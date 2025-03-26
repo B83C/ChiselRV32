@@ -7,10 +7,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-env:
-  verilator-version: v5.022
-  verilator-install-dir: verilator-install
-
 jobs:
   ci:
     name: ci
@@ -27,10 +23,8 @@ jobs:
         with:
           jvm: adopt:11
           apps: sbt
-      - uses: taiki-e/install-action@just
-      - name: Setup Mill
-        run: |
-          just fetchMill
+      - uses: extractions/setup-just@v3
+      - uses: jodersky/setup-mill@master
       # - name: Setup Dependencies
       #   run: |
       #     sudo apt-get install ccache
@@ -58,11 +52,20 @@ jobs:
       #     echo VERILATOR_ROOT="$(pwd)/${{ env.verilator-install-dir }}/share/verilator" >> $GITHUB_ENV
       #     ln -sf $(pwd)/${{ env.verilator-install-dir }}/bin/verilator_bin $(pwd)/${{ env.verilator-install-dir }}/share/verilator/verilator_bin
       - uses: veryl-lang/setup-verilator@v1
-      - name: SBT Test
-        run: sbt test
+      # - name: SBT Test
+      #   run: sbt test
       - name: mill Test
         run: ./mill _.test
-      - name: Typst
-        uses: lvignoli/typst-action@main
+
+      - uses: typst-community/setup-typst@v4
         with:
-          source_file: spec.typ
+          cache-dependency-path: imports.typ
+      - run: typst compile spec.typ spec.pdf
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spec
+          path: spec.pdf
+      # - name: Typst
+      #   uses: lvignoli/typst-action@main
+      #   with:
+      #     source_file: spec.typ
