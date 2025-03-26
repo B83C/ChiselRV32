@@ -1,3 +1,5 @@
+#import "imports.typ": *
+
 #set par(first-line-indent: (amount: 2em, all: true))
 #show heading: it => [
   #it
@@ -173,8 +175,8 @@ LRT 表项包含以下信息：
 请根据项目的实际需求进一步细化各部分设计与实现。``
 
 == 利用Typst 轻松实现图纸生成功能
-#import "@preview/cetz:0.3.2": draw
-#import "@preview/circuiteria:0.2.0": *
+// #import "@preview/cetz:0.3.2": draw
+// #import "@preview/circuiteria:0.2.0": *
 
 // #set page(width: auto, height: auto, margin: .5cm)
 
