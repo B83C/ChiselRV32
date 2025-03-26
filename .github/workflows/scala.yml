@@ -67,7 +67,7 @@ jobs:
       - run: typst compile spec.typ spec.pdf
       - uses: actions/upload-artifact@v4
         with:
-          name: spec
+          name: spec.pdf
           path: spec.pdf
       # - name: Typst
       #   uses: lvignoli/typst-action@main
