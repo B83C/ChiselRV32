@@ -1,7 +1,7 @@
 #set par(first-line-indent: (amount: 2em, all: true))
 #show heading: it => [
   #it
-  #linebreak()
+  #line()
 ]
 
 = RV32 Processor Design Specification
