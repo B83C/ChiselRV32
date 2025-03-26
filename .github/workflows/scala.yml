@@ -27,8 +27,8 @@ jobs:
         with:
           jvm: adopt:11
           apps: sbt
+      - uses: taiki-e/install-action@just
       - name: Setup Mill
-        uses: taiki-e/install-action@just
         run: |
           just fetchMill
           # curl -L https://github.com/com-lihaoyi/mill/releases/download/0.12.5/0.12.5 > mill && chmod +x mill
@@ -63,6 +63,5 @@ jobs:
       - name: mill Test
         run: ./mill _.test
       - name: Spec File Generation
-        uses: taiki-e/install-action@just
         run: |
           just spec
