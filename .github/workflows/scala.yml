@@ -58,8 +58,8 @@ jobs:
       - uses: veryl-lang/setup-verilator@v1
       # - name: SBT Test
       #   run: sbt test
-      - name: mill Test
-        run: ./mill _.test
+      - name: mill Test run
+        run: mill _.test
 
       - uses: typst-community/setup-typst@v4
         with:
