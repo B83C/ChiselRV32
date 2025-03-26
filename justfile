@@ -5,3 +5,6 @@ fetchMill:
 
 test unittest="ChiselRV32.test": fetchMill
 	@{{MILL}} {{unittest}}
+
+spec:
+	typst compile spec.typ

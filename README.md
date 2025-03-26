@@ -22,9 +22,23 @@ See Verilator installation instructions [here](https://verilator.org/guide/lates
 
 For the convenience of cross-platform, we are using justfile in place of makefile. For installation for various platforms (Linux/MacOS/Windows), see [here](https://github.com/casey/just). It is recommended to use it as as makefile is not readily available on windows.
 
+#### Typst
+
+For compilation of spec file written in typst.
+
 ### Performing tests
 ```sh
 just test
+```
+
+### Generating Spec File
+Generation will be done with github actions. But you can do it locally on your machine by:
+```sh
+typst compile spec.typ
+```
+or
+```sh
+just spec
 ```
 
 ### Project Directory Structure
