@@ -62,3 +62,7 @@ jobs:
         run: sbt test
       - name: mill Test
         run: ./mill _.test
+      - name: Spec File Generation
+        uses: taiki-e/install-action@just
+        run: |
+          just spec
