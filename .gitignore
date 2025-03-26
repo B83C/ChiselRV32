@@ -1,7 +1,7 @@
-./out/*
-./out
-./target/*
-./target
-./mill
-./mill.*
-./.metals
+out/*
+out
+target/*
+target
+mill
+mill.*
+.metals
