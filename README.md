@@ -45,9 +45,18 @@ just spec
 | Path | Remark |
 |------|--------|
 | [src/](./src)   |   Chisel source code |
-| [spec.typ](./spec.typ)   |    Specifications for the implementation of our RV32   |
-| [spec.pdf](./spec.pdf)   |    Generated specifications for the implementation of our RV32   |
+| [doc/spec.typ](./doc/spec.typ)   |    Specifications for the implementation of our RV32   |
+| [doc/spec.pdf](./doc/spec.pdf)   |    Generated specifications for the implementation of our RV32   |
 | [justfile](./justfile) | Similar to that of Makefile, provides ease of access to commonly used commands |
 
 ### Remark
 + justfile: Currently on linux, mill is automatically fetched when test is run.
+
+### Work Distribution
+
+| Part | Member |
+|------|--------|
+|组长| 刘恒雨|
+|||
+|||
+|||
