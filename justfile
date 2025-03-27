@@ -7,5 +7,10 @@ test unittest="ChiselRV32.test": fetchMill
 	@{{MILL}} {{unittest}}
 
 [working-directory: 'doc']
-spec:
+diagram:
+	typst compile diagram.typ
+	typst compile --format svg diagram.typ
+
+[working-directory: 'doc']
+spec: diagram
 	typst compile spec.typ

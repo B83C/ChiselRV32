@@ -26,6 +26,9 @@ For the convenience of cross-platform, we are using justfile in place of makefil
 
 For compilation of spec file written in typst.
 
+### Design Schematics
+![schem](./doc/diagram.svg)
+
 ### Performing tests
 ```sh
 just test
