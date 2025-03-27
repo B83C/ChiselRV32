@@ -6,5 +6,6 @@ fetchMill:
 test unittest="ChiselRV32.test": fetchMill
 	@{{MILL}} {{unittest}}
 
+[working-directory: 'doc']
 spec:
 	typst compile spec.typ
