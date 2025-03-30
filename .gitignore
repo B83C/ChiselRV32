@@ -6,3 +6,4 @@ mill
 mill.*
 .metals
 project/
+.vscode
