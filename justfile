@@ -8,9 +8,9 @@ test unittest="ChiselRV32.test": fetchMill
 
 [working-directory: 'doc']
 diagram:
-	typst compile diagram.typ
-	typst compile --format svg diagram.typ
+	typst compile diagram_standalone.typ diagram.pdf
+	typst compile --format svg diagram_standalone.typ diagram.svg
 
 [working-directory: 'doc']
 spec: diagram
-	typst compile spec.typ
+	typst compile spec.typ --root ..
