@@ -12,18 +12,18 @@
   )
 )
 
-#let match(content, name_regex, class) = {
+#let match(content, object_type, name_regex, inheritance) = {
   content.matches(
     // regex("((?:/{2,}.*?\n)*)class\s+(" + name_prefix + "\w+" + name_suffix + ")\s*(\((?:[^()]|[^()]\)\([^()])*\))\s+extends\s+" + class + "[\s\n\r]*\{[\s\n\r]*((?:[^{}]|\{[^{}]*\})*)\}")
-    regex("((?:/{2,}.*?\n)*)class\s+(" +  name_regex + ")\s*(\((?:[^()]|\)\()*\))\s+extends\s+" + class + "[^{]*\{[^\n]*\n?")
+    regex("((?:/{2,}.*?\n)*)" + object_type + "\s+(" +  name_regex + ")\s*(\((?:[^()]|\)\()*\))\s+extends\s+" + inheritance + "[^{]*\{[^\n]*\n?")
   )
 }
-#let render(module-path, object-name-pattern, object-type, show-params, show-ios, show-snippet) = {
+#let render(module-path, object_type, name_regex, inheritance, show-params, show-ios, show-snippet) = {
   let content = read(module-path)
   
   let sections = []
 
-  let matches = match(content, object-name-pattern, object-type)  
+  let matches = match(content, object_type, name_regex, inheritance)  
 
   for unit in matches {
     let comment = unit.captures.at(0).replace(regex("/{2,}\s*"), "")
@@ -50,35 +50,39 @@
     
     // let code = unit.captures.at(3)
     let io_bundle = code.match(regex("IO\(new\s+Bundle\s+\{((?:[^{}]|\{[^{}]*\})*)\}\)"))
-      .captures.first()
+    let ios = none
     let params = params.matches(
-      regex("val\s+(\w+)\s*:\s*([^,/\n\r]*)(?:/\*|/{2,})?([^,\n\r\)]*)")
+      regex("val\s+(\w+)\s*:\s*([^/,\n\r]*),?[\s\r]*(?:/\*|/{2,})?([^,*\n\rv)]*)")
       // regex("\(\s*val\s+((?:[^()]|\([^()]\))*)\)")
     )
-    let ios = io_bundle.matches(
-      regex("val\s+(\w+)\s*=\s*([^/\n\r]*)(?:/\*|/{2,})?([^\n\r]*)")
-    )
-
+    if io_bundle != none {
+      
+      io_bundle = io_bundle
+        .captures.first()
+      let ios = io_bundle.matches(
+        regex("val\s+(\w+)\s*=\s*([^/\n\r]*)(?:/\*|/{2,})?([^\n\r]*)")
+      )
+    }
     sections += [
       == #module
 
       #comment
 
-      #if show-params and params.len() > 0 {
+      #if params != none and show-params and params.len() > 0 {
         [#module 的构造参数如下：]
         table(
           columns: 3,
           gutter: 3pt,
           [*Name*], [*Type*], [*Description*],
           ..params.map(x => {
-            let cap = x.captures.slice(0, 3)
-            (cap.at(0), raw(cap.at(1), lang: "scala"), cap.at(2).replace("\*\/", "").trim())
+            let cap = x.captures
+            (cap.at(0), raw(cap.at(1), lang: "scala"), cap.at(2, default: "").replace("\*\/", "").trim())
           }).flatten()
         )  
       }
 
 
-      #if show-ios and ios.len() > 0 {
+      #if ios != none and show-ios and ios.len() > 0 {
         [IO端口定义如下：]
 
         table(
@@ -96,6 +100,7 @@
         raw(code, lang: "scala", block: true)
       }
     ]
+
   }
   sections
 }
@@ -115,9 +120,15 @@
 = Parameters
 = Interface
 = Microarchitecture
-#for (path, pattern) in (
-  ("common/common.scala", "\w+"),
-  ("common/freelist.scala", "\w+"),
+// (Filepath, object type to match (like class, abstract class or object or case class), object name to match, inheritance pattern)
+// \w+ is a Regex pattern, meanning it will match a contiguous range of characters of at least 1 character long
+// \s is space, (pred)* means matching at least 0 amount of pred
+// (?:) is a non capturing group, meaning it will be omitted in the match result (i.e, it will be matched, but the exact value won't be returned) 
+// the notion 'group' is necessary since the pattern ab* will only match a, ab, abb, abbb, abbb..., but not ab,abab,abab. So to make the latter happen you have to group 'ab' into (ab), but writing this way will cause it to appear in the final result. So if you wish to match ab's, but don't want it to contaminate the search result, use (?:ab)
+// For detailed syntax, please refer to Regex.
+#for (path, object_type, object_name, object_inheritance) in (
+  ("common/common.scala", "(?:abstract)*\s?class", "\w+", "Module"),
+  ("common/freelist.scala", "(?:abstract)*\s?class", "\w+", "[^{]*"),
 ) {
-  render("/src/main/rsd_rv32/" + path, pattern, "Module", true, true, true)
+  render("/src/main/rsd_rv32/" + path, object_type, object_name, object_inheritance, true, true, true)
 }

@@ -3,9 +3,10 @@ package rsd_rv32.common
 import chisel3._
 import chisel3.util._
 
+// 参数化的Freelist
 abstract class FreeList(
-  val read_ports: Int,
-  val depth: Int,
+  val read_ports: Int, /* Number of read ports */
+  val depth: Int,      /* Depth of the freelist buffer */
 )(implicit p: Parameters) extends Module {
   val io = IO(
     val requests = Input(Vec(depth, Bool()))
@@ -15,12 +16,13 @@ abstract class FreeList(
   )
 }
 
-// 获取PRF可用的寄存器
+// 获取PRF中可用的寄存器
+// 
 class PRFFreeList(
-  val read_ports: Int,
-  val depth: Int,
+  val read_ports: Int,  /* with desc */ 
+  val depth: Int,  //Another desc
   val data_width: Int,
 )(implicit p: Parameters) extends FreeList(read_ports, depth) {
-
+  //BLablabla
 
 }
