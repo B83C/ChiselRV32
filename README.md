@@ -66,6 +66,6 @@ just spec
 |访存|饶忠禹|
 ||赵力|
 |Fetch&Decode|邢益成|
-|Issue Queue + ROB|胡英瀚|
+|Issue Queue & ROB|胡英瀚|
 |译码|马嘉一|
 ||胡继仁|
