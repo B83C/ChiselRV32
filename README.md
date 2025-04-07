@@ -64,7 +64,7 @@ just spec
 ||李可名|
 |branch predictor|杨钧铎|
 |访存|饶忠禹|
-|Dispatch Unit|赵力|
+|Cache|赵力|
 |Fetch&Decode|邢益成|
 |Issue Queue & ROB|胡英瀚|
 |译码|马嘉一|
