@@ -67,5 +67,5 @@ just spec
 |Cache|赵力|
 |Fetch&Decode|邢益成|
 |Issue Queue & ROB|胡英瀚|
-|译码|马嘉一|
-||胡继仁|
+|exu|马嘉一|
+|prf & bypass|胡继仁|
