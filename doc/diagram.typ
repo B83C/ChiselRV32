@@ -2,6 +2,63 @@
 
 #circuit({
   element.group(name: "Toplevel", {
+    element.group(name: "Frontend", id: "frontend", {
+      element.block(
+        x: 0, y: 0, w: 8, h: 4,
+        id: "fetch",
+        fill: util.colors.pink,
+        name: "Fetch",
+        ports: (
+        ),
+        ports-margins: (
+        )
+      )
+      element.block(
+      x: (rel: 1, to: "fetch.east"),
+      y: (rel: 0, to: "fetch.north"),
+      w: 3, h: 4,
+        id: "decode",
+        fill: util.colors.pink,
+        name: "Decode",
+        ports: (
+        ),
+        ports-margins: (
+          north: (0%, 0%),
+          west: (0%, 70%)
+        )
+      )
+      element.block(
+        x: 0, y: -5, w: 8, h: 4,
+        id: "bp",
+        fill: util.colors.pink,
+        name: "Branch Predictor",
+        ports: (
+        ),
+        ports-margins: (
+          north: (0%, 0%),
+          west: (0%, 70%)
+        )
+      )      
+    })
+    element.group(name: "Scheduling", id: "scheduler",
+    {
+      element.block(
+        x: (rel: 3, to: "decode.east"),
+        y: 0,
+        w: 4, h:4,
+        id: "idk",
+        fill: util.colors.pink,
+        name: "Fetch",
+        ports: (
+        ),
+        ports-margins: (
+        )
+      )
+    })
+  })
+})
+#circuit({
+  element.group(name: "Toplevel", {
     element.group(
       name: "test", {
       element.block(
