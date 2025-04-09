@@ -63,7 +63,7 @@ just spec
 |rename|蔡家麒|
 |dispatch|李可名|
 |branch predictor|杨钧铎|
-|访存|饶忠禹|
+|LoadStoreUnit|饶忠禹|
 |Cache|赵力|
 |Fetch&Decode|邢益成|
 |Issue Queue & ROB|胡英瀚|
