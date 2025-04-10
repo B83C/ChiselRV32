@@ -22,6 +22,15 @@ class ROB(val num_WakeupPorts: Int)(implicit p: Parameters) extends Module {
         val LSU_clr_busy = Input(Vec(p.DISPATCH_WIDTH), Valid(UInt(p.ROB_ADDR_WIDTH.W)))  //来自LSU的清除忙标志
         val LSU_clr_unsafe = Input(Vec(p.LSU_WIDTH), Valid(UInt(p.ROB_ADDR_WIDTH.W)))  //来自LSU的清除不安全标志
         val LSU_exception = Input(Valid(new Exception()))  //来自LSU的异常标志(Exception类待定义)
+
         val CSR_replay = Input(Valid(new Exception()))  //来自CSR的重放标志(Exception类待定义)
+        val CSR_stall = Input(Bool())  //来自CSR的停顿标志
+
+        val commit = Output(new Commit_Info())  //提交信息(Commit_Info类待定义)
+        val rollback = Output(Bool())  //回滚标志
+        val commit_exception = Output(Valid(new Commit_exception_Info()))  //提交异常信息（To CSR）(Commit_exception_Info类待定义)
+        
+        val flush = Output(Valid(new Commit_exception_Info()))  //刷新标志(Commit_exception_Info类待定义)
+        val flush_frontend = Output(Bool())  //前端刷新标志
     })
 }
