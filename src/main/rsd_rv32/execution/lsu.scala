@@ -18,7 +18,7 @@ with HasUOP {
 }
 
 
-//描述与数据内容交互的信号
+//描述与数据内容交互的各种信号，用于管理L/S请求和缓存访问，包含一部分异常处理、顺序控制的功能
 class LSUMemIO(implicit p: Parameters , edge: TLEdgeOut) extends Bundle()(p) {
   val req           = new DecoupledIO(p.lsuWidth,Valid(new DCacheRequest))//LSU发出的数据缓存请求
   val resp          = new Flipped(p.lsuWidth,Valid(new DCacheResponse))//LSU接收数据缓存响应
@@ -46,6 +46,7 @@ class LSUMemIO(implicit p: Parameters , edge: TLEdgeOut) extends Bundle()(p) {
   //指示信号的获取和释放，进行性能的监控
 }
 
+//LSU的核心IO接口，与execution、dcache、rob等进行交互
 class LSUCoreIO(implicit p: Parameters) extends Bundle()(p) {
   //这里的MenGen定义为
   //class MemGen(implicit p: Parameters) extends BoomBundle
@@ -102,7 +103,7 @@ class LSUCoreIO(implicit p: Parameters) extends Bundle()(p) {
 
     val bp          = Input(Vec(breakpoint_num,new rocket.BP))//接收断点设置
     val mach_context= Input(UInt)//接收机器模式上下文的值
-    val scontext    = Input(UInt)//接收超线程模式上下文的值
+    val s_context   = Input(UInt)//接收超线程模式上下文的值
 
     val perf = Output(new Bundle {
       val acquire = Bool()
@@ -114,6 +115,7 @@ class LSUCoreIO(implicit p: Parameters) extends Bundle()(p) {
 
 //TLE部分可能不需要做，待定
 
+//提供LSU的核心、内存（TLB）的IO接口
 class LSUIO(implicit p: Parameters,edge : TLEdgeOut) extends Bundle()(p){
   val ptw   = new rocket.TLBPTWIO//TLB的输入输出接口,待定
   val core  = new LSUCoreIO//LSU的核心接口
