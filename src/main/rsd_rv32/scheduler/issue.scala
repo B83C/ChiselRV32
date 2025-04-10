@@ -5,7 +5,7 @@ import chisel3.util._
 import rsd_rv32.common._
 
 //
-class Issue_Quene extends Module {
+class Issue_Queue extends Module {
     val io = IO(new Bundle {
         val dispatch_uops = Flipped(Vec(p.DISPATCH_WIDTH, DispatchedInsr))  //来自Dispatch Unit的输入
         val issue_uops = Output(Vec(p.ISSUE_WIDTH, IssueInsr))  //发射的指令
