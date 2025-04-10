@@ -23,3 +23,30 @@ class Issue_Queue extends Module {
 
     })
 }
+class PayloadRAM(implicit p: Parameters) extends Module {
+    val io = IO(new Bundle {
+        val we = Input(Vec(p.DISPATCH_WIDTH, Bool()))  //写使能信号
+        val waddr = Input(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(NUM_PayloadRAM).W)))  //写地址
+        val wdata = Input(Vec(p.DISPATCH_WIDTH, UInt(Insr_WIDTH.W)))  //写数据
+        val raddr = Input(Vec(p.ISSUE_WIDTH, UInt(log2Ceil(NUM_PayloadRAM).W)))  //读地址
+        val rdata = Output(Vec(p.ISSUE_WIDTH, UInt(Insr_WIDTH.W)))  //读数据
+    })
+}
+
+class WakeupLogic(implicit p: Parameters) extends Module {
+    val io = IO(new Bundle {
+        val stall = Input(Bool()) //停顿信号
+        val write = Input(Vec(p.DISPATCH_WIDTH, Bool())) //写使能
+        val writePtr = Input(Vec(p.DISPATCH_WIDTH, UInt(32.W))) //写指针
+        val writeSrcTag = Input(Vec(p.DISPATCH_WIDTH, new SrcTag())) //写源标签,SrcTag可能包含寄存器标签与寄存器地址
+        val writeDstTag = Input(Vec(p.DISPATCH_WIDTH, new DstTag())) //写目标标签,DstTag可能包含寄存器标签
+        val wakeup = Input(Vec(p.WAKEUP_WIDTH, Bool())) //唤醒信号
+        val wakeupDstTag = Input(Vec(p.WAKEUP_WIDTH, new DstTag())) //唤醒目标标签
+        val wakeupVector = Input(Vec(p.WAKEUP_WIDTH, Vec(p.ISSUE_QUEUE_ENTRY_NUM, Bool()))) //唤醒向量
+        val notIssued = Input(Vec(p.ISSUE_QUEUE_ENTRY_NUM, Bool())) //未发射标志
+        val dispatchStore = Input(Vec(p.DISPATCH_WIDTH, Bool())) //来自Dispatch Unit的Store指令
+        val dispatchLoad = Input(Vec(p.DISPATCH_WIDTH, Bool())) //来自Dispatch Unit的Load指令
+        val memDependencyPred = Input(Vec(p.DISPATCH_WIDTH, Bool())) //内存依赖预测
+        val opReady = Output(Vec(p.ISSUE_QUEUE_ENTRY_NUM, Bool())) //操作就绪标志
+    })
+}
