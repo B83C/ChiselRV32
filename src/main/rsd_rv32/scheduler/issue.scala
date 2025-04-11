@@ -47,8 +47,8 @@ class WakeupLogic(implicit p: Parameters) extends Module {
         val wakeupDstTag = Input(Vec(p.WAKEUP_WIDTH, new DstTag())) //唤醒目标标签
         val wakeupVector = Input(Vec(p.WAKEUP_WIDTH + p.ISSUE_STORE_WIDTH, Vec(p.ISSUE_QUEUE_ENTRY_NUM, Bool()))) //唤醒向量
         val notIssued = Input(Vec(p.ISSUE_QUEUE_ENTRY_NUM, Bool())) //未发射标志
-        val dispatchStore = Input(Vec(p.DISPATCH_WIDTH, Bool())) //来自Dispatch Unit的Store指令
-        val dispatchLoad = Input(Vec(p.DISPATCH_WIDTH, Bool())) //来自Dispatch Unit的Load指令
+        val dispatchStore = Input(Vec(p.DISPATCH_WIDTH, Bool())) //是否是Store
+        val dispatchLoad = Input(Vec(p.DISPATCH_WIDTH, Bool())) //是否是Load
         val memDependencyPred = Input(Vec(p.DISPATCH_WIDTH, Bool())) //内存依赖预测
         val opReady = Output(Vec(p.ISSUE_QUEUE_ENTRY_NUM, Bool())) //操作就绪标志
     })
