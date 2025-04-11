@@ -15,3 +15,12 @@ class BP_ROB_Interface(val GHR_width : Int) extends Bundle {
     val GHR = Input(UInt(GHR_width.W)) //作出预测时的全局历史寄存器快照，使得更新BHT时能够生成正确的index
     val actualTargetPC = Input(UInt(32.W)) //实际跳转的目标地址
 }
+
+class BP_IO (val fetch_width : Int , val GHR_width : Int) extends Bundle {
+    val ifu = new BP_IFU_Interface(fetch_width, GHR_width)
+    val rob = new BP_ROB_Interface(GHR_width)
+}
+
+class BranchPredictor(val fetch_width : Int , val GHR_width : Int) extends Module {
+    val io = IO(new BP_IO(fetch_width, GHR_width))
+}
