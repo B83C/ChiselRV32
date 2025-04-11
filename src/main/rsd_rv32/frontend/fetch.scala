@@ -8,5 +8,5 @@ class FetchInput extends Bundle ={
 }
 
 class FetchOutput extends Bundle ={
-  val FC_inst = UInt(32.W)
+  val FC_inst = UInt(INSTR_WIDTH.W)
 }
