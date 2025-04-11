@@ -1,15 +1,18 @@
+package rsd_rv32.execution
+
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.config.Parameters
 
 class ALUIO(implicit p: Parameters) extends Bundle {
+  //输入操作数
   val in1 = Input(UInt(p(XLen).W))  
   val in2 = Input(UInt(p(XLen).W))  
-  val fn  = Input(UInt(4.W))        // 运算类型 (ADD/SUB/AND/OR/XOR等)
+  val fn  = Input(UInt(4.W))        
 
   // 输出结果
-  val out = Output(UInt(p(XLen).W)) // 运算结果
-  val cmp_out = Output(Bool())      // 比较结果（用于分支指令）
+  val out = Output(UInt(p(XLen).W)) 
+  val cmp_out = Output(Bool())      
 }
 
 class ALU(implicit p: Parameters) extends Module {
