@@ -121,3 +121,10 @@ class LSUIO(implicit p: Parameters,edge : TLEdgeOut) extends Bundle()(p){
   val core  = new LSUCoreIO//LSU的核心接口
   val dcache_mem = new LSUMemIO//LSU的内存接口
 }
+
+//LSU的模块定义，目前只完成了IO接口的定义，内部逻辑还未完成
+class LSU(implicit p: Parameters,edge : TLEdgeOut) extends Module()(p){
+    val io = IO(new LSUIO)//定义LSU的IO接口
+
+    //内部信号定义还未完成，待定
+}
