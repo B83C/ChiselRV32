@@ -13,7 +13,7 @@ class ROB(val num_WakeupPorts: Int)(implicit p: Parameters) extends Module {
 
         val ROB_head_idx = Output(UInt(p.ROB_ADDR_WIDTH.W))  //ROB头指针
         val ROB_tail_idx = Output(UInt(p.ROB_ADDR_WIDTH.W))  //ROB尾指针
-        val ROB_pnr_idx = Output(UInt(p.ROB_ADDR_WIDTH.W))  //ROB当前指针
+        val ROB_pnr_idx = Output(UInt(p.ROB_ADDR_WIDTH.W))  //ROB安全上限指针
 
         val ROB_empty = Output(Bool())  //ROB空标志 
         val ROB_ready = Output(Bool())  //ROB准备好标志(不仅仅是非满)
