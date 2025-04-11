@@ -18,7 +18,7 @@ class Issue_Queue extends Module {
         val flush = Input(Bool())  //刷新信号
 
         val ROB_head_idx = Input(UInt(p.ROB_ADDR_WIDTH.W)) //ROB头指针
-        val ROB_pnr_idx = Input(UInt(p.ROB_ADDR_WIDTH.W))  //ROB当前指针
+        val ROB_pnr_idx = Input(UInt(p.ROB_ADDR_WIDTH.W))  //ROB安全上限指针
 
 
     })
