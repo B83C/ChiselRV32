@@ -1,3 +1,7 @@
+package rsd_rv32.frontend
+import chisel3._
+import chisel3.util._
+
 class BP_IFU_Interface(val fetch_width : Int , val GHR_width : Int) extends Bundle {
     val PC_curr = Input(UInt(32.W)) //当前IFU的PC值
     val PC_target = Output(Vec(fetch_width, UInt(32.W))) //预测的目标地址
