@@ -8,12 +8,12 @@ abstract class FreeList(
   val read_ports: Int, /* Number of read ports */
   val depth: Int,      /* Depth of the freelist buffer */
 )(implicit p: Parameters) extends Module {
-  val io = IO(
+  val io = IO(new Bundle {
     val requests = Input(Vec(depth, Bool()))
     val data  = Output(Vec(depth, Valid(UInt(data_width.W))))
 
     val dealloc  = Input(Vec(depth, Valid(UInt(data_width.W))))
-  )
+  })
 }
 
 // 获取PRF中可用的寄存器
