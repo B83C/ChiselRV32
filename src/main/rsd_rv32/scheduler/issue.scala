@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
 
-//
+// IssueQueue是一个发射队列，用于存储待发射的指令。它根据指令的优先级和状态，决定哪些指令可以被发射。
 class Issue_Queue extends Module {
     val io = IO(new Bundle {
         val dispatch_uops = Flipped(Vec(p.DISPATCH_WIDTH, DispatchedInsr))  //来自Dispatch Unit的输入
