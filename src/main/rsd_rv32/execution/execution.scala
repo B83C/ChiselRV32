@@ -35,3 +35,29 @@ class ALU(implicit p: Parameters) extends Module {
     ALU_GE  -> (io.in1.asSInt >= io.in2.asSInt)
   ))
 }
+
+
+class BypassNetworkIO(implicit p: Parameters) extends Bundle {
+  // 来自执行单元的旁路输入
+  val exec_units = Input(Vec(2, Valid(new BypassInfo)))
+  
+  // 寄存器读取请求
+  val preg_rd    = Input(UInt(p(PhysRegIdxSz).W))
+  
+  // 输出数据
+  val data_out   = Output(UInt(p(XLen).W))
+}
+
+class BypassNetwork(implicit p: Parameters) extends Module {
+  val io = IO(new BypassNetworkIO)
+
+  io.data_out := 0.U
+  
+  // 检查所有旁路源
+  for (i <- 0 until 2) {
+    when (io.exec_units(i).valid && 
+          io.exec_units(i).bits.pdst === io.preg_rd) {
+      io.data_out := io.exec_units(i).bits.data
+    }
+  }
+}
