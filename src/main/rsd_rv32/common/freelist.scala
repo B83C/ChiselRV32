@@ -11,7 +11,7 @@ abstract class FreeList(
   val io = IO(
     val requests = Input(Vec(depth, Bool()))
     val data  = Output(Vec(depth, Valid(UInt(data_width.W))))
-
+    val empty = Output(Bool())//无空闲 置高
     val dealloc  = Input(Vec(depth, Valid(UInt(data_width.W))))
   )
 }
