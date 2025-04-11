@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
 
-//
+// IssueQueue是一个发射队列，用于存储待发射的指令。它根据指令的优先级和状态，决定哪些指令可以被发射。
 class Issue_Queue extends Module {
     val io = IO(new Bundle {
         val dispatch_uops = Flipped(Vec(p.DISPATCH_WIDTH, DispatchedInsr))  //来自Dispatch Unit的输入
@@ -18,7 +18,7 @@ class Issue_Queue extends Module {
         val flush = Input(Bool())  //刷新信号
 
         val ROB_head_idx = Input(UInt(p.ROB_ADDR_WIDTH.W)) //ROB头指针
-        val ROB_pnr_idx = Input(UInt(p.ROB_ADDR_WIDTH.W))  //ROB当前指针
+        val ROB_pnr_idx = Input(UInt(p.ROB_ADDR_WIDTH.W))  //ROB安全上限指针
 
 
     })
@@ -45,10 +45,10 @@ class WakeupLogic(implicit p: Parameters) extends Module {
         val writeDstTag = Input(Vec(p.DISPATCH_WIDTH, new DstTag())) //写目标标签,DstTag可能包含寄存器标签
         val wakeup = Input(Vec(p.WAKEUP_WIDTH, Bool())) //唤醒信号
         val wakeupDstTag = Input(Vec(p.WAKEUP_WIDTH, new DstTag())) //唤醒目标标签
-        val wakeupVector = Input(Vec(p.WAKEUP_WIDTH, Vec(p.ISSUE_QUEUE_ENTRY_NUM, Bool()))) //唤醒向量
+        val wakeupVector = Input(Vec(p.WAKEUP_WIDTH + p.ISSUE_STORE_WIDTH, Vec(p.ISSUE_QUEUE_ENTRY_NUM, Bool()))) //唤醒向量
         val notIssued = Input(Vec(p.ISSUE_QUEUE_ENTRY_NUM, Bool())) //未发射标志
-        val dispatchStore = Input(Vec(p.DISPATCH_WIDTH, Bool())) //来自Dispatch Unit的Store指令
-        val dispatchLoad = Input(Vec(p.DISPATCH_WIDTH, Bool())) //来自Dispatch Unit的Load指令
+        val dispatchStore = Input(Vec(p.DISPATCH_WIDTH, Bool())) //是否是Store
+        val dispatchLoad = Input(Vec(p.DISPATCH_WIDTH, Bool())) //是否是Load
         val memDependencyPred = Input(Vec(p.DISPATCH_WIDTH, Bool())) //内存依赖预测
         val opReady = Output(Vec(p.ISSUE_QUEUE_ENTRY_NUM, Bool())) //操作就绪标志
     })
