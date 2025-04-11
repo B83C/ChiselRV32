@@ -24,7 +24,59 @@
     + "[^{]*\{[^\n]*\n?")
   )
 }
-#let rend(module-path, object_type, name_regex, inheritance, params: true, ios: true, snippet: true) = {
+
+#let find_block(slice) = {
+  let map = ("{": 0, "}": 0, "(": 1, ")": 1)
+  let brac_count = map.pairs().chunks(2).map(_ => 0)
+  let start_pos = slice.len() - 1
+  let inc_index = 0
+  for ((kl, v), (_, _)) in map.pairs().chunks(2) {
+    let left_brac = slice.position(kl)
+    if left_brac != none and start_pos > left_brac {
+      start_pos  = left_brac
+      brac_count.at(inc_index) = 0
+      brac_count.at(v) = 1
+      inc_index = v
+    }
+  }
+  let slice = slice.slice(start_pos)
+  let code_end_pos = 0
+  while brac_count.all(x => x > 0) {
+    let cslice = slice.slice(code_end_pos)
+    let found = false
+    let closest = map.pairs().chunks(2).map(((k1, v), (kr, _)) => {
+      let left_brac = cslice.position(kl)
+      let right_brac = cslice.position(kr)
+      (left_brac, right_brac, v)
+    })
+    let closest = none
+    for ((kl, v), (kr, _)) in map.pairs().chunks(2) {
+      let left_brac = cslice.position(kl)
+      let right_brac = cslice.position(kr)
+      left_brac
+      (left_brac, right_brac, v)
+    }
+    for ((kl, v), (kr, _)) in map.pairs().chunks(2) {
+      let left_brac = cslice.position(kl)
+      let right_brac = cslice.position(kr)
+      if left_brac == none or left_brac > right_brac {
+        brac_count.at(v) -= 1
+        code_end_pos += right_brac + 1
+        found = true
+      } else if right_brac == none or right_brac > left_brac{
+        brac_count.at(v) += 1
+        code_end_pos += left_brac + 1
+        found = true
+      }
+    }
+    if found == false {
+      break;
+    }
+  }
+  slice.slice(0, code_end_pos - 1)
+}
+
+#let rend(module-path, object_type, name_regex, inheritance, params: true, ios: true, snippet: false) = {
   let content = read(module-path)
   
   let sections = []
@@ -54,20 +106,21 @@
     }
 
     let code = content.slice(unit.end, code_end_pos - 1)
+    // let code = find_block(content.slice(unit.end - 1))
     
     // let code = unit.captures.at(3)
     let io_bundle = code.match(regex("IO\(new\s+Bundle\s+\{((?:[^{}]|\{[^{}]*\})*)\}\)"))
-    let ios = none
+    let io_ports = none
     let params_c = params_c.matches(
-      regex("val\s+(\w+)\s*:\s*([^/,\n\r]*),?[\s\r]*(?:/\*|/{2,})?([^,*\n\r)]*)")
+      regex("val\s+(\w+)\s*:\s*([^/,\n\r)]*),?[\s\r]*(?:/\*|/{2,})?([^,*\n\r)]*)")
       // regex("\(\s*val\s+((?:[^()]|\([^()]\))*)\)")
     )
     if io_bundle != none {
-      
       io_bundle = io_bundle
         .captures.first()
-      let ios = io_bundle.matches(
+      io_ports = io_bundle.matches(
         regex("val\s+(\w+)\s*=\s*([^/\n\r]*)(?:/\*|/{2,})?([^\n\r]*)")
+        // regex("val\s+(\w+)\s*=\s*([^/\n\r]*)")
       )
     }
     sections += [
@@ -89,16 +142,17 @@
       }
 
 
-      #if ios != none and ios and ios.len() > 0 {
+      #if io_ports != none and ios and io_ports.len() > 0 {
         [IO端口定义如下：]
 
         table(
           columns: 3,
           gutter: 3pt,
           [*Name*], [*Type*], [*Description*],
-          ..ios.map(x => {
+          ..io_ports.map(x => {
             let cap = x.captures.slice(0, 3)
-            ([*#cap.at(0)*], raw(cap.at(1), lang: "scala"), cap.at(2).replace("*/", "").trim())
+            let desc = cap.at(2)
+            ([*#cap.at(0)*], raw(cap.at(1), lang: "scala"), if desc != none {desc.replace("*/", "").trim()} else {""})
           }).flatten()
         )
       }
@@ -140,7 +194,7 @@
 #rend(r("common/common.scala"), "(?:case\s+)*class", "Parameters", none)
 
 = Interface
-#rend(r("common/common.scala"), "(?:case\s+)*class", "Parameters", none)
+#rend(r("common/common.scala"), "(?:abstract\s+)*class", "\w+", "Bundle")
 
 = Microarchitecture
 本处理器为乱序执行多发射RV32IM架构，其设计主要借鉴于RSD以及BOOM。 
@@ -154,3 +208,4 @@
 #rend(r("common/common.scala"), "(?:abstract)*\s?class", "\w+", "Module")
 #rend(r("common/freelist.scala"), "(?:abstract)*\s?class", "\w+", "[^{]*")
 #rend(r("execution/lsu.scala"), "(?:abstract)*\s?class", "\w+", "[^{]*")
+#rend(r("scheduler/rob.scala"), "(?:abstract)*\s?class", "\w+", "Module")
