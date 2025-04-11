@@ -14,6 +14,7 @@
 
 
 #let iob = regex("IO\(new\s+Bundle\s+\{((?:[^{}]|\{[^{}]*\})*)\}\)") 
+#let match_all = regex("((?:.|\n)*)")
 
 #let r(path) = "/src/main/rsd_rv32/" + path //Path relative to porject root
 #let match(content, object_type, name_regex, inheritance) = {
@@ -76,7 +77,7 @@
   slice.slice(0, code_end_pos - 1)
 }
 
-#let rend(module-path, object_type, name_regex, inheritance, params: true, ios: true, snippet: false) = {
+#let rend(module-path, object_type, name_regex, inheritance, params: true, ios: iob, snippet: false) = {
   let content = read(module-path)
   
   let sections = []
@@ -109,19 +110,21 @@
     // let code = find_block(content.slice(unit.end - 1))
     
     // let code = unit.captures.at(3)
-    let io_bundle = code.match(regex("IO\(new\s+Bundle\s+\{((?:[^{}]|\{[^{}]*\})*)\}\)"))
     let io_ports = none
     let params_c = params_c.matches(
       regex("val\s+(\w+)\s*:\s*([^/,\n\r)]*),?[\s\r]*(?:/\*|/{2,})?([^,*\n\r)]*)")
       // regex("\(\s*val\s+((?:[^()]|\([^()]\))*)\)")
     )
-    if io_bundle != none {
-      io_bundle = io_bundle
-        .captures.first()
-      io_ports = io_bundle.matches(
-        regex("val\s+(\w+)\s*=\s*([^/\n\r]*)(?:/\*|/{2,})?([^\n\r]*)")
-        // regex("val\s+(\w+)\s*=\s*([^/\n\r]*)")
-      )
+    if ios != none {
+      let io_bundle = code.match(ios)
+      if io_bundle != none {
+        io_bundle = io_bundle
+          .captures.first()
+        io_ports = io_bundle.matches(
+          regex("val\s+(\w+)\s*=\s*([^/\n\r]*)(?:/\*|/{2,})?([^\n\r]*)")
+          // regex("val\s+(\w+)\s*=\s*([^/\n\r]*)")
+        )
+      }
     }
     sections += [
       == #module
@@ -142,7 +145,7 @@
       }
 
 
-      #if io_ports != none and ios and io_ports.len() > 0 {
+      #if io_ports != none and io_ports.len() > 0 {
         [IO端口定义如下：]
 
         table(
@@ -195,9 +198,19 @@
 
 = Interface
 #rend(r("common/common.scala"), "(?:abstract\s+)*class", "\w+", "Bundle")
+#rend(r("frontend/branch_predict.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
+#rend(r("frontend/decoder.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
+#rend(r("frontend/fetch.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
+#rend(r("scheduler/issue.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
+#rend(r("scheduler/rename.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
+#rend(r("scheduler/rob.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
+#rend(r("scheduler/scheduler.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
+#rend(r("execution/execution.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
+#rend(r("execution/lsu.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
+#rend(r("execution/prf.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
 
 = Microarchitecture
-本处理器为乱序执行多发射RV32IM架构，其设计主要借鉴于RSD以及BOOM。 
+本处理器为乱序执行多发射RV32IM架构，其设计主要借鉴于RSD以及BOOM。  
 
 // (Filepath, object type to match (like class, abstract class or object or case class), object name to match, inheritance pattern)
 // \w+ is a Regex pattern, meanning it will match a contiguous range of characters of at least 1 character long
@@ -205,7 +218,13 @@
 // (?:) is a non capturing group, meaning it will be omitted in the match result (i.e, it will be matched, but the exact value won't be returned) 
 // the notion 'group' is necessary since the pattern ab* will only match a, ab, abb, abbb, abbb..., but not ab,abab,abab. So to make the latter happen you have to group 'ab' into (ab), but writing this way will cause it to appear in the final result. So if you wish to match ab's, but don't want it to contaminate the search result, use (?:ab)
 // For detailed syntax, please refer to Regex.
-#rend(r("common/common.scala"), "(?:abstract)*\s?class", "\w+", "Module")
-#rend(r("common/freelist.scala"), "(?:abstract)*\s?class", "\w+", "[^{]*")
-#rend(r("execution/lsu.scala"), "(?:abstract)*\s?class", "\w+", "[^{]*")
-#rend(r("scheduler/rob.scala"), "(?:abstract)*\s?class", "\w+", "Module")
+#rend(r("frontend/branch_predict.scala"), "(?:abstract\s+)*class", "\w+", "Module", ios: match_all)
+#rend(r("frontend/decoder.scala"), "(?:abstract\s+)*class", "\w+", "Module", ios: match_all)
+#rend(r("frontend/fetch.scala"), "(?:abstract\s+)*class", "\w+", "Module", ios: match_all)
+#rend(r("scheduler/issue.scala"), "(?:abstract\s+)*class", "\w+", "Module", ios: match_all)
+#rend(r("scheduler/rename.scala"), "(?:abstract\s+)*class", "\w+", "Module", ios: match_all)
+#rend(r("scheduler/rob.scala"), "(?:abstract\s+)*class", "\w+", "Module", ios: match_all)
+#rend(r("scheduler/scheduler.scala"), "(?:abstract\s+)*class", "\w+", "Module", ios: match_all)
+#rend(r("execution/execution.scala"), "(?:abstract\s+)*class", "\w+", "Module", ios: match_all)
+#rend(r("execution/lsu.scala"), "(?:abstract\s+)*class", "\w+", "Module", ios: match_all)
+#rend(r("execution/prf.scala"), "(?:abstract\s+)*class", "\w+", "Module", ios: match_all)
