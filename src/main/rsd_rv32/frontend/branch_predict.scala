@@ -16,7 +16,7 @@ class BP_ROB_Interface(params : Parameters) extends Bundle {
     val instrType = Input(UInt(3.W)) //当前指令类型,该模块需要区分条件分支和无条件分支
     val BTB_Hit = Input(Bool()) //该分支指令最初是否命中BTB
     val actual_Taken = Input(Bool()) //实际是否taken
-    val GHR = Input(UInt(params.XLEN.W)) //作出预测时的全局历史寄存器快照，使得更新BHT时能够生成正确的index
+    val GHR = Input(UInt(params.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照，使得更新BHT时能够生成正确的index
     val actualTargetPC = Input(UInt(params.XLEN.W)) //实际跳转的目标地址
 }
 
