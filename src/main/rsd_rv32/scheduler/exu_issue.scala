@@ -10,6 +10,7 @@ class exu_issue_IO(implicit p: Parameters) extends Bundle {
     val dis_uop = Output(Vec(p.DISPATCH_WIDTH, new uop()))  //来自Dispatch Unit的输入
 
     //发射到执行单元的输出
+    val FU_ready = Input(Vec(p.EXU_FU_NUM, Bool())) //功能单元的ready信号
     val dst_FU = Output(Vec(p.ISSUE_WIDTH, UInt(log2Ceil(p.FU_NUM).W)))  //发射的指令的目标功能单元
     val issue_uop = Output(Vec(p.ISSUE_WIDTH, new uop()))  //发射的指令
     val issue_uop_valid = Output(Vec(p.ISSUE_WIDTH, Bool()))  //发射的指令的有效信号

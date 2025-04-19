@@ -14,6 +14,8 @@ case class Parameters (
   ISSUE_WIDTH: Int = 2,
   GHR_WIDTH: Int = 8,
   FU_NUM: Int = 7,
+  EXU_FU_NUM: Int = 5,
+  LSU_FU_NUM: Int = 2,
   PRF_DEPTH: Int = 128,
   ROB_DEPTH: Int = 256
 )
