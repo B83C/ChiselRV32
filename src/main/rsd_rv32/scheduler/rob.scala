@@ -46,11 +46,11 @@ class Dispatch_ROB_Interface(implicit p: Parameters) extends Bundle {
     val rob_tail = Input(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
 }
 
-class EXU_ROB_Interface(implicit p: Parameters) extends Bundle {
-    val complete_map = Output(Vec(p.FU_NUM, Bool()))  //完成映射表
-    val complete_uop = Output(Vec(p.FU_NUM, new uop()))  //来自exu的uop
-    val mispred = Output(Bool()) //分支误预测信号
-    val if_jump = Output(Bool()) //分支指令跳转信号
+class WB_ROB_Interface(implicit p: Parameters) extends Bundle {
+    val complete_map = Input(Vec(p.FU_NUM, Bool()))  //完成映射表
+    val complete_uop = Input(Vec(p.FU_NUM, new uop()))  //来自exu的uop
+    val mispred = Input(Bool()) //分支误预测信号
+    val if_jump = Input(Bool()) //分支指令跳转信号
 }
 
 class ROB_broadcast(implicit p: Parameters) extends Bundle {
