@@ -4,10 +4,30 @@ import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
 
+class Dispatch_issue_interface(implicit p: Parameters) extends Bundle {
+    val dis_valid = Output(Vec(p.DISPATCH_WIDTH, Bool()))  //来自Dispatch Unit的有效信号
+    val dis_uop = Output(Vec(p.DISPATCH_WIDTH, new uop()))  //来自Dispatch Unit的输入
+}
+
+class issue_exu_interface(implicit p: Parameters) extends Bundle {
+    val dst_FU = Output(Vec(p.ISSUE_WIDTH, UInt(log2Ceil(p.FU_NUM).W)))  //发射的指令的目标功能单元
+    val issue_uop = Output(Vec(p.ISSUE_WIDTH, new uop()))  //发射的指令
+    val issue_uop_valid = Output(Vec(p.ISSUE_WIDTH, Bool()))  //发射的指令的有效信号
+}
+
+class issue_lsu_interface(implicit p: Parameters) extends Bundle {
+    val dst_FU = Output(Vec(p.ISSUE_WIDTH, UInt(log2Ceil(p.FU_NUM).W)))  //发射的指令的目标功能单元
+    val issue_uop = Output(Vec(p.ISSUE_WIDTH, new uop()))  //发射的指令
+    val issue_uop_valid = Output(Vec(p.ISSUE_WIDTH, Bool()))  //发射的指令的有效信号
+}
+
+class iq_freelist_update(implicit p: Parameters) extends Bundle {
+    val iq_freelist_id = Input(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ Freelist ID
+}
 // IssueQueue是一个发射队列，用于存储待发射的指令。它根据指令的优先级和状态，决定哪些指令可以被发射。
 class Issue_Queue extends Module {
     val io = IO(new Bundle {
-        val dispatch_uops = Flipped(Vec(p.DISPATCH_WIDTH, DispatchedInsr))  //来自Dispatch Unit的输入
+        
         val issue_uops = Output(Vec(p.ISSUE_WIDTH, IssueInsr))  //发射的指令
         val exu_wakeup = Flipped(Vec(p.Num_WakeupPorts, Valid(new WakeupInfo())))  //来自执行单元的唤醒信号
 
