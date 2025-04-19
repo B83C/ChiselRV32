@@ -3,7 +3,7 @@ package rsd_rv32.common
 import chisel3._
 import chisel3.util._
 
-case class Parameters (
+case class Parameters(
   XLEN: Int = 32,
   PC_WIDTH: Int = 32,
   INSTR_WIDTH: Int = 32,
@@ -18,6 +18,8 @@ case class Parameters (
   LSU_FU_NUM: Int = 2,
   PRF_DEPTH: Int = 128,
   ROB_DEPTH: Int = 256
-)
+) {
+  
+}
 
 

@@ -3,11 +3,13 @@ package rsd_rv32.common
 import chisel3._
 import chisel3.util._
 
-class Port(val AddrWidth: Int,
-   val DataWidth: Int,
-   val read: Bool)(implicit p: Parameters) extends Bundle {
-  val addr = Input(UInt(AddrWidth.W))
-  val data = if read Output(UInt(DataWidth.W)) else Input(UInt(DataWidth.W))
+class Port(
+  val addr_width: Int,
+   val data_width: Int,
+   val read: Bool,
+ )(implicit p: Parameters) extends Bundle {
+  val addr = Input(UInt(addr_width.W))
+  val data = if (read) Output(UInt(data_width.W)) else Input(UInt(data_width.W))
 }
 
 class MultiportRam(

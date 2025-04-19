@@ -17,12 +17,9 @@ abstract class FreeList(
 }
 
 // 获取PRF中可用的寄存器
-// 
 class PRFFreeList(
   val read_ports: Int,  /* with desc */ 
   val depth: Int,  //Another desc
   val data_width: Int,
 )(implicit p: Parameters) extends FreeList(read_ports, depth) {
-  //BLablabla
-
 }

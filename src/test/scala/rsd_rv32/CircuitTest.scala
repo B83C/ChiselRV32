@@ -7,7 +7,6 @@ import chisel3.simulator.EphemeralSimulator._
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.must.Matchers
 
-import rsd_rv32._
 
 class CircuitTest extends AnyFreeSpec with Matchers {
   "Comb adder" in {

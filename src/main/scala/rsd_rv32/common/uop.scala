@@ -20,7 +20,7 @@ object OprSel extends ChiselEnum {
 }
 
 trait Signals {
-    val width = (new this).getWidth
+    val width = this.getWidth
 }
 
 class ALUSignals extends Bundle with Signals{
