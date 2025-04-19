@@ -9,11 +9,10 @@ import rsd_rv32.scheduler._
 import rsd_rv32.frontend._
 import rsd_rv32.execution._
 
-// 主要核心
+// Top Level Structure
 class Core()(implicit p: Parameters) extends Module {
   val io = IO(new Bundle {
-    // val imem = new InstructionMemoryInterface
-    // val dmem = new DataMemoryInterface
+    val mem = new MemInterface
   })
 
   // val fetch = Module(new FetchUnit)
