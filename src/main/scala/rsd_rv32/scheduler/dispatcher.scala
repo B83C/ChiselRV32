@@ -23,3 +23,7 @@ class Dispatcher_IO(implicit p:Parameters) extends Bundle {
   val stq_head = Input(UInt(log2Ceil(p.STQ_DEPTH).W))
   val stq_tail = Input(UInt(log2Ceil(p.STQ_DEPTH).W))
 }
+
+class Dispatcher(implicit p: Parameters) extends Module{
+  val io = IO(new Dispatcher_IO)
+}
