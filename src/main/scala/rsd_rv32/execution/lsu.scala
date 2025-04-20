@@ -5,6 +5,7 @@ import chisel3.util._
 import rsd_rv32.scheduler._
 import rsd_rv32.common._
 
+/*
 class DCacheRequest(implicit p:Parameters) extends Bundle()(p) 
 with HasUOP {
   val addr = UInt(p.CoreMaxAddrbits.W)
@@ -40,24 +41,32 @@ class LSUMemIO(implicit p: Parameters , edge: TLEdgeOut) extends Bundle()(p) {
   val order         = Input(Bool())//顺序控制信号，表示当前是否满足顺序要求
 
 }
+*/
 
-//LSU的核心IO接口，与execution、dcache、rob等进行交互
-
-
+//与Issue的IO接口，主要用于接收来自Issue的load和store指令，并将其传递给LSU的其他模块进行处理
 class LSU_Issue_IO(implicit p: Parameters) extends Bundle()(p){
 
   val store_issue_uop = Flipped(Decoupled(new uop()))
+  val store_value_i1  = Input(UInt(p.XLEN.W))//存储指令的操作数1
+  val store_value_i2  = Input(UInt(p.XLEN.W))//存储指令的操作数2
   val load_issue_uop  = Flipped(Decoupled(new uop()))
+  val load_value_i1   = Input(UInt(p.XLEN.W))//加载指令的操作数1
+  val load_value_i2   = Input(UInt(p.XLEN.W))//加载指令的操作数2
+  //接收来自issue的load和store指令
 }
 
-class STQ_Dispatch_IO(implicit p: Parameters) extends Bundle()(p){
+//向dispatcher发送STQ的头尾指针，方便后续store，load指令的调度
+//STQ的头尾指针主要用于存储指令的调度和执行
+class STQ_Dispatcher_IO(implicit p: Parameters) extends Bundle()(p){
 
-  val stq_tail_idx  = Output(log2Ceil(p.STQ_Depth).W)//stq的尾部索引 
-  val stq_head_idx  = Output(log2Ceil(p.STQ_Depth).W)//stq的头部索引
-  val store_dis_uop = Valid(Vec(p.DISPATCH_WIDTH,new uop()))//存储指令的uop
-  
+  val stq_tail_ptx  = Output(log2Ceil(p.STQ_Depth).W)//stq的尾部索引 
+  val stq_head_ptx  = Output(log2Ceil(p.STQ_Depth).W)//stq的头部索引
+  //val store_dis_uop = Flipped(Valid(Vec(p.DISPATCH_WIDTH,new uop())))
+  //存储指令的uop
+
 }
 
+//接收来自ROB的CommitSignal信号，用于执行后续入STQ的操作
 class LSU_ROB_IO(implicit p: Parameters) extends Bundle()(p){
 
   val store_signal = Input(Vec(p.DISPATCH_WIDTH, 
@@ -65,14 +74,16 @@ class LSU_ROB_IO(implicit p: Parameters) extends Bundle()(p){
 
 }
 
+//广播信号，store完成信号主要是给ROB使用
+//load完成信号则提供给PRF跟ROB
 class LSU_Broadcast(implicit p: Parameters) extends Bundle()(p){
 
-  val store_finish = Valid(new uop())//存储完成的信号
-  val load_finish  = Valid(new uop())//加载完成的信号
+  val store_finish = Valid((new uop()))//存储完成的信号
+  val load_finish  = Valid((new uop()))//加载完成的信号
 
 }
 
-class LSUIO(implicit p: Parameters,edge : TLEdgeOut) extends Bundle()(p){
+class LSUIO(implicit p: Parameters) extends Bundle()(p){
   
   val lsu_broadcast_commit = new LSU_Broadcast//LSU的提交信号
   val lsu_rob       = new LSU_ROB_IO//LSU与ROB的交互信号
@@ -82,7 +93,7 @@ class LSUIO(implicit p: Parameters,edge : TLEdgeOut) extends Bundle()(p){
 }
 
 //LSU的模块定义，目前只完成了IO接口的定义，内部逻辑还未完成
-class LSU(implicit p: Parameters,edge : TLEdgeOut) extends Module()(p){
+class LSU(implicit p: Parameters) extends Module()(p){
 
     val io = IO(new LSUIO())//定义LSU的IO接口
 
