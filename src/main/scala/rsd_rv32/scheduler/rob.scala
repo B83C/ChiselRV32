@@ -7,7 +7,6 @@ import rsd_rv32.common._
 
 
 class Dispatch_ROB_Interface(implicit p: Parameters) extends Bundle {
-    val dis_valid = Output(Vec(p.DISPATCH_WIDTH, Bool()))  //Dispatch Unit的有效标志
     val dis_uops = Valid(Vec(p.DISPATCH_WIDTH, new uop()))  //Dispatch Unit的uop
 
     val rob_empty = Input(Bool())  //ROB空标志(0表示空，1表示非空)
