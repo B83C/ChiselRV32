@@ -27,6 +27,6 @@ class st_issue_IO(implicit p: Parameters) extends Bundle {
     val iq_freelist_update = Output(UInt(log2Ceil(p.IQ_DEPTH).W)) //更新IQ Freelist
 }
 
-class st_issue_queue extends Module {
+class st_issue_queue(implicit p: Parameters) extends Module {
     val io = IO(new st_issue_IO())
 }

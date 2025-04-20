@@ -35,6 +35,6 @@ class exu_issue_IO(implicit p: Parameters) extends Bundle {
     val iq_freelist_update = Output(Vec(p.ISSUE_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //更新IQ Freelist
 }
 
-class exu_issue_queue extends Module {
+class exu_issue_queue(implicit p: Parameters) extends Module {
     val io = IO(new exu_issue_IO())
 }
