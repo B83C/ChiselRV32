@@ -6,18 +6,18 @@ import rsd_rv32.scheduler.rob._
 
 class Dispatcher_IO(implicit p:Parameters) extends Bundle {
   // with Rename
-  val Rename_uop = Decoupled(Vec(p.RENAME_WIDTH,new uop())).flip
+  val rename_uop = Decoupled(Vec(p.RENAME_WIDTH,new RENAME_DISPATCH_uop())).flip
   // with ROB
-  val ROB_uop = Valid(Vec(p.DISPATCH_WIDTH,new uop()))
-  val ROB_empty = Input(Bool())
-  val ROB_head = Input(UInt(log2Ceil(p.ROB_DEPTH).W))
-  val ROB_tail = Input(UInt(log2Ceil(p.ROB_DEPTH).W))
+  val rob_uop = Valid(Vec(p.DISPATCH_WIDTH,new DISPATCH_ROB_uop()))
+  val rob_empty = Input(Bool())
+  val rob_head = Input(UInt(log2Ceil(p.ROB_DEPTH).W))
+  val rob_tail = Input(UInt(log2Ceil(p.ROB_DEPTH).W))
   // with exu_issue
-  val exu_issue_uop = Valid(Vec(p.DISPATCH_WIDTH,new uop()))
+  val exuissue_uop = Valid(Vec(p.DISPATCH_WIDTH,new DISPATCH_EXUISSUE_uop()))
   // with st_issue
-  val st_issue_uop = Valid(Vec(p.DISPATCH_WIDTH,new uop()))
+  val stissue_uop = Valid(Vec(p.DISPATCH_WIDTH,new DISPATCH_STISSUE_uop()))
   // with ld_issue
-  val ld_issue_uop = Valid(Vec(p.DISPATCH_WIDTH,new uop()))
+  val ldissue_uop = Valid(Vec(p.DISPATCH_WIDTH,new DISPATCH_LDISSUE_uop()))
   // with sq
   val stq_empty = Input(Bool())
   val stq_head = Input(UInt(log2Ceil(p.STQ_DEPTH).W))

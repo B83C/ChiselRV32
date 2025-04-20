@@ -19,6 +19,9 @@ case class Parameters(
   PRF_DEPTH: Int = 128,
   ROB_DEPTH: Int = 256,
   STQ_DEPTH: Int = 32,
+  EXUISSUE_DEPTH: Int = 16
+  LDISSUE_DEPTH: Int = 16,
+  STISSUE_DEPTH: Int = 16
 ) {
   
 }
