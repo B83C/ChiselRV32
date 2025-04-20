@@ -54,7 +54,7 @@ class STQ_Dispatch_IO(implicit p: Parameters) extends Bundle()(p){
 
   val stq_tail_idx  = Output(log2Ceil(p.STQ_Depth).W)//stq的尾部索引 
   val stq_head_idx  = Output(log2Ceil(p.STQ_Depth).W)//stq的头部索引
-  val store_dis_uop = Valid(Vec(p.DISPATCH_WIDTH,new uop()))//存储指令的uop
+  //val store_dis_uop = Valid(Vec(p.DISPATCH_WIDTH,new uop()))//存储指令的uop
   val stq_empty     = Output(Bool())//stq是否为空
 }
 
