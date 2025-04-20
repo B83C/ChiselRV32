@@ -1,19 +1,18 @@
-class lsu_issue_IO(implicit p: Parameters) extends Bundle {
+class ld_issue_IO(implicit p: Parameters) extends Bundle {
     //来自Dispatch Unit的输入
     val iq_id = Input(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID
-    val dis_valid = Output(Vec(p.DISPATCH_WIDTH, Bool()))  //来自Dispatch Unit的有效信号
-    val dis_uop = Output(Vec(p.DISPATCH_WIDTH, new uop()))  //来自Dispatch Unit的输入
+    val dis_uop = Flipped(Valid(Vec(p.DISPATCH_WIDTH, new uop())))  //来自Dispatch Unit的输入
 
-    //发射到lsu的输出
+    //发射到ld的输出
     val issue_uop = Decoupled(new uop())  //发射的指令
-    val value_o1 = Output(Vec(p.ISSUE_WIDTH, UInt(p.XLEN.W))) //发射的指令的操作数1
-    val value_o2 = Output(Vec(p.ISSUE_WIDTH, UInt(p.XLEN.W))) //发射的指令的操作数2
+    val value_o1 = Output(UInt(p.XLEN.W)) //发射的指令的操作数1
+    val value_o2 = Output(UInt(p.XLEN.W)) //发射的指令的操作数2
 
     //PRF
     val raddr1 = Output(UInt(log2Ceil(p.PRF_DEPTH).W)) //PRF读地址1
     val raddr2 = Output(UInt(log2Ceil(p.PRF_DEPTH).W)) //PRF读地址2
-    val value_i1 = Input(Vec(p.ISSUE_WIDTH, UInt(p.XLEN.W))) //操作数1
-    val value_i2 = Input(Vec(p.ISSUE_WIDTH, UInt(p.XLEN.W))) //操作数2    
+    val value_i1 = Input(UInt(p.XLEN.W)) //操作数1
+    val value_i2 = Input(UInt(p.XLEN.W)) //操作数2    
 
     //监听PRF的valid信号用于更新ready状态
     val prf_valid = Input(Vec(p.PRF_DEPTH, Bool())) //PRF的valid信号
@@ -25,9 +24,9 @@ class lsu_issue_IO(implicit p: Parameters) extends Bundle {
     val complete_uop1 = Input(Vec(p.FU_NUM, new uop()))  //来自exu的uop
 
     //输出至Dispatch Unit的信号
-    val iq_freelist_update = Output(Vec(p.ISSUE_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //更新IQ Freelist
+    val iq_freelist_update = Output(UInt(log2Ceil(p.IQ_DEPTH).W)) //更新IQ Freelist
 }
 
-class lsu_issue_queue extends Module {
-    val io = IO(new exu_issue_IO())
+class ld_issue_queue extends Module {
+    val io = IO(new ld_issue_IO())
 }

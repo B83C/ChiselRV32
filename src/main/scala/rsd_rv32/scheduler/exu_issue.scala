@@ -6,8 +6,7 @@ import rsd_rv32.common._
 class exu_issue_IO(implicit p: Parameters) extends Bundle {
     //来自Dispatch Unit的输入
     val iq_id = Input(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID
-    val dis_valid = Output(Vec(p.DISPATCH_WIDTH, Bool()))  //来自Dispatch Unit的有效信号
-    val dis_uop = Output(Vec(p.DISPATCH_WIDTH, new uop()))  //来自Dispatch Unit的输入
+    val dis_uop = Flipped(Valid(Vec(p.DISPATCH_WIDTH, new uop())))  //来自Dispatch Unit的输入
 
     //发射到执行单元的输出
     val FU_ready = Input(Vec(p.EXU_FU_NUM, Bool())) //功能单元的ready信号
