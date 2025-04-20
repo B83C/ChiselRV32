@@ -63,7 +63,7 @@ class STQ_Dispatcher_IO(implicit p: Parameters) extends Bundle()(p){
   val stq_head_ptx  = Output(log2Ceil(p.STQ_Depth).W)//stq的头部索引
   //val store_dis_uop = Flipped(Valid(Vec(p.DISPATCH_WIDTH,new uop())))
   //存储指令的uop
-  val stq_empty    = Input(Bool())//stq是否为空
+  val stq_empty     = Output(Bool())//stq是否为空
 }
 
 //接收来自ROB的CommitSignal信号，用于执行后续入STQ的操作
