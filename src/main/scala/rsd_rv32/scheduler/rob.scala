@@ -25,7 +25,7 @@ class WB_ROB_Interface(implicit p: Parameters) extends Bundle {
 }
 
 class ROB_broadcast(implicit p: Parameters) extends Bundle {
-    val commit_signal = Output(Vec(p.DISPATCH_WIDTH, UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))) //ROB条目
+    val commit_signal = Valid(Vec(p.DISPATCH_WIDTH, UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))) //ROB条目
 }
 
 
