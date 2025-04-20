@@ -5,12 +5,13 @@ class lsu_issue_IO(implicit p: Parameters) extends Bundle {
     val dis_uop = Output(Vec(p.DISPATCH_WIDTH, new uop()))  //来自Dispatch Unit的输入
 
     //发射到lsu的输出
-    val FU_ready = Input(Vec(p.LSU_FU_NUM, Bool())) //功能单元的ready信号
-    val dst_FU = Output(Vec(p.ISSUE_WIDTH, Bool()))  //发射的指令的目标功能单元(load/store)
-    val issue_uop = Output(Vec(p.ISSUE_WIDTH, new uop()))  //发射的指令
-    val issue_uop_valid = Output(Vec(p.ISSUE_WIDTH, Bool()))  //发射的指令的有效信号
+    val issue_uop = Decoupled(new uop())  //发射的指令
     val value1 = Output(Vec(p.ISSUE_WIDTH, UInt(p.XLEN.W))) //发射的指令的操作数1
     val value2 = Output(Vec(p.ISSUE_WIDTH, UInt(p.XLEN.W))) //发射的指令的操作数2
+
+    //PRF
+    val raddr1 = Output(UInt(log2Ceil(p.PRF_DEPTH).W)) //PRF读地址1
+    val raddr2 = Output(UInt(log2Ceil(p.PRF_DEPTH).W)) //PRF读地址2
 
     //监听PRF的valid信号用于更新ready状态
     val prf_valid = Input(Vec(p.PRF_DEPTH, Bool())) //PRF的valid信号
