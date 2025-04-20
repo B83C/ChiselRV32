@@ -17,7 +17,8 @@ case class Parameters(
   EXU_FU_NUM: Int = 5,
   LSU_FU_NUM: Int = 2,
   PRF_DEPTH: Int = 128,
-  ROB_DEPTH: Int = 256
+  ROB_DEPTH: Int = 256,
+  STQ_DEPTH: Int = 32,
 ) {
   
 }
