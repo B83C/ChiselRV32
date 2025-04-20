@@ -8,12 +8,10 @@ import rsd_rv32.common._
 
 class Dispatch_ROB_Interface(implicit p: Parameters) extends Bundle {
     val dis_valid = Output(Vec(p.DISPATCH_WIDTH, Bool()))  //Dispatch Unit的有效标志
-    val dis_uops = Output(Vec(p.DISPATCH_WIDTH, new uop()))  //Dispatch Unit的uop
-    val dis_instr_PC = Output(Vec(p.DISPATCH_WIDTH,UInt(32.W)))  //Dispatch Unit的指令PC值
+    val dis_uops = Valid(Vec(p.DISPATCH_WIDTH, new uop()))  //Dispatch Unit的uop
 
     val rob_empty = Input(Bool())  //ROB空标志(0表示空，1表示非空)
-    val rob_ready = Input(Bool())  //ROB准备好标志
-    val rob_head = Input(UInt(log2Ceil())) //ROB头指针
+    val rob_head = Input(UInt(log2Ceil(p.ROB_DEPTH))) //ROB头指针
     val rob_tail = Input(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
 }
 
