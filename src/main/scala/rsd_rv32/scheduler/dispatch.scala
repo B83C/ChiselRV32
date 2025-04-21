@@ -2,7 +2,7 @@ package rsd_rv32.scheduler
 
 import chisel3._
 import chisel3.util._
-import rsd_rv32.scheduler.rob._
+import rsd_rv32.common._
 
 class Dispatcher_IO(implicit p:Parameters) extends Bundle {
   // with Rename

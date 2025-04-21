@@ -25,3 +25,7 @@ class Fetch_IO(implicit p: Parameters) extends Bundle {
     // with ID
     val id_uop = Decoupled(Vec(p.FETCH_WIDTH, new IF_ID_uop()))
 }
+
+class Fetch(implicit p: Parameters) extends Module {
+    val io = IO(new Fetch_IO())
+}
