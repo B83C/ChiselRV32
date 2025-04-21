@@ -1,4 +1,5 @@
 package rsd_rv32.frontend
+
 import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
@@ -22,7 +23,7 @@ class BP_ROB_Interface(implicit p: Parameters) extends Bundle {
 
 class BP_IO (implicit p: Parameters) extends Bundle {
     //with IF
-    val PC_cur = Input(UInt(p.XLEN.W)) //当前IFU的PC值
+    val instrAddr = Input(UInt(p.XLEN.W)) //当前IFU的PC值
     val PC_target = Output(UInt(p.XLEN.W)) //预测的下个cycle取指的目标地址
     val BTB_Hit = Output(Vec(p.FETCH_WIDTH, Bool())) //1代表hit，0相反；将最年轻的命中BTB的置为1，其余为0
     val BHT_Taken = Output(Bool()) //branch指令的BHT的预测结果；1代表跳转，0相反
