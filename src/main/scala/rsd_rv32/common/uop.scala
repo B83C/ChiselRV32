@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 
 object InstrType extends ChiselEnum {
-    val ALU, Branch, LD, ST, csr, MUL = Value
+    val ALU, Branch, LD, ST, csr, MUL, DIV_REM= Value
 }
 
 object BranchPred extends ChiselEnum {
