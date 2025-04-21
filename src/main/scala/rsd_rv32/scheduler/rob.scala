@@ -28,16 +28,18 @@ class ROB_broadcast(implicit p: Parameters) extends Bundle {
 */
 
 class ROBIO(implicit p: Parameters) extends Bundle {
-    val dis_uops = Valid(Vec(p.DISPATCH_WIDTH, new uop()))  //Dispatch Unit的uop
+    val dis_uops = Valid(Vec(p.DISPATCH_WIDTH, new DISPATCH_ROB_uop()))  //Dispatch Unit的uop
 
     val rob_empty = Input(Bool())  //ROB空标志(0表示空，1表示非空)
     val rob_head = Input(UInt(log2Ceil(p.ROB_DEPTH))) //ROB头指针
     val rob_tail = Input(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
 
-    val complete_map = Input(Vec(p.FU_NUM, Bool()))  //完成映射表
-    val complete_uop = Input(Vec(p.FU_NUM, new uop()))  //来自exu的uop
-    val mispred = Input(Bool()) //分支误预测信号
-    val if_jump = Input(Bool()) //分支指令跳转信号
+    val ALU_complete_uop = Flipped(Valid((Vec(p.ALU_NUM, new ALU_WB_uop()))))  //来自alu的uop
+    val BU_complete_uop = Flipped(Valid((Vec(p.BU_NUM, new BU_WB_uop()))))  //来自bu的uop
+    val STU_complete_uop = Flipped(Valid(new STPIPE_WB_uop()))  //来自stu的uop
+    val LDU_complete_uop = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
+    // val mispred = Input(Bool()) //分支误预测信号
+    // val if_jump = Input(Bool()) //分支指令跳转信号
 
     val commit_signal = Valid(Vec(p.DISPATCH_WIDTH, UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))) //ROB条目
 }
