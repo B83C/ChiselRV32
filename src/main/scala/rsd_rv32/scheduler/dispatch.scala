@@ -12,6 +12,7 @@ class Dispatcher_IO(implicit p:Parameters) extends Bundle {
   val rob_empty = Input(Bool())
   val rob_head = Input(UInt(log2Ceil(p.ROB_DEPTH).W))
   val rob_tail = Input(UInt(log2Ceil(p.ROB_DEPTH).W))
+  val rob_commitsignal = ßValid(Vec(p.DISPATCH_WIDTH, UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))).flip
   // with exu_issue
   val exuissue_uop = Valid(Vec(p.DISPATCH_WIDTH,new DISPATCH_EXUISSUE_uop()))
   val exuissued_id = Valid(Vec(p.EXU_ISSUE_WIDTH,UInt(log2Ceil(p.EXUISSUE_DEPTH).W))).flip
