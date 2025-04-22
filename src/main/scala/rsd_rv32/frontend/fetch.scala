@@ -13,7 +13,7 @@ class Fetch_IO(implicit p: Parameters) extends Bundle {
     val id_uop = Vec(p.CORE_WIDTH, Valid(new IF_ID_uop()))
 
     // with ROB
-    val rob_commitsignal = Vec(p.CORE_WIDTH, Valid(UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))).flip
+    val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped((UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))))
     
     // with BranchPredictor
     // instAddr上面已写
