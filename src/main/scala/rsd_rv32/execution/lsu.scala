@@ -43,15 +43,18 @@ class LSUMemIO(implicit p: Parameters , edge: TLEdgeOut) extends Bundle()(p) {
 }
 */
 
+//与MEM的IO接口
+class LSU_MEM_IO(implicit p: Parameters) extends Bundle()(p){
+
+}
+
 //与Issue的IO接口，主要用于接收来自Issue的load和store指令，并将其传递给LSU的其他模块进行处理
 class LSU_Issue_IO(implicit p: Parameters) extends Bundle()(p){
 
-  val store_issue_uop = Flipped(Decoupled(new uop()))
-  val store_value_i1  = Input(UInt(p.XLEN.W))//存储指令的操作数1
-  val store_value_i2  = Input(UInt(p.XLEN.W))//存储指令的操作数2
-  val load_issue_uop  = Flipped(Decoupled(new uop()))
-  val load_value_i1   = Input(UInt(p.XLEN.W))//加载指令的操作数1
-  val load_value_i2   = Input(UInt(p.XLEN.W))//加载指令的操作数2
+  val store_issue_uop = Flipped(Decoupled(new STISSUE_STPIPE_uop()))//存储指令的uop
+  
+  val load_issue_uop  = Flipped(Decoupled(new LDISSUE_LDPIPE_uop()))//加载指令的uop
+  
   //接收来自issue的load和store指令
 }
 
@@ -61,9 +64,10 @@ class STQ_Dispatcher_IO(implicit p: Parameters) extends Bundle()(p){
 
   val stq_tail_ptx  = Output(log2Ceil(p.STQ_Depth).W)//stq的尾部索引 
   val stq_head_ptx  = Output(log2Ceil(p.STQ_Depth).W)//stq的头部索引
-  //val store_dis_uop = Flipped(Valid(Vec(p.DISPATCH_WIDTH,new uop())))
-  //存储指令的uop
+ 
   val stq_empty     = Output(Bool())//stq是否为空
+  val dis_store     = Vec(2,Bool())//存储指令是否被调度
+
 }
 
 //接收来自ROB的CommitSignal信号，用于执行后续入STQ的操作
@@ -78,8 +82,8 @@ class LSU_ROB_IO(implicit p: Parameters) extends Bundle()(p){
 //load完成信号则提供给PRF跟ROB
 class LSU_Broadcast(implicit p: Parameters) extends Bundle()(p){
 
-  val store_finish = Valid((new uop()))//存储完成的信号
-  val load_finish  = Valid((new uop()))//加载完成的信号
+  val store_finish = Valid((new STPIPE_WB_uop()))//存储完成的信号
+  val load_finish  = Valid((new LDPIPE_WB_uop()))//加载完成的信号
 
 }
 
