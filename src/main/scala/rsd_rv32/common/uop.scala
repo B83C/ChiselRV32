@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 
 object InstrType extends ChiselEnum {
-    val ALU, LD, ST, CSR, MUL = Value
+    val ALU, Branch, LD, ST, CSR, MUL, DIV_REM= Value
 }
 
 object BranchPred extends ChiselEnum {
@@ -202,12 +202,18 @@ class ALU_WB_uop(implicit p: Parameters) extends Bundle {
 }
 
 class BU_WB_uop(implicit p: Parameters) extends Bundle {
-    //writeback to ROB only!
+    val isConditional = Bool() //needed to distinguish between conditional branches and unconditional branches
+
+    //writeback to ROB
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
     val isConditional = Bool() //rob needs it to distinguish between conditional branches and unconditional branches
     val mispred = Bool()
     val target_PC = UInt(p.XLEN.W)
     val actual_branch_direction = BranchPred()
+
+    //jal and jalr need to writeback to PRF
+    val pd = UInt(log2Ceil(p.PRF_DEPTH).W)
+    val pd_value = UInt(p.XLEN.W)
 }
 
 class LDPIPE_WB_uop(implicit p: Parameters) extends Bundle {
