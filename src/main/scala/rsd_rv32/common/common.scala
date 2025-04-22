@@ -5,7 +5,7 @@ import chisel3.util._
 
 case class Parameters(
   XLEN: Int = 32,
-  PC_WIDTH: Int = 32,
+  //PC_WIDTH: Int = 32,
   CORE_WIDTH: Int = 2,  //Dispatch, Issue, Commit Width
   INSTR_WIDTH: Int = 32,
   // FETCH_WIDTH: Int = 2,

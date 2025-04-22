@@ -6,21 +6,22 @@ import rsd_rv32.common._
 
 class Dispatcher_IO(implicit p:Parameters) extends Bundle {
   // with Rename
-  val rename_uop = Decoupled(Vec(p.RENAME_WIDTH,new RENAME_DISPATCH_uop())).flip
+  val rename_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new RENAME_DISPATCH_uop())))
+  val ready = Output(Bool()) // Dispatch单元是否准备好接收指令
   // with ROB
-  val rob_uop = Output(Valid(Vec(p.DISPATCH_WIDTH,new DISPATCH_ROB_uop())))
+  val rob_uop = Output(Valid(Vec(p.CORE_WIDTH,new DISPATCH_ROB_uop())))
   val rob_empty = Input(Bool())
   val rob_head = Input(UInt(log2Ceil(p.ROB_DEPTH).W))
   val rob_tail = Input(UInt(log2Ceil(p.ROB_DEPTH).W))
-  val rob_commitsignal = ßValid(Vec(p.DISPATCH_WIDTH, UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))).flip
+  val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))))
   // with exu_issue
-  val exuissue_uop = Valid(Vec(p.DISPATCH_WIDTH,new DISPATCH_EXUISSUE_uop()))
-  val exuissued_id = Valid(Vec(p.EXU_ISSUE_WIDTH,UInt(log2Ceil(p.EXUISSUE_DEPTH).W))).flip
+  val exuissue_uop = Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop()))
+  val exuissued_id = Vec(p., Flipped(Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))))
   // with st_issue
-  val stissue_uop = Valid(Vec(p.DISPATCH_WIDTH,new DISPATCH_STISSUE_uop()))
+  val stissue_uop = Vec(p.CORE_WIDTH, Valid(new DISPATCH_STISSUE_uop()))
   val stissued_id = Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)).flip
   // with ld_issue
-  val ldissue_uop = Valid(Vec(p.DISPATCH_WIDTH,new DISPATCH_LDISSUE_uop()))
+  val ldissue_uop = Vec(p.CORE_WIDTH, Valid(new DISPATCH_LDISSUE_uop()))
   val ldissued_id = Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W)).flip
   // with sq
   val stq_empty = Input(Bool())

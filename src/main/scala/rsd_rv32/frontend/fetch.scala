@@ -11,9 +11,10 @@ class Fetch_IO(implicit p: Parameters) extends Bundle {
 
     // with ID
     val id_uop = Vec(p.CORE_WIDTH, Valid(new IF_ID_uop()))
+    val id_ready = Input(Bool()) //ID是否准备好接收指令
 
     // with ROB
-    val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped((UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))))
+    val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))))
     
     // with BranchPredictor
     // instAddr上面已写
