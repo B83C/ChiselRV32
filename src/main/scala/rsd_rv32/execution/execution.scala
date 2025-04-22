@@ -4,6 +4,10 @@ import chisel3._
 import chisel3.util._
 import freechips.rocketchip.config.Parameters
 
+import rsd_rv32.common._
+
+import rsd_rv32.frontend._
+
 class ALUIO(implicit p: Parameters) extends Bundle {
   //输入操作数
   val in1 = Input(UInt(p(XLen).W))  
@@ -60,4 +64,29 @@ class BypassNetwork(implicit p: Parameters) extends Module {
       io.data_out := io.exec_units(i).bits.data
     }
   }
+}
+
+abstract class ExecutionUnit(implicit p: Parameters) extends Module {
+  val base_io = IO(new Bundle {
+    val kill = Input(Bool())   //Killed upon misprediction/exception
+    val branch_update = Input(new BrUpdateInfo) 
+    val issued_uop = Input(Valid(new uop()))
+  })
+}
+
+class ALUExu() extends ExecutionUnit {
+  
+}
+class BranchExu() extends ExecutionUnit {
+  
+}
+class MULExu() extends ExecutionUnit {
+  
+}
+class CSRExu() extends ExecutionUnit {
+  
+}
+
+class () extends ExecutionUnit {
+  
 }

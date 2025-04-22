@@ -4,11 +4,15 @@ import chisel3._
 import chisel3.util._
 
 object InstrType extends ChiselEnum {
-    val ALU, Branch, LD, ST, csr, MUL = Value
+    val ALU, LD, ST, CSR, MUL = Value
 }
 
 object BranchPred extends ChiselEnum {
     val T, NT = Value
+}
+
+object BranchType extends ChiselEnum {
+    val X, Branch, JAL, JALR = Value
 }
 
 object BTBHit extends ChiselEnum{
@@ -30,8 +34,7 @@ class ALUSignals extends Bundle with Signals{
 }
 
 class BranchSignals extends Bundle with Signals{
-    val jal = Bool()
-    val jalr = Bool()
+    val type = BranchType()
 }
 
 class FUSignals extends Bundle {
@@ -40,7 +43,15 @@ class FUSignals extends Bundle {
     def as_Branch = this.asTypeOf(new BranchSignals)
 }
 
-/*class uop()(implicit p: Parameters) extends Bundle {
+// abstract class BaseUOP()(implicit p: Parameters) extends Bundle {
+//     val instr = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode;
+// }
+
+abstract trait HasUOP() extends Bundle {
+    val uop = new uop()
+}
+
+class uop(implicit p: Parameters) extends Bundle {
     val instr = UInt((32 - 7).W) //func3, func7, rd, rs1 , rs2, imm without opcode
     val instr_type = InstrType()
     val instr_PC = UInt(p.XLEN.W)
@@ -51,11 +62,11 @@ class FUSignals extends Bundle {
     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps2 = UInt(log2Ceil(p.PRF_DEPTH).W)
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
-    val branch_pred = BranchPred()
-    val btb_hit = BTBHit()
+    val branch_taken = Bool()
+    val btb_hit = Bool()
     
     val fu_signals = new FUSignals() //opcode is compiled into fu specific control signals
-} */
+}
 
 class IF_ID_uop(implicit p: Parameters) extends Bundle {
     val instr = UInt(p.XLEN.W) 
@@ -67,7 +78,6 @@ class IF_ID_uop(implicit p: Parameters) extends Bundle {
 }
 
 class ID_RENAME_uop(implicit p: Parameters) extends Bundle {
-    val instr = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode;
 
     //opcode is compiled into fu specific control signals
     val instr_type = InstrType() 

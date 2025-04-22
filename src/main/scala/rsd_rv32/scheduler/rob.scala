@@ -36,6 +36,8 @@ class ROBIO(implicit p: Parameters) extends Bundle {
 
     val ALU_complete_uop = Flipped(Valid((Vec(p.ALU_NUM, new ALU_WB_uop()))))  //来自alu的uop
     val BU_complete_uop = Flipped(Valid((Vec(p.BU_NUM, new BU_WB_uop()))))  //来自bu的uop
+    val jal = Bool()
+    val jalr = Bool()
     val STU_complete_uop = Flipped(Valid(new STPIPE_WB_uop()))  //来自stu的uop
     val LDU_complete_uop = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
     // val mispred = Input(Bool()) //分支误预测信号

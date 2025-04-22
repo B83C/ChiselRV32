@@ -36,3 +36,8 @@ class BP_IO (implicit p: Parameters) extends Bundle {
 class BranchPredictor(implicit p: Parameters) extends Module {
     val io = IO(new BP_IO())
 }
+
+class BrUpdateInfo extends Bundle {
+    val 
+    
+}

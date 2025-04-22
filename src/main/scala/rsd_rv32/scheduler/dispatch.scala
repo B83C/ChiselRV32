@@ -8,7 +8,7 @@ class Dispatcher_IO(implicit p:Parameters) extends Bundle {
   // with Rename
   val rename_uop = Decoupled(Vec(p.RENAME_WIDTH,new RENAME_DISPATCH_uop())).flip
   // with ROB
-  val rob_uop = Valid(Vec(p.DISPATCH_WIDTH,new DISPATCH_ROB_uop()))
+  val rob_uop = Output(Valid(Vec(p.DISPATCH_WIDTH,new DISPATCH_ROB_uop())))
   val rob_empty = Input(Bool())
   val rob_head = Input(UInt(log2Ceil(p.ROB_DEPTH).W))
   val rob_tail = Input(UInt(log2Ceil(p.ROB_DEPTH).W))
