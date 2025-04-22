@@ -6,15 +6,15 @@ import rsd_rv32.common._
 
 class exu_issue_IO(implicit p: Parameters) extends Bundle {
     //来自Dispatch Unit的输入
-    val iq_id = Input(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID
+    // val iq_id = Input(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID,
     val dis_uop = Flipped(Valid(Vec(p.DISPATCH_WIDTH, new DISPATCH_EXUISSUE_uop())))  //来自Dispatch Unit的输入
 
     //发射到ALU的输出
     val FU_ready = Input(Vec(p.ALU_NUM, Bool())) //功能单元的ready信号
     val dst_FU = Output(Vec(p.ISSUE_WIDTH, UInt(log2Ceil(p.ALU_NUM).W)))  //发射的指令的目标功能单元
-    val issue_uop = Valid(Vec(p.ISSUE_WIDTH, new EXUISSUE_EXU_uop()))  //发射的指令
-    val value_o1 = Output(Vec(p.ISSUE_WIDTH, UInt(p.XLEN.W))) //发射的指令的操作数1
-    val value_o2 = Output(Vec(p.ISSUE_WIDTH, UInt(p.XLEN.W))) //发射的指令的操作数2
+    val issue_uop = Valid(Vec(p.ISSUE_WIDTH, new EXUISSUE_EXU_uop()))  //发射的指令(包含操作数的值)
+    // val value_o1 = Output(Vec(p.ISSUE_WIDTH, UInt(p.XLEN.W))) //发射的指令的操作数1
+    // val value_o2 = Output(Vec(p.ISSUE_WIDTH, UInt(p.XLEN.W))) //发射的指令的操作数2
 
     //PRF
     val raddr1 = Output(Vec(p.EXU_FU_NUM, UInt(log2Ceil(p.PRF_DEPTH).W))) //PRF读地址1

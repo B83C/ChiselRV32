@@ -10,8 +10,8 @@ class ld_issue_IO(implicit p: Parameters) extends Bundle {
 
     //发射到ld的输出
     val issue_uop = Decoupled(new LDISSUE_LDPIPE_uop())  //发射的指令
-    val value_o1 = Output(UInt(p.XLEN.W)) //发射的指令的操作数1
-    val value_o2 = Output(UInt(p.XLEN.W)) //发射的指令的操作数2
+    // val value_o1 = Output(UInt(p.XLEN.W)) //发射的指令的操作数1
+    // val value_o2 = Output(UInt(p.XLEN.W)) //发射的指令的操作数2
 
     //PRF
     val raddr1 = Output(UInt(log2Ceil(p.PRF_DEPTH).W)) //PRF读地址1
