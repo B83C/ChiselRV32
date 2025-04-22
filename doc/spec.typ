@@ -1,8 +1,6 @@
 #import "util.typ": *
-
 #show: codly-init.with()
 #show table.cell.where(x: 0): strong
-
 #set table(
   stroke: (x, y) => if y == 0 {
     (bottom: 0.7pt + black)
@@ -14,7 +12,6 @@
 )
 
 = Revision History
-
 #table(
   columns: 3,
   gutter: 3pt,
@@ -32,43 +29,42 @@
 / SDA: Store Data Array
 / STQ: STore Queue
 / LDQ: LoaD Queue
+/ LSU: LoaD Queue
 
 = Overview
 #include "diagram.typ"
 
-= Parameters
-#rend(r("common/common.scala"), "(?:case\s+)*class", "Parameters", none)
-
-= Interface
-#rend(r("common/common.scala"), "(?:abstract\s+)*class", "\w+", "Bundle")
-#rend(r("frontend/branch_predict.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
-// #rend(r("frontend/decoder.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
-#rend(r("frontend/fetch.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
-#rend(r("scheduler/issue.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
-#rend(r("scheduler/rename.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
-#rend(r("scheduler/rob.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
-// #rend(r("scheduler/scheduler.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
-#rend(r("execution/execution.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
-#rend(r("execution/lsu.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
-#rend(r("execution/prf.scala"), "(?:abstract\s+)*class", "\w+", "Bundle", ios: match_all)
-
 = Microarchitecture
-本处理器为乱序执行多发射RV32IM架构，其设计主要借鉴于RSD以及BOOM。  
+本处理器为乱序执行双发射RV32IM架构，代码设计风格主要借鉴于BOOM。
+== 功能部件介绍
+=== 取指 (IF)
+取指单元在单周期内完成取指操作...
+=== 分支预测 (BP)
+=== 译码 (ID)
+=== 重命名 (RU)
+=== 派遣 (DP)
+=== 指令发射 (IQ)
+=== 重排序 (ROB)
+=== 执行 (EXU)
+=== 物理寄存器堆 (PRF)
 
-// (Filepath, object type to match (like class, abstract class or object or case class), object name to match, inheritance pattern)
-// \w+ is a Regex pattern, meanning it will match a contiguous range of characters of at least 1 character long
-// \s is space, (pred)* means matching at least 0 amount of pred
-// (?:) is a non capturing group, meaning it will be omitted in the match result (i.e, it will be matched, but the exact value won't be returned) 
-// the notion 'group' is necessary since the pattern ab* will only match a, ab, abb, abbb, abbb..., but not ab,abab,abab. So to make the latter happen you have to group 'ab' into (ab), but writing this way will cause it to appear in the final result. So if you wish to match ab's, but don't want it to contaminate the search result, use (?:ab)
-// For detailed syntax, please refer to Regex.
-#rend(r("core.scala"), "(?:abstract\s+)*class", "\w+", "Module")
-#rend(r("frontend/branch_predict.scala"), "(?:abstract\s+)*class", "\w+", "Module")
-// #rend(r("frontend/decoder.scala"), "(?:abstract\s+)*class", "\w+", "Module")
-#rend(r("frontend/fetch.scala"), "(?:abstract\s+)*class", "\w+", "Module")
-#rend(r("scheduler/issue.scala"), "(?:abstract\s+)*class", "\w+", "Module")
-#rend(r("scheduler/rename.scala"), "(?:abstract\s+)*class", "\w+", "Module")
-#rend(r("scheduler/rob.scala"), "(?:abstract\s+)*class", "\w+", "Module")
-// #rend(r("scheduler/scheduler.scala"), "(?:abstract\s+)*class", "\w+", "Module")
-#rend(r("execution/execution.scala"), "(?:abstract\s+)*class", "\w+", "Module")
-#rend(r("execution/lsu.scala"), "(?:abstract\s+)*class", "\w+", "Module")
-#rend(r("execution/prf.scala"), "(?:abstract\s+)*class", "\w+", "Module")
+Summary:
+#table(
+  columns: 2,
+  gutter: 3pt,
+  [功能], [实现方法],
+  [分支预测], [BTB + GShare],
+  [执行单元], [分为ALU, Branch Unit, CSR, MUL],
+)
+== 特别案例处理方式
+=== Load Store违例
+=== 精确异常以及分支误判回滚
+=== CSR写入
+
+= Units
+#dpio(c.ExecutionUnit)
+#dpio(c.ALU)
+
+= Parameters
+= Interface
+#context interfaces_used.final()
