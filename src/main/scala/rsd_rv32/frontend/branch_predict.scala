@@ -23,15 +23,17 @@ class BP_ROB_Interface(implicit p: Parameters) extends Bundle {
 
 class BP_IO (implicit p: Parameters) extends Bundle {
     //with IF
-    val instrAddr = Input(UInt(p.XLEN.W)) //当前IFU的PC值
+    val instrAddr = Input(UInt(p.XLEN.W)) //当前PC值，用于访问BTB获得跳转目标地址，以及访问BHT获得跳转预测结果
     val PC_target = Output(UInt(p.XLEN.W)) //预测的下个cycle取指的目标地址
-    val BTB_Hit = Output(Vec(p.FETCH_WIDTH, Bool())) //1代表hit，0相反；将最年轻的命中BTB的置为1，其余为0
-    val BHT_Taken = Output(Bool()) //branch指令的BHT的预测结果；1代表跳转，0相反
-    val GHR = Output(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照
+    val BTB_Hit = Output(Vec(p.FETCH_WIDTH, Bool())) //1代表hit，0相反；将指令包中命中BTB的最年轻的置为1，其余为0
+    val BHT_Taken = Output(Bool()) //条件分支指令的BHT的预测结果；1代表跳转，0相反；非条件分支置1
+    val GHR = Output(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照，随流水级传递，在ROB退休分支指令时更新BHT
 
     //with ROB
-    val rob_commitsignal = Valid(Vec(p.DISPATCH_WIDTH, UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))).flip
+    val rob_commitsignal = Valid(Vec(p.DISPATCH_WIDTH, UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))).flip //ROB提交时的广播信号，从中识别出分支指令更新BHT和BTB
 }
+
+
 
 class BranchPredictor(implicit p: Parameters) extends Module {
     val io = IO(new BP_IO())
