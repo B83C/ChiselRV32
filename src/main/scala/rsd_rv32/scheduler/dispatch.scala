@@ -27,7 +27,7 @@ class Dispatcher_IO(implicit p:Parameters) extends Bundle {
   val stq_empty = Input(Bool())
   val stq_head = Input(UInt(log2Ceil(p.STQ_DEPTH).W))
   val stq_tail = Input(UInt(log2Ceil(p.STQ_DEPTH).W))
-  val dispatched_st = Vec(p.CORE_WIDTH, Valid(Bool())) //本cycle派遣store指令的情况
+  val dispatched_st = Vec(p.CORE_WIDTH, Bool()) //本cycle派遣store指令的情况
 }
 
 class Dispatcher(implicit p: Parameters) extends Module{
