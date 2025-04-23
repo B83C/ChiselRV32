@@ -213,7 +213,7 @@ class BU_WB_uop(implicit p: Parameters) extends Bundle {
     val isConditional = Bool() //rob needs it to distinguish between conditional branches and unconditional branches
     val mispred = Bool()
     val target_PC = UInt(p.XLEN.W)
-    val actual_branch_direction = BranchPred()
+    val branch_direction = BranchPred()
 
     //jal and jalr need to writeback to PRF
     val pd = UInt(log2Ceil(p.PRF_DEPTH).W)

@@ -28,7 +28,7 @@ class ROB_broadcast(implicit p: Parameters) extends Bundle {
 */
 
 class ROBIO(implicit p: Parameters) extends Bundle {
-    val dis_uops = Valid(Vec(p.DISPATCH_WIDTH, new DISPATCH_ROB_uop()))  //Dispatch Unit的uop,存入条目中
+    val dis_uops = Valid(Vec(p.CORE_WIDTH, new DISPATCH_ROB_uop()))  //Dispatch Unit的uop,存入条目中
 
     val empty_full = Output(Bool())  //ROB空标志(0表示非满，1表示满)
     val rob_head = Output(UInt(log2Ceil(p.ROB_DEPTH))) //ROB头指针
@@ -43,9 +43,9 @@ class ROBIO(implicit p: Parameters) extends Bundle {
     // val mispred = Input(Bool()) //分支误预测信号
     // val if_jump = Input(Bool()) //分支指令跳转信号
 
-    val commit_signal = Valid(Vec(p.DISPATCH_WIDTH, UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))) //广播ROB条目
+    val commit_signal = Vec(p.CORE_WIDTH, Valid(new ROBContent()))  //广播ROB条目
 }
-// 重命名缓冲区，主要用于存储指令的执行结果。它是一个FIFO结构，先进先出。指令在执行完成后，将结果写入ROB中。ROB中的数据可以被其他指令读取，从而实现数据的共享和重用。
+
 class ROB(implicit p: Parameters) extends Module {
     val io = IO(new ROBIO())
 }

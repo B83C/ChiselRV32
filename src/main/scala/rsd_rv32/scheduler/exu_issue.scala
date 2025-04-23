@@ -33,6 +33,9 @@ class exu_issue_IO(implicit p: Parameters) extends Bundle {
 
     //输出至Dispatch Unit的信号
     val iq_freelist_update = Output(Vec(p.ISSUE_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //更新IQ Freelist
+
+    //with ROB
+    val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
 }
 
 class exu_issue_queue(implicit p: Parameters) extends Module {

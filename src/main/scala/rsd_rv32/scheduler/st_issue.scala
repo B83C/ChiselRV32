@@ -1,7 +1,7 @@
 class st_issue_IO(implicit p: Parameters) extends Bundle {
     //来自Dispatch Unit的输入
-    val iq_id = Input(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID
-    val dis_uop = Flipped(Valid(Vec(p.DISPATCH_WIDTH, new DISPATCH_STISSUE_uop())))  //来自Dispatch Unit的输入
+    val iq_id = Input(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID
+    val dis_uop = Flipped(Valid(Vec(p.CORE_WIDTH, new DISPATCH_STISSUE_uop())))  //来自Dispatch Unit的输入
 
     //发射到st的输出
     val issue_uop = Decoupled(new STISSUE_STPIPE_uop())  //发射的指令
@@ -25,6 +25,9 @@ class st_issue_IO(implicit p: Parameters) extends Bundle {
 
     //输出至Dispatch Unit的信号
     val iq_freelist_update = Output(UInt(log2Ceil(p.IQ_DEPTH).W)) //更新IQ Freelist
+
+    //with ROB
+    val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
 }
 
 class st_issue_queue(implicit p: Parameters) extends Module {

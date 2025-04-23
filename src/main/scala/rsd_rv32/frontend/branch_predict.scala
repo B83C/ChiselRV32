@@ -30,7 +30,7 @@ class BP_IO (implicit p: Parameters) extends Bundle {
     val GHR = Output(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照，随流水级传递，在ROB退休分支指令时更新BHT
 
     //with ROB
-    val rob_commitsignal = Valid(Vec(p.DISPATCH_WIDTH, UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))).flip //ROB提交时的广播信号，从中识别出分支指令更新BHT和BTB
+    val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，从中识别出分支指令更新BHT和BTB
 }
 
 /*
