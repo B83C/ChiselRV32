@@ -5,6 +5,15 @@ import chisel3.util._
 import rsd_rv32.scheduler._
 import rsd_rv32.common._
 
+//该Bundle用于后续向Arbiter传输信号
+class Req_Abter(implicit p: Parameters) extends Bundle()(p){
+
+  val data      = UInt(64.w)
+  val data_Addr = UInt(64.w)
+  val write_en  = Bool()
+
+}
+
 
 //与MEM的IO接口
 class LSU_MEM_IO(implicit p: Parameters) extends Bundle()(p){
