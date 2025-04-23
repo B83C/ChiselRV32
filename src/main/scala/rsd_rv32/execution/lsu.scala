@@ -8,10 +8,11 @@ import rsd_rv32.common._
 //该Bundle用于后续向Arbiter传输信号,不是interface
 class Req_Abter(implicit p: Parameters) extends Bundle {
 
-  val data      = UInt(64.W)
+  val writeData = UInt(64.W)
   val data_Addr = UInt(64.W)
   val write_en  = Bool()
-
+  val func3     = UInt(3.W)
+  //此处定义的含义与LSUIO中的含义相同
 }
 
 class LSUIO(implicit p: Parameters) extends Bundle {
