@@ -30,6 +30,12 @@ class Dispatcher_IO(implicit p:Parameters) extends Bundle {
   val dispatched_st = Vec(p.CORE_WIDTH, Bool()) //本cycle派遣store指令的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）
 }
 
+/*
+  该模块负责将重命名单元发来的指令派遣到ROB，根据指令类型派遣到三个issue queue（分别为exu issue queue，store issue queue和load issue queue），如果是store指令，则还需要派遣到STQ（store queue）中。
+  该模块通过和三个issue queue分别共同维护一个freelist（不是FIFO！），freelist到head和tail之间为可用的issue queue ID，dispatch单元选择head处的issue queue id进行派遣，issue queue发射指令后会将issue queue id
+  反馈给dispatch单元，dispatch单元会将该id存入freelist的tail处。
+*/
+
 class Dispatcher(implicit p: Parameters) extends Module{
   val io = IO(new Dispatcher_IO)
 }
