@@ -23,24 +23,28 @@ object OprSel extends ChiselEnum {
     val IMM, REG, PC, Z = Value
 }
 
-trait Signals {
-    val width = this.getWidth
-}
-
-class ALUSignals extends Bundle with Signals{
+class ALUSignals extends Bundle {
     val req_immediate = Bool()
     val opr1_sel = OprSel()
     val opr2_sel = OprSel()
+}
+
+object ALUSignals {
+    val width : Int = (new ALUSignals).getWidth
 }
 
 class BranchSignals extends Bundle with Signals{
     val type = BranchType()
 }
 
+object BranchSignals {
+    val width : Int = (new BranchSignals).getWidth
+}
+
 class FUSignals extends Bundle {
-    val bits = UInt(ALUSignals.width max BranchSignals.width max LSUSignals.width)
-    def as_ALU = this.asTypeOf(new ALUSignals)
-    def as_Branch = this.asTypeOf(new BranchSignals)
+    val bits = UInt((ALUSignals.width max BranchSignals.width).W)
+    def as_ALU : ALUSignals = bits.asTypeOf(new ALUSignals)
+    def as_Branch : BranchSignals = bits.asTypeOf(new BranchSignals)
 }
 
 // abstract class BaseUOP()(implicit p: Parameters) extends Bundle {
