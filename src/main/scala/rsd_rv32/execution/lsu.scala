@@ -36,7 +36,7 @@ class STQ_Dispatcher_IO(implicit p: Parameters) extends Bundle()(p){
   val stq_head_ptx  = Output(log2Ceil(p.STQ_Depth).W)//stq的头部索引
  
   val stq_empty     = Output(Bool())//stq是否为空
-  val dis_store     = Vec(2,Bool())//存储指令是否被调度
+  val dis_store     = Input(Vec(2,Bool()))//存储指令是否被调度
 
 }
 
@@ -50,18 +50,18 @@ class LSU_ROB_IO(implicit p: Parameters) extends Bundle()(p){
 
 //广播信号，store完成信号主要是给ROB使用
 //load完成信号则提供给PRF跟ROB
-class LSU_Broadcast(implicit p: Parameters) extends Bundle()(p){
+class LSU_SL_Commit(implicit p: Parameters) extends Bundle()(p){
 
-  val store_finish = Valid((new STPIPE_WB_uop()))//存储完成的信号
-  val load_finish  = Valid((new LDPIPE_WB_uop()))//加载完成的信号
+  val store_finish = Valid((new STPIPE_WB_uop()))//存储完成的信号,wb to ROB
+  val load_finish  = Valid((new LDPIPE_WB_uop()))//加载完成的信号,wb to ROB and PRF
 
 }
 
 class LSUIO(implicit p: Parameters) extends Bundle()(p){
   
   val lsu_mem       = new LSU_MEM_IO//LSU与MEM的交互信号
-  val lsu_broadcast_commit = new LSU_Broadcast//LSU的提交信号
-  val lsu_rob       = new LSU_ROB_IO//LSU与ROB的交互信号
+  val lsu_sl_finish = new LSU_SL_Commit//LSU的在完成store或者load后的写回信号
+  val lsu_rob       = new LSU_ROB_IO//接收后续ROB的Commit_signal信号
   val lsu_issue     = new LSU_Issue_IO//LSU与issue的交互信号
   val stq_dispatch  = new STQ_Dispatch_IO//LSU与stq的交互信号
   
