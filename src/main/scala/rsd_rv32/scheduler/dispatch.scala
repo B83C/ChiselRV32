@@ -7,7 +7,7 @@ import rsd_rv32.common._
 class Dispatcher_IO(implicit p:Parameters) extends Bundle {
   // with Rename
   val rename_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new RENAME_DISPATCH_uop()))) //来自rename单元的uop
-  val ready = Output(Bool()) // 反馈给rename单元，显示Dispatch单元是否准备好接收指令
+  val dis_ready = Output(Bool()) // 反馈给rename单元，显示Dispatch单元是否准备好接收指令
   // with ROB
   val rob_uop = Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop())) //发往ROB的uop
   val rob_full = Input(Bool()) // ROB空标志(0表示非满，1表示满)
@@ -15,19 +15,19 @@ class Dispatcher_IO(implicit p:Parameters) extends Bundle {
   val rob_tail = Input(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾部指针，指向入队处
   val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
   // with exu_issue
-  val exuissue_uop = Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop())) //发往EXU的uop
-  val exuissued_id = Vec(p.CORE_WIDTH, Flipped(Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W)))) //本周期EXU ISSUE queue发出指令对应的issue queue ID，用于更新iq freelist
+  val exu_issue_uop = Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop())) //发往EXU的uop
+  val exu_issued_id = Vec(p.CORE_WIDTH, Flipped(Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W)))) //本周期EXU ISSUE queue发出指令对应的issue queue ID，用于更新iq freelist
   // with st_issue
-  val stissue_uop = Vec(p.CORE_WIDTH, Valid(new DISPATCH_STISSUE_uop())) //发往Store Issue的uop
-  val stissued_id = Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)).flip //本周期Store Issue queue发出指令对应的issue queue ID，用于更新issue queue freelist
+  val st_issue_uop = Vec(p.CORE_WIDTH, Valid(new DISPATCH_STISSUE_uop())) //发往Store Issue的uop
+  val st_issued_index = Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)).flip //本周期Store Issue queue发出指令对应的issue queue ID，用于更新issue queue freelist
   // with ld_issue
-  val ldissue_uop = Vec(p.CORE_WIDTH, Valid(new DISPATCH_LDISSUE_uop())) //发往Load Issue的uop
-  val ldissued_id = Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W)).flip //本周期Load Issue queue发出指令对应的issue queue ID，用于更新issue queue freelist
+  val ld_issue_uop = Vec(p.CORE_WIDTH, Valid(new DISPATCH_LDISSUE_uop())) //发往Load Issue的uop
+  val ld_issued_index = Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W)).flip //本周期Load Issue queue发出指令对应的issue queue ID，用于更新issue queue freelist
   // with sq
   val stq_full = Input(Bool()) // Store Queue空标志(0表示非满，1表示满)
   val stq_head = Input(UInt(log2Ceil(p.STQ_DEPTH).W)) //store queue头部指针
   val stq_tail = Input(UInt(log2Ceil(p.STQ_DEPTH).W)) //store queue尾部指针，指向入队处
-  val dispatched_st = Output(Vec(p.CORE_WIDTH, Bool())) //本cycle派遣store指令的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）
+  val st_dis = Output(Vec(p.CORE_WIDTH, Bool())) //本cycle派遣store指令的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）
 }
 
 /*

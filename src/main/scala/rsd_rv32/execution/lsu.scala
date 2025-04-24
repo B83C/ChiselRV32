@@ -7,11 +7,9 @@ import rsd_rv32.common._
 
 //该Bundle用于后续向Arbiter传输信号,不是interface
 class Req_Abter(implicit p: Parameters) extends Bundle {
-
   val data      = UInt(64.W)
-  val data_Addr = UInt(64.W)
+  val data_addr = UInt(64.W)
   val write_en  = Bool()
-
 }
 
 class LSUIO(implicit p: Parameters) extends Bundle {
@@ -25,25 +23,25 @@ class LSUIO(implicit p: Parameters) extends Bundle {
   val data_out_mem  = Input(UInt(64.W))//从储存器中读取的数据
 
   //with store issue queue
-  val store_issue_uop = Flipped(Valid(new STISSUE_STPIPE_uop()))//存储指令的uop
+  val st_issue_uop = Flipped(Valid(new STISSUE_STPIPE_uop()))//存储指令的uop
 
   //with load issue queue
-  val load_issue_uop  = Flipped(Decoupled(new LDISSUE_LDPIPE_uop()))//加载指令的uop
+  val ld_issue_uop  = Flipped(Decoupled(new LDISSUE_LDPIPE_uop()))//加载指令的uop
 
   //with dispatcher
   val stq_tail  = Output(log2Ceil(p.STQ_Depth).W)//stq的尾部索引 
   val stq_head  = Output(log2Ceil(p.STQ_Depth).W)//stq的头部索引
   val stq_full  = Output(Bool())//stq是否为满,1表示满
-  val dispatched_st = Input(Vec(p.CORE_WIDTH, Bool()))//存储指令被派遣的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）
+  val st_dis = Input(Vec(p.CORE_WIDTH, Bool()))//存储指令被派遣的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）
   
   //with ROB
   val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))//ROB的CommitSignal信号
-  val store_finish = Valid((new STPIPE_WB_uop()))//存储完成的信号,wb to ROB
-  val load_finish  = Valid((new LDPIPE_WB_uop()))//加载完成的信号,wb to ROB and PRF
+  val st_wb = Valid((new STPIPE_WB_uop()))//存储完成的信号,wb to ROB
+  val ld_wb  = Valid((new ALU_WB_uop()))//加载完成的信号,wb to ROB and PRF
 }
 
 //LSU的模块定义，目前只完成了IO接口的定义，内部逻辑还未完成
-class LSU(implicit p: Parameters) extends Module()(p){
+class LSU(implicit p: Parameters) extends Module {
 
     val io = IO(new LSUIO())//定义LSU的IO接口
 

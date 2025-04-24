@@ -16,8 +16,10 @@ case class Parameters(
   GHR_WIDTH: Int = 8,
 
   FU_NUM: Int = 7,
-  ALU_NUM: Int = 4,
+  ALU_NUM: Int = 2,
   BU_NUM: Int = 1,
+  MUL_NUM: Int = 1,
+  DIV_NUM: Int = 1,
   STU_NUM: Int = 1,
   LDU_NUM: Int = 1,
 
@@ -26,7 +28,7 @@ case class Parameters(
   ROB_DEPTH: Int = 256,
 
   STQ_DEPTH: Int = 32,
-  
+
   EXUISSUE_DEPTH: Int = 16,
   LDISSUE_DEPTH: Int = 16,
   STISSUE_DEPTH: Int = 16

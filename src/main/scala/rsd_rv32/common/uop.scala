@@ -34,7 +34,7 @@ object ALUSignals {
 }
 
 class BranchSignals extends Bundle with Signals{
-    val type = BranchType()
+    val branch_type = BranchType()
 }
 
 object BranchSignals {
@@ -51,18 +51,18 @@ class FUSignals extends Bundle {
 //     val instr = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode;
 // }
 
-abstract trait HasUOP() extends Bundle {
+/*abstract trait HasUOP() extends Bundle {
     val uop = new uop()
 }
 
 class uop(implicit p: Parameters) extends Bundle {
     val instr = UInt((32 - 7).W) //func3, func7, rd, rs1 , rs2, imm without opcode
     val instr_type = InstrType()
-    val instr_PC = UInt(p.XLEN.W)
+    val instr_addr = UInt(p.XLEN.W)
     val target_PC = UInt(p.XLEN.W)
     val GHR = UInt(p.GHR_WIDTH.W)
     // Signals created in the middle of the pipeline
-    val pd = UInt(log2Ceil(p.PRF_DEPTH).W)
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps2 = UInt(log2Ceil(p.PRF_DEPTH).W)
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
@@ -70,11 +70,11 @@ class uop(implicit p: Parameters) extends Bundle {
     val btb_hit = Bool()
     
     val fu_signals = new FUSignals() //opcode is compiled into fu specific control signals
-}
+}*/
 
 class IF_ID_uop(implicit p: Parameters) extends Bundle {
     val instr = UInt(p.XLEN.W) 
-    val instr_PC = UInt(p.XLEN.W) //needed by rob, BU, ALU
+    val instr_addr = UInt(p.XLEN.W) //needed by rob, BU, ALU
     val target_PC = UInt(p.XLEN.W) //needed by BU
     val GHR = UInt(p.GHR_WIDTH.W) //needed by rob
     val branch_pred = BranchPred() //needed by BU
@@ -87,7 +87,7 @@ class ID_RENAME_uop(implicit p: Parameters) extends Bundle {
     val instr_type = InstrType() 
     val fu_signals = new FUSignals() 
 
-    val instr_PC = UInt(p.XLEN.W)
+    val instr_addr = UInt(p.XLEN.W)
     val target_PC = UInt(p.XLEN.W)
     val GHR = UInt(p.GHR_WIDTH.W)
     val branch_pred = BranchPred()
@@ -95,18 +95,18 @@ class ID_RENAME_uop(implicit p: Parameters) extends Bundle {
 }
 
 class RENAME_DISPATCH_uop(implicit p: Parameters) extends ID_RENAME_uop {
-    val pd = UInt(log2Ceil(p.PRF_DEPTH).W)
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps2 = UInt(log2Ceil(p.PRF_DEPTH).W)
 }
 
 class DISPATCH_ROB_uop(implicit p: Parameters) extends Bundle {
-    val instr_PC = UInt(p.XLEN.W)
+    val instr_addr = UInt(p.XLEN.W)
 
     val instr_type = InstrType()
     val fu_signals = new FUSignals() //needed to distinguish between conditional branches and unconditioal ones
 
-    val pd = UInt(log2Ceil(p.PRF_DEPTH).W)
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val rd = UInt(5.W)
 
     val GHR = UInt(p.GHR_WIDTH.W)
@@ -125,25 +125,25 @@ class DISPATCH_EXUISSUE_uop(implicit p: Parameters) extends Bundle {
     val branch_pred = BranchPred()
     val target_PC = UInt(p.XLEN.W)
 
-    val pd = UInt(log2Ceil(p.PRF_DEPTH).W)
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps2 = UInt(log2Ceil(p.PRF_DEPTH).W)
 
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
 
-    val iq_id = UInt(log2Ceil(p.EXUISSUE_DEPTH).W)
+    val iq_index = UInt(log2Ceil(p.EXUISSUE_DEPTH).W)
 }
 
 class DISPATCH_LDISSUE_uop(implicit p: Parameters) extends Bundle {
     val instr = UInt((p.XLEN-7).W) //Load Pipeline need it to get imm,func,etc
     
-    val pd = UInt(log2Ceil(p.PRF_DEPTH).W)
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
     val stq_tail = UInt(log2Ceil(p.STQ_DEPTH).W) //needed to get the right forwarding data from STQ
 
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
 
-    val iq_id = UInt(log2Ceil(p.LDISSUE_DEPTH).W)
+    val iq_index = UInt(log2Ceil(p.LDISSUE_DEPTH).W)
 }
 
 class DISPATCH_STISSUE_uop(implicit p: Parameters) extends Bundle {
@@ -155,7 +155,7 @@ class DISPATCH_STISSUE_uop(implicit p: Parameters) extends Bundle {
     val stq_index = UInt(log2Ceil(p.STQ_DEPTH).W) //needed to writeback to STQ
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
 
-    val iq_id = UInt(log2Ceil(p.STISSUE_DEPTH).W)
+    val iq_index = UInt(log2Ceil(p.STISSUE_DEPTH).W)
 }
 
 class EXUISSUE_EXU_uop(implicit p: Parameters) extends Bundle {
@@ -170,7 +170,7 @@ class EXUISSUE_EXU_uop(implicit p: Parameters) extends Bundle {
     val branch_pred = BranchPred()
     val target_PC = UInt(p.XLEN.W)
 
-    val pd = UInt(log2Ceil(p.PRF_DEPTH).W)
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
 
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
     
@@ -190,44 +190,44 @@ class LDISSUE_LDPIPE_uop(implicit p: Parameters) extends Bundle {
     val instr = UInt((p.XLEN-7).W)
 
     val ps1_value = UInt(p.XLEN.W)
-    val pd = UInt(log2Ceil(p.PRF_DEPTH).W)
-    val stq_tail = UInt(log2Ceil(p.STQ_DEPTH).W)
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
+    val stq_tail = UInt(log2Ceil(p.STQ_DEPTH).W) //used when stq forwarding
 
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
 }
 
 class ALU_WB_uop(implicit p: Parameters) extends Bundle {
     //wrieback to PRF
-    val pd = UInt(log2Ceil(p.PRF_DEPTH).W)
-    val pd_value = UInt(p.XLEN.W)
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
+    val pdst_value = UInt(p.XLEN.W)
 
     //writeback to ROB
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
 }
+//乘除法器、Load pipeline的WB uop和ALU的WB uop相同
 
 class BU_WB_uop(implicit p: Parameters) extends Bundle {
-    val isConditional = Bool() //needed to distinguish between conditional branches and unconditional branches
+    val is_conditional = Bool() //needed to distinguish between conditional branches and unconditional branches
 
     //writeback to ROB
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
-    val isConditional = Bool() //rob needs it to distinguish between conditional branches and unconditional branches
-    val mispred = Bool()
+    val mispred = Bool() //1 if mispred, 0 otherwise
     val target_PC = UInt(p.XLEN.W)
     val branch_direction = BranchPred()
 
     //jal and jalr need to writeback to PRF
-    val pd = UInt(log2Ceil(p.PRF_DEPTH).W)
-    val pd_value = UInt(p.XLEN.W)
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
+    val pdst_value = UInt(p.XLEN.W)
 }
 
-class LDPIPE_WB_uop(implicit p: Parameters) extends Bundle {
+/*class LDPIPE_WB_uop(implicit p: Parameters) extends Bundle {
     //writeback to PRF
-    val pd = UInt(log2Ceil(p.PRF_DEPTH).W)
-    val pd_value = UInt(p.XLEN.W)
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
+    val pdst_value = UInt(p.XLEN.W)
 
     //writeback to ROB
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
-}
+}*/
 
 class STPIPE_WB_uop(implicit p: Parameters) extends Bundle {
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)

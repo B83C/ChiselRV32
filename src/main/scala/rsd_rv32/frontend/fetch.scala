@@ -6,7 +6,7 @@ import rsd_rv32.common._
 
 class Fetch_IO(implicit p: Parameters) extends Bundle {
     // with MEM
-    val instAddr = Output(UInt(p.XLEN.W)) //当前IFU的PC值
+    val instr_addr = Output(UInt(p.XLEN.W)) //当前IFU的PC值
     val instr = Input(Vec(p.CORE_WIDTH, UInt(32.W)))
 
     // with ID
@@ -14,13 +14,13 @@ class Fetch_IO(implicit p: Parameters) extends Bundle {
     val id_ready = Input(Bool()) //ID是否准备好接收指令
 
     // with ROB
-    val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))))
+    val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
     
     // with BranchPredictor
-    // instAddr上面已写
-    val PC_target = Input(UInt(p.XLEN.W)) //预测的下个cycle取指的目标地址
-    val BTB_Hit = Input(Vec(p.CORE_WIDTH, Bool())) //1代表hit，0相反；将最年轻的命中BTB的置为1，其余为0
-    val BHT_Taken = Input(Bool()) //branch指令的BHT的预测结果；1代表跳转，0相反
+    // instr_addr上面已写
+    val target_PC = Input(UInt(p.XLEN.W)) //预测的下个cycle取指的目标地址
+    val btb_hit = Input(Vec(p.CORE_WIDTH, Bool())) //1代表hit，0相反；将最年轻的命中BTB的置为1，其余为0
+    val branch_pred = Input(Bool()) //branch指令的BHT的预测结果；1代表跳转，0相反
     val GHR = Input(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照
 }
 
