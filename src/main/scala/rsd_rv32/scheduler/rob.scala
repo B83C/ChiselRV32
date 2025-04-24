@@ -28,7 +28,7 @@ class ROB_broadcast(implicit p: Parameters) extends Bundle {
 */
 
 class ROBIO(implicit p: Parameters) extends Bundle {
-    val dis_uop = Valid(Vec(p.CORE_WIDTH, new DISPATCH_ROB_uop()))  //Dispatch Unit的uop,存入条目中
+    val dis_uop = Vec(p.CORE_WIDTH, (new DISPATCH_ROB_uop()))  //Dispatch Unit的uop,存入条目中
 
     val empty_full = Output(Bool())  //ROB空标志(0表示非满，1表示满)
     val rob_head = Output(UInt(log2Ceil(p.ROB_DEPTH))) //ROB头指针
@@ -46,4 +46,27 @@ class ROBIO(implicit p: Parameters) extends Bundle {
 
 class ROB(implicit p: Parameters) extends Module {
     val io = IO(new ROBIO())
+    val rob = RegInit(Seq.fill(p.ROB_DEPTH)(0.U.asTypeOf(new ROBContent()))) //ROB条目
+    val rob_head = RegInit(0.U(log2Ceil(p.ROB_DEPTH).W)) //ROB头指针
+    val rob_tail = RegInit(0.U(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
+    val rob_full = RegInit(false.B) //ROB满标志
+
+    when(io.dis_uop(0).valid ## io.dis_uop(1).valid === "b11".U){
+        switch(io.dis_uop.instr_type){
+            is(InstrType.ALU, InstrType.MUL, InstrType.DIV, InstrType.LD){
+                val temp = WireDefault(0.U(ROBContent.width.W))
+                temp := Cat(io.dis_uop(0).instr_addr, ROBType.Arithmetic, false.B, false.B, 0.U((Payload.width - ROB_Arithmetic.width).W), io.dis_uop(0).pdst, io.dis_uop(0).rd)
+                rob(rob_tail) := temp
+            }
+            is(){
+                //其他类型指令
+            }
+            
+            //更新rob_tail and rob_full
+        }
+    }.elsewhen(){
+        //处理 “10”
+    }.elsewhen(){
+        //处理 “00”
+    }
 }
