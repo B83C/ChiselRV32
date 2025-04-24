@@ -21,7 +21,7 @@ object ROB_Arithmetic {
 class ROB_Branch(implicit p: Parameters) extends Bundle {
     val btb_hit = BTBHit() // BTB hit flag
     val branch_direction = Bool() // Branch direction(1 represents taken)
-    val PC_target = UInt(p.XLEN.W) // Target address
+    val target_PC = UInt(p.XLEN.W) // Target address
     val GHR = UInt(p.GHR_WIDTH.W) // Global history register
 }
 
@@ -30,7 +30,7 @@ object ROB_Branch {
 }
 
 class ROB_Jump(implicit p: Parameters) extends Bundle {
-    val PC_target = UInt(p.XLEN.W) // Target address
+    val target_PC = UInt(p.XLEN.W) // Target address
     val btb_hit = BTBHit() // BTB hit flag
     val pdst = UInt(p.PRF_DEPTH.W) // Physical destination register
     val rd = UInt(p.XLEN.W) // Destination register
@@ -57,13 +57,17 @@ object ROB_CSR {
     def width(implicit p: Parameters): Int = (new ROB_CSR).getWidth
 }
 
+object Payload {
+    def width(implicit p: Parameters): Int = (ROB_Arithmetic.width max ROB_Branch.width max ROB_Jump.width max ROB_Store.width max ROB_CSR.width)
+}
+
 class ROBContent(implicit p: Parameters) extends Bundle {
-    val instrAddr = UInt(p.XLEN.W) // Instruction address
-    val robType = ROBType() // Instruction type
+    val instr_addr = UInt(p.XLEN.W) // Instruction address
+    val rob_type = ROBType() // Instruction type
     val mispred = Bool() // Misprediction flag(1 represents misprediction)
     val completed = Bool() // Completion flag(1 represents completion)
 
-    val payload = UInt((ROB_Arithmetic.width max ROB_Branch.width max ROB_Jump.width max ROB_Store.width max ROB_CSR.width).W)
+    val payload = UInt(Payload.width.W) // Payload of the ROB entry
     def as_Arithmetic: ROB_Arithmetic = payload.asTypeOf(new ROB_Arithmetic)
     def as_Branch: ROB_Branch = payload.asTypeOf(new ROB_Branch)
     def as_Jump: ROB_Jump = payload.asTypeOf(new ROB_Jump)
