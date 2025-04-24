@@ -51,8 +51,8 @@ class ROB(implicit p: Parameters) extends Module {
     val rob_tail = RegInit(0.U(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
     val rob_full = RegInit(false.B) //ROB满标志
 
-    when(io.dis_uop(0).valid ## io.dis_uop(1).valid === "b11".U){
-        switch(io.dis_uop.instr_type){
+    when(io.dis_uop(0).valid ## io.dis_uop(1).valid === "b10".U){
+        switch(io.dis_uop(0).instr_type){
             is(InstrType.ALU, InstrType.MUL, InstrType.DIV, InstrType.LD){
                 val temp = WireDefault(0.U(ROBContent.width.W))
                 temp := Cat(io.dis_uop(0).instr_addr, ROBType.Arithmetic, false.B, false.B, 0.U((Payload.width - ROB_Arithmetic.width).W), io.dis_uop(0).pdst, io.dis_uop(0).rd)
@@ -64,9 +64,7 @@ class ROB(implicit p: Parameters) extends Module {
             
             //更新rob_tail and rob_full
         }
-    }.elsewhen(){
-        //处理 “10”
-    }.elsewhen(){
-        //处理 “00”
+    }.elsewhen(io.dis_uop(0).valid ## io.dis_uop(1).valid === "b11".U){
+        //处理 “11”
     }
 }
