@@ -36,8 +36,8 @@ class LSUIO(implicit p: Parameters) extends Bundle {
   
   //with ROB
   val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))//ROB的CommitSignal信号
-  val st_wb_uop = Valid((new STPIPE_WB_uop()))//存储完成的信号,wb to ROB
-  val ld_wb_uop  = Valid((new ALU_WB_uop()))//加载完成的信号,wb to ROB and PRF
+  val stu_wb_uop = Valid((new STPIPE_WB_uop()))//存储完成的信号,wb to ROB
+  val ldu_wb_uop  = Valid((new ALU_WB_uop()))//加载完成的信号,wb to ROB and PRF
 }
 
 //LSU的模块定义，目前只完成了IO接口的定义，内部逻辑还未完成
