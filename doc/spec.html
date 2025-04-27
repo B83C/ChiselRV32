@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head>
+  <body>
+    <h2>Revision History</h2>
+    <table>
+      <tr>
+        <td>Author</td>
+        <td>Description</td>
+        <td>Date</td>
+      </tr>
+      <tr>
+        <td>刘恒雨</td>
+        <td>Initialised and updated spec doc</td>
+        <td>2025/04/10</td>
+      </tr>
+      <tr>
+        <td>刘恒雨</td>
+        <td>Finialised automatic code referencing logic</td>
+        <td>2025/04/23</td>
+      </tr>
+      <tr>
+        <td>胡英瀚，杨钧铎，饶忠禹</td>
+        <td>提供模块功能框图，以及功能部件阐述</td>
+        <td>2025/04/23</td>
+      </tr>
+    </table>
+    <h2>Contents</h2>
+    <div>Revision History <span style="display: inline-block;"></span> ⁠1</div>
+    <div>1Terminology <span style="display: inline-block;"></span> ⁠1</div>
+    <div>2Overview <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3Microarchitecture <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1功能部件介绍 <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.1取指 (IF) <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.2分支预测 (BP) <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.3译码 (ID) <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.4重命名 (RU) <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.5派遣 (DP) <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.6指令发射 (IQ) <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.7重排序 (ROB) <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.8寄存器访问和旁路 (RRDWB) <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.9功能单元 (FU) <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.9.1ALU <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.9.2BU <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.9.3MULFU <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.9.4DIVFU <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.9.5CSR <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.10执行 (EXU) <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.10.1FU组合 <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.10.2LSU <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.1.11物理寄存器堆 (PRF) <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.2特别案例处理方式 <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.2.1Load Store违例 <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.2.2分支误判回滚 <span style="display: inline-block;"></span> ⁠1</div>
+    <div>3.2.3CSR写入 <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4Units <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.1FetchUnit <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.2BranchPredictorUnit <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.3DecodeUnit <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.4RenameUnit <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.5DispatchUnit <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.6exu_issue_queue <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.7ld_issue_queue <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.8st_issue_queue <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.9ROB <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.10FunctionalUnit <span style="display: inline-block;">abstract class</span> <span style="display: inline-block;">Module</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.11ALUFU <span style="display: inline-block;">class</span> <span style="display: inline-block;">FunctionalUnit</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.12BranchFU <span style="display: inline-block;">class</span> <span style="display: inline-block;">FunctionalUnit</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.13MULFU <span style="display: inline-block;">class</span> <span style="display: inline-block;">FunctionalUnit</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.14DIVFU <span style="display: inline-block;">class</span> <span style="display: inline-block;">FunctionalUnit</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.15CSRFU <span style="display: inline-block;">class</span> <span style="display: inline-block;">FunctionalUnit</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.16ExecutionUnit <span style="display: inline-block;">abstract class</span> <span style="display: inline-block;">Module</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.17LSU <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>4.18PRFFreeList <span style="display: inline-block;">class</span> <span style="display: inline-block;">FreeList</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>5Parameters <span style="display: inline-block;"></span> ⁠1</div>
+    <div>6Interface <span style="display: inline-block;"></span> ⁠1</div>
+    <div>6.1Fetch_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>6.2BP_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>6.3Decode_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>6.4RenameUnit_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>6.5Dispatcher_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>6.6exu_issue_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>6.7ld_issue_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>6.8st_issue_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>6.9ROBIO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>6.10FUReq <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>6.11FUDataOut <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span><span style="display: inline-block;">HasUOP</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>6.12uop <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <div>6.13LSUIO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span> <span style="display: inline-block;"></span> ⁠1</div>
+    <h2>1 Terminology</h2>
+    <dl>
+      <dt>PRF</dt>
+      <dd>Physical Register File</dd>
+      <dt>WAT</dt>
+      <dd>Wakeup Allocation Table</dd>
+      <dt>RMT</dt>
+      <dd>Register Map Table</dd>
+      <dt>SDA</dt>
+      <dd>Store Data Array</dd>
+      <dt>STQ</dt>
+      <dd>STore Queue</dd>
+      <dt>LDQ</dt>
+      <dd>LoaD Queue</dd>
+      <dt>LSU</dt>
+      <dd>Load Store Unit</dd>
+      <dt>EXU</dt>
+      <dd>Execution Unit, 是所有FU的总称</dd>
+      <dt>FU</dt>
+      <dd>Functional Unit, 指ALU、MUL、DIV等功能元件</dd>
+    </dl>
+    <h2>2 Overview</h2>
+    <h2>3 Microarchitecture</h2>
+    <p>本处理器为乱序执行双发射RV32IM架构，代码设计风格部分借鉴于BOOM。</p>
+    <h3>3.1 功能部件介绍</h3>
+    <h4>3.1.1 取指 (IF)</h4>
+    <p>取指单元在单周期内读取CORE_WIDTH个指令，随后在检测指令组是否包含跳转指令并与分支预测结果（BP）进行比较，进而确定PC_Next，同时将CORE_WIDTH个指令发送到译码单元。这CORE_WIDTH个指令将保持程序原有的执行次序，并且随带着valid位表示是否为有效指令。valid位为主要由PC地址低有效位中非对齐部分和分支预测结果决定。</p>
+    <p>PC_Next对于存储器来说永远是对齐的（把低有效位置零即可），而PC_Next本身不一定是对齐的，因此在取指后，需要将PC(非对齐)之前的指令作废（vaild = 0)。</p>
+    <p>PC_Next主要来自：ROB、分支预测(BP)、，其中优先级由高到低排列。当ROB发出转跳信号时（ROB退休指令提示分支预测错误），PC_Next取自ROB，否则按照BP命中与否来决定PC_Next是PC_BP 还是 。</p>
+    <p>此外，取指单元同样也会检测指令组是否包含CSRRW，如若包含指令</p>
+    <p>为了简化分支预测逻辑，我们只将PC_Next发送给BP。</p>
+    <div>
+      <div>
+        <div>
+          <div>参见： FetchUnit</div>
+        </div>
+      </div>
+    </div>
+    <h4>3.1.2 分支预测 (BP)</h4>
+    <figure>
+      <figcaption>Figure 1: BHT结构：我们采用分开的T/NT策略，以PC低位作为选择器索引</figcaption>
+    </figure>
+    <figure>
+      <figcaption>Figure 2: BTB条目</figcaption>
+    </figure>
+    <p>我们省却了RAS，并对跳转和分支指令使用共同的BTB表，表中以isConditional区分两者。若BTB命中且isConditional为假，则跳转结果为T（覆盖BHT结果）。</p>
+    <p>分支跳转指令退休时，ROB会发出信号更新BTB、BHT表以及GHR。</p>
+    <p>为了避免组合逻辑循环，BHT预测结果和BTB输出必须是寄存器输出。</p>
+    <div>
+      <div>
+        <div>
+          <div>参见： BranchPredictorUnit</div>
+        </div>
+      </div>
+    </div>
+    <h4>3.1.3 译码 (ID)</h4>
+    <p>从取指单元接受CORE_WIDTH个指令，并对有效的指令进行译码操作，最后发送到重命名单元。</p>
+    <p>译码单元不会造成流水线堵塞，因此只传递后级的阻塞信号。</p>
+    <div>
+      <div>
+        <div>
+          <div>参见： DecodeUnit</div>
+        </div>
+      </div>
+    </div>
+    <h4>3.1.4 重命名 (RU)</h4>
+    <figure>
+      <figcaption>Figure 3: 重命名架构</figcaption>
+    </figure>
+    <p>从译码单元接受CORE_WIDTH个指令，执行时必须确保CORE_WIDTH个指令能够同时被重命名（不包括无效指令），否则阻塞流水线。</p>
+    <p>对指令源寄存器重命名时分别从RMT和AMT获得对应的映射关系。其中RMT优先级高于AMT，亦即当RMT中的映射关系被记为有效时，应当选取RMT，否则AMT取胜。RMT中的有效位只有在回滚时被清零，目的是为了减少冗余的复制操作。</p>
+    <p>对于目的寄存器，需从PRF Freelist获取CORE_WIDTH个空闲物理寄存器，获取成功后将index写入RMT，否则stall。</p>
+    <div>
+      <div>
+        <div>
+          <div>参见： RenameUnit</div>
+        </div>
+      </div>
+    </div>
+    <h4>3.1.5 派遣 (DP)</h4>
+    <p>从重命名单元接受CORE_WIDTH个指令，执行时必须确保CORE_WIDTH个指令能够同时被派遣，否则阻塞流水线。</p>
+    <p>此单元将根据uop的类型，将指令分别派遣到exu_issue, ld_issue, st_issue等指令发射队列。</p>
+    <div>
+      <div>
+        <div>
+          <div>参见： DispatchUnit</div>
+        </div>
+      </div>
+    </div>
+    <h4>3.1.6 指令发射 (IQ)</h4>
+    <figure>
+      <figcaption>Figure 4: Issue Queue 工作原理图</figcaption>
+    </figure>
+    <p>Issue queue用于向各个EXU发射命令，需要监听后续EXU是否空闲以及各操作数的就绪状态。操作数设置为就绪有三种途径：</p>
+    <ol>
+      <li>监听PRF 中各物理寄存器的Valid信号</li>
+      <li>监听EXU处的ready信号</li>
+      <li>监听EXU后的级间寄存器的ready信号</li>
+    </ol>
+    <p>在本CPU中，IQ分为三部分，分别是<strong>exu_issue</strong>, <strong>ld_issue</strong>, <strong>st_issue</strong>，其中后面二者间有数据传输，可见后续说明。</p>
+    <p><strong>exu_issue</strong>的运行过程如下，在非满时接收dispatch模块的uop存入payloadRAM中，将有用信息（instrType、psrc）存入queue中用于判断就绪状态，等待发射，每周期根据条目就绪状态至多选择2条已就绪的指令发射给FU（内含两个ALU、一个BU、一个乘法器、一个除法器），同时向dispatch模块发送本周期发出的指令的IQ地址，用以更新IQ Free List（位于dispatch单元）。</p>
+    <p><strong>St_issue</strong>基本与<strong>exu_issue</strong>相同，向store流水线（位于LSU中）发送uop，不同的是要向<strong>ld_issue</strong>发送每周期仍未发射的条目信息。<strong>Ld_issue</strong>需要从<strong>st_issue</strong>接收信息的目的在于解决load-store违例。</p>
+    <p>在本CPU中，store指令走完store流水线的周期固定为2，而load指令在load流水线第二级才会从stq获取前馈数据(见Figure 5)，所以只需要保证在程序顺序上位于该load指令之前的store指令全部进入STU后再发射load，就可以避免load指令越过有数据依赖的store指令，错误地读取数据（store – load violation）。为此，需要一个存储依赖关系的矩阵，load指令在进入<strong>ld_issue</strong>时，就要接收当前周期<strong>st_issue</strong>中尚未发射的store条目，以二进制数(位宽为ST_ISSUE_QUEUE_DEPTH)的形式存入矩阵的一行中。每当<strong>st_issue</strong>发射一条store指令，就要更新<strong>ld_issue</strong>矩阵中对应的列，将其全部置为0表示就绪。当一条load命令所在行全为0时，表示与其相关的（比该load指令更年轻的）store指令已经全部发射，该load指令解除限制（又若load指令的psrc为ready状态，则该load指令具备发射条件）。</p>
+    <div>
+      <div>
+        <div>
+          <div>参见： exu_issue_queue | ld_issue_queue | st_issue_queue</div>
+        </div>
+      </div>
+    </div>
+    <h4>3.1.7 重排序 (ROB)</h4>
+    <p>Reorder Buffer(ROB)，是一个FIFO结构，用于按照程序序存储指令，可以实现顺序retire，从而实现分支预测失误后的回滚与精确异常（本项目无需实现精确异常）</p>
+    <p>在实际工作时，ROB从dispatch接收uop并储存，把自身头尾指针以及empty/full标志传递给dispatch单元。从各个EXU接收指令完成信号，更新complete状态。ROB总是广播位于头部的两条指令，用额外的valid位（两条指令各有一个）来指示本周期是否retire该指令，用于AMT的更新、通知STQ可以写入内存、通知其他模块发生分支预测错误。</p>
+    <div>
+      <div>
+        <div>
+          <div>参见： ROB</div>
+        </div>
+      </div>
+    </div>
+    <h4>3.1.8 寄存器访问和旁路 (RRDWB)</h4>
+    <h4>3.1.9 功能单元 (FU)</h4>
+    <p>FU为ALU, BU, MUL, DIV, CSR的抽象类，主要提供基本的输出入输出端口。</p>
+    <div>
+      <div>
+        <div>
+          <div>参见： FunctionalUnit</div>
+        </div>
+      </div>
+    </div>
+    <h5>3.1.9.1 ALU</h5>
+    <p>主要实现加减法，逻辑和算数位移操作，可流水化实现，不阻塞流水线。</p>
+    <h5>3.1.9.2 BU</h5>
+    <p>内部实现减法器，检测分支跳转预测结果是否正确。通过额外的端口将跳转信息写入ROB。</p>
+    <h5>3.1.9.3 MULFU</h5>
+    <p>多周期整数乘法流水线</p>
+    <h5>3.1.9.4 DIVFU</h5>
+    <p>多周期整数除法流水线</p>
+    <h5>3.1.9.5 CSR</h5>
+    <p>由于写入CSR寄存器时会更改处理器的状态，所以我们按照一般做法：ID在检测到CSRRw指令后，阻塞流水线直到ROB队首执行CSRRW为止。与LSU类似，在ROB队首遇到了CSRRw才执行指令。</p>
+    <div>
+      <div>
+        <div>
+          <div>参见： ALUFU | BranchFU | MULFU | DIVFU | CSRFU</div>
+        </div>
+      </div>
+    </div>
+    <h4>3.1.10 执行 (EXU)</h4>
+    <p>执行单元（EXU）可以指多个FU的组合、LSU单元或是像CSR这类型需要特殊处理方式的执行单元。一个Issue Queue可以有多于一个Exu，但本项目只考虑一个的情况。</p>
+    <h5>3.1.10.1 FU组合</h5>
+    <div>
+      <div>
+        <div>
+          <div>参见： ExecutionUnit</div>
+        </div>
+      </div>
+    </div>
+    <h5>3.1.10.2 LSU</h5>
+    <figure>
+      <figcaption>Figure 5: LSU 工作原理图</figcaption>
+    </figure>
+    <div>
+      <div>
+        <div>
+          <div>参见： LSU</div>
+        </div>
+      </div>
+    </div>
+    <h4>3.1.11 物理寄存器堆 (PRF)</h4>
+    <div>
+      <div>
+        <div>
+          <div>参见： PRFFreeList</div>
+        </div>
+      </div>
+    </div>
+    <p>Summary:</p>
+    <table>
+      <tr>
+        <td>功能</td>
+        <td>实现方法</td>
+      </tr>
+      <tr>
+        <td>分支预测</td>
+        <td>BTB + BHT(T/NT)</td>
+      </tr>
+      <tr>
+        <td>重命名表</td>
+        <td>AMT+RMT, RMT存有有效位，无效时以AMT为准</td>
+      </tr>
+      <tr>
+        <td>发射队列</td>
+        <td>一个执行单元对应一个发射队列</td>
+      </tr>
+      <tr>
+        <td>执行单元</td>
+        <td>三个执行单元，即FU（ALU, BU, MUL, DIV）的组合，LSU，CSR</td>
+      </tr>
+      <tr>
+        <td>Cache</td>
+        <td>无</td>
+      </tr>
+    </table>
+    <h3>3.2 特别案例处理方式</h3>
+    <h4>3.2.1 Load Store违例</h4>
+    <h4>3.2.2 分支误判回滚</h4>
+    <p>我们</p>
+    <h4>3.2.3 CSR写入</h4>
+    <h2>4 Units</h2>
+    <h3>4.1 FetchUnit <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>io <span style="display: inline-block;"><code>new Fetch_IO()</code></span><br></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>4.2 BranchPredictorUnit <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>io <span style="display: inline-block;"><code>new BP_IO()</code></span><br></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>4.3 DecodeUnit <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>io <span style="display: inline-block;"><code>new Decode_IO()</code></span><br></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>4.4 RenameUnit <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>io <span style="display: inline-block;"><code>new RenameUnit_IO()</code></span><br></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>4.5 DispatchUnit <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>io <span style="display: inline-block;"><code>new Dispatcher_IO</code></span><br></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>4.6 exu_issue_queue <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>io <span style="display: inline-block;"><code>new exu_issue_IO()</code></span><br></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>4.7 ld_issue_queue <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>io <span style="display: inline-block;"><code>new ld_issue_IO()</code></span><br></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>4.8 st_issue_queue <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>io <span style="display: inline-block;"><code>new st_issue_IO()</code></span><br></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>4.9 ROB <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>io <span style="display: inline-block;"><code>new ROBIO()</code></span><br></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>4.10 FunctionalUnit <span style="display: inline-block;">abstract class</span> <span style="display: inline-block;">Module</span></h3>
+    <p>FunctionalUnit 的构造参数如下：</p>
+    <table>
+      <tr>
+        <td><strong>Name</strong></td>
+        <td><strong>Type</strong></td>
+        <td><strong>Description</strong></td>
+      </tr>
+      <tr>
+        <td>needInformBranch</td>
+        <td><code>Boolean</code></td>
+        <td>通知前端信息，比如BU需要提供转调信息</td>
+      </tr>
+    </table>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>kill <span style="display: inline-block;"><code>Input(Bool())</code></span><br>Killed upon misprediction/exception</div>
+            <div>req <span style="display: inline-block;"><code>Flipped(new DecoupledIO(new FUReq()))</code></span><br>功能单元的请求</div>
+            <div>data_out <span style="display: inline-block;"><code>new DecoupledIO(new FUDataOut())</code></span><br>功能单元的输出</div>
+            <div>branch_info <span style="display: inline-block;"><code>if (needInformBranch)</code></span><br>仅有FU为BU时才有用</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>4.11 ALUFU <span style="display: inline-block;">class</span> <span style="display: inline-block;">FunctionalUnit</span></h3>
+    <h3>4.12 BranchFU <span style="display: inline-block;">class</span> <span style="display: inline-block;">FunctionalUnit</span></h3>
+    <h3>4.13 MULFU <span style="display: inline-block;">class</span> <span style="display: inline-block;">FunctionalUnit</span></h3>
+    <h3>4.14 DIVFU <span style="display: inline-block;">class</span> <span style="display: inline-block;">FunctionalUnit</span></h3>
+    <h3>4.15 CSRFU <span style="display: inline-block;">class</span> <span style="display: inline-block;">FunctionalUnit</span></h3>
+    <h3>4.16 ExecutionUnit <span style="display: inline-block;">abstract class</span> <span style="display: inline-block;">Module</span></h3>
+    <p>ExecutionUnit 包含了若干个FunctionalUnit</p>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>kill <span style="display: inline-block;"><code>Input(Bool())</code></span><br>Killed upon misprediction/exception</div>
+            <div>issued_uop <span style="display: inline-block;"><code>Input(Decoupled(new uop()))</code></span><br>从exu_issue来的指令</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>4.17 LSU <span style="display: inline-block;">class</span> <span style="display: inline-block;">Module</span></h3>
+    <p>LSU的模块定义，目前只完成了IO接口的定义，内部逻辑还未完成</p>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>io <span style="display: inline-block;"><code>new LSUIO()</code></span><br></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>4.18 PRFFreeList <span style="display: inline-block;">class</span> <span style="display: inline-block;">FreeList</span></h3>
+    <p>获取PRF中可用的寄存器 PRFFreeList 的构造参数如下：</p>
+    <table>
+      <tr>
+        <td><strong>Name</strong></td>
+        <td><strong>Type</strong></td>
+        <td><strong>Description</strong></td>
+      </tr>
+      <tr>
+        <td>read_ports</td>
+        <td><code>Int</code></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>depth</td>
+        <td><code>Int</code></td>
+        <td>Another desc</td>
+      </tr>
+      <tr>
+        <td>data_width</td>
+        <td><code>Int</code></td>
+        <td></td>
+      </tr>
+    </table>
+    <h2>5 Parameters</h2>
+    <h2>6 Interface</h2>
+    <h3>6.1 Fetch_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>instr_addr <span style="display: inline-block;"><code>Output(UInt(p.XLEN.W))</code></span><br>当前IFU的PC值</div>
+            <div>instr <span style="display: inline-block;"><code>Input(Vec(p.CORE_WIDTH, UInt(32.W)))</code></span><br></div>
+            <div>id_uop <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Valid(new IF_ID_uop()))</code></span><br></div>
+            <div>id_ready <span style="display: inline-block;"><code>Input(Bool())</code></span><br>ID是否准备好接收指令</div>
+            <div>rob_commitsignal <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))</code></span><br>ROB提交时的广播信号，发生误预测时对本模块进行冲刷</div>
+            <div>target_PC <span style="display: inline-block;"><code>Input(UInt(p.XLEN.W))</code></span><br>预测的下个cycle取指的目标地址</div>
+            <div>btb_hit <span style="display: inline-block;"><code>Input(Vec(p.CORE_WIDTH, Bool()))</code></span><br>1代表hit，0相反；将最年轻的命中BTB的置为1，其余为0</div>
+            <div>branch_pred <span style="display: inline-block;"><code>Input(Bool())</code></span><br>branch指令的BHT的预测结果；1代表跳转，0相反</div>
+            <div>GHR <span style="display: inline-block;"><code>Input(UInt(p.GHR_WIDTH.W))</code></span><br>作出预测时的全局历史寄存器快照</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>6.2 BP_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>instr_addr <span style="display: inline-block;"><code>Input(UInt(p.XLEN.W))</code></span><br>当前PC值，用于访问BTB获得跳转目标地址，以及访问BHT获得跳转预测结果</div>
+            <div>target_PC <span style="display: inline-block;"><code>Output(UInt(p.XLEN.W))</code></span><br>预测的下个cycle取指的目标地址</div>
+            <div>btb_hit <span style="display: inline-block;"><code>Output(Vec(p.CORE_WIDTH, Bool()))</code></span><br>1代表hit，0相反；将指令包中命中BTB的最年轻的置为1，其余为0</div>
+            <div>branch_pred <span style="display: inline-block;"><code>Output(Bool())</code></span><br>条件分支指令的BHT的预测结果；1代表跳转，0相反；非条件分支置1</div>
+            <div>GHR <span style="display: inline-block;"><code>Output(UInt(p.GHR_WIDTH.W))</code></span><br>作出预测时的全局历史寄存器快照，随流水级传递，在ROB退休分支指令时更新BHT</div>
+            <div>rob_commitsignal <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))</code></span><br>ROB提交时的广播信号，从中识别出分支指令更新BHT和BTB</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>6.3 Decode_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>if_uop <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Flipped(Valid(new IF_ID_uop())))</code></span><br></div>
+            <div>id_ready <span style="display: inline-block;"><code>Output(Bool())</code></span><br>ID是否准备好接收指令</div>
+            <div>rename_uop <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Valid(new ID_RENAME_uop()))</code></span><br></div>
+            <div>rename_ready <span style="display: inline-block;"><code>Input(Bool())</code></span><br>Rename是否准备好接收指令</div>
+            <div>rob_commitsignal <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))</code></span><br>ROB提交时的广播信号，发生误预测时对本模块进行冲刷</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>6.4 RenameUnit_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span></h3>
+    <p>重命名单元将逻辑寄存器地址映射成实际寄存器。逻辑寄存器指的是ISA定义的x0-x31，而实际寄存器数量多于32个，一般可达128个。主要解决WAW，WAR等问题。</p>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>id_uop <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Flipped(Valid(new ID_RENAME_uop())))</code></span><br>来自ID单元的uop</div>
+            <div>rename_ready <span style="display: inline-block;"><code>Output(Bool())</code></span><br>反馈给IDU，显示Rename单元是否准备好接收指令</div>
+            <div>rob_commitsignal <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))</code></span><br>ROB提交时的广播信号，rob正常提交指令时更新amt与rmt，发生误预测时对本模块进行恢复</div>
+            <div>dis_uop <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Valid(new RENAME_dis_uop()))</code></span><br>发往Dispatch单元的uop</div>
+            <div>dis_ready <span style="display: inline-block;"><code>Input(Bool())</code></span><br>来自Dispatch单元的反馈，显示dispatch单元是否准备好接收指令</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>6.5 Dispatcher_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>rename_uop <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Flipped(Valid(new RENAME_DISPATCH_uop())))</code></span><br>来自rename单元的uop</div>
+            <div>dis_ready <span style="display: inline-block;"><code>Output(Bool())</code></span><br>反馈给rename单元，显示Dispatch单元是否准备好接收指令</div>
+            <div>rob_uop <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop()))</code></span><br>发往ROB的uop</div>
+            <div>rob_full <span style="display: inline-block;"><code>Input(Bool())</code></span><br>ROB空标志(0表示非满，1表示满)</div>
+            <div>rob_head <span style="display: inline-block;"><code>Input(UInt(log2Ceil(p.ROB_DEPTH).W))</code></span><br>ROB头部指针</div>
+            <div>rob_tail <span style="display: inline-block;"><code>Input(UInt(log2Ceil(p.ROB_DEPTH).W))</code></span><br>ROB尾部指针，指向入队处</div>
+            <div>rob_commitsignal <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))</code></span><br>ROB提交时的广播信号，发生误预测时对本模块进行冲刷</div>
+            <div>exu_issue_uop <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop()))</code></span><br>发往EXU的uop</div>
+            <div>exu_issued_id <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Flipped(Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))))</code></span><br>本周期EXU ISSUE queue发出指令对应的issue queue ID，用于更新iq freelist</div>
+            <div>st_issue_uop <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Valid(new DISPATCH_STISSUE_uop()))</code></span><br>发往Store Issue的uop</div>
+            <div>st_issued_index <span style="display: inline-block;"><code>Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W))</code></span><br>本周期Store Issue queue发出指令对应的issue queue ID，用于更新issue queue freelist</div>
+            <div>ld_issue_uop <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Valid(new DISPATCH_LDISSUE_uop()))</code></span><br>发往Load Issue的uop</div>
+            <div>ld_issued_index <span style="display: inline-block;"><code>Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W))</code></span><br>本周期Load Issue queue发出指令对应的issue queue ID，用于更新issue queue freelist</div>
+            <div>stq_full <span style="display: inline-block;"><code>Input(Bool())</code></span><br>Store Queue空标志(0表示非满，1表示满)</div>
+            <div>stq_head <span style="display: inline-block;"><code>Input(UInt(log2Ceil(p.STQ_DEPTH).W))</code></span><br>store queue头部指针</div>
+            <div>stq_tail <span style="display: inline-block;"><code>Input(UInt(log2Ceil(p.STQ_DEPTH).W))</code></span><br>store queue尾部指针，指向入队处</div>
+            <div>st_dis <span style="display: inline-block;"><code>Output(Vec(p.CORE_WIDTH, Bool()))</code></span><br>本cycle派遣store指令的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>6.6 exu_issue_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>iq_id <span style="display: inline-block;"><code>Input(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W)))</code></span><br>IQ ID,</div>
+            <div>dis_uop <span style="display: inline-block;"><code>Flipped(Valid(Vec(p.CORE_WIDTH, new DISPATCH_EXUISSUE_uop())))</code></span><br>来自Dispatch Unit的输入</div>
+            <div>exu_issue_uop <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop()))</code></span><br>发往EXU的uop</div>
+            <div>mul_ready <span style="display: inline-block;"><code>Input(Vec(p.MUL_NUM, Bool()))</code></span><br>乘法器的ready信号</div>
+            <div>div_ready <span style="display: inline-block;"><code>Input(Vec(p.DIV_NUM, Bool()))</code></span><br>除法器的ready信号</div>
+            <div>dst_FU <span style="display: inline-block;"><code>Output(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.ALU_NUM).W)))</code></span><br>发射的指令的目标功能单元</div>
+            <div>issue_uop <span style="display: inline-block;"><code>Valid(Vec(p.CORE_WIDTH, new EXUISSUE_EXU_uop()))</code></span><br>发射的指令(包含操作数的值)</div>
+            <div>value_o1 <span style="display: inline-block;"><code>Output(Vec(p.CORE_WIDTH, UInt(p.XLEN.W)))</code></span><br>发射的指令的操作数1</div>
+            <div>value_o2 <span style="display: inline-block;"><code>Output(Vec(p.CORE_WIDTH, UInt(p.XLEN.W)))</code></span><br>发射的指令的操作数2</div>
+            <div>exu_issue_raddr1 <span style="display: inline-block;"><code>Output(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W)))</code></span><br>PRF读地址1</div>
+            <div>exu_issue_raddr2 <span style="display: inline-block;"><code>Output(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W)))</code></span><br>PRF读地址2</div>
+            <div>exu_issue_value1 <span style="display: inline-block;"><code>Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W)))</code></span><br>操作数1</div>
+            <div>exu_issue_value2 <span style="display: inline-block;"><code>Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W)))</code></span><br>操作数2</div>
+            <div>prf_valid <span style="display: inline-block;"><code>Input(Vec(p.PRF_DEPTH, Bool()))</code></span><br>PRF的valid信号</div>
+            <div>wb_uop2 <span style="display: inline-block;"><code>Flipped(Valid((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, new ALU_WB_uop()))))</code></span><br>来自alu、mul、div、load pipeline的uop</div>
+            <div>wb_uop1 <span style="display: inline-block;"><code>Flipped(Valid((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, new ALU_WB_uop()))))</code></span><br>来自alu、mul、div、load pipeline的uop</div>
+            <div>ldu_wb_uop1 <span style="display: inline-block;"><code>Flipped(Valid(new LDPIPE_WB_uop()))</code></span><br>来自ldu的uop</div>
+            <div>exu_issued_index <span style="display: inline-block;"><code>Output(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.EXUISSUE_DEPTH).W)))</code></span><br>更新IQ Freelist</div>
+            <div>rob_commitsignal <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))</code></span><br>ROB提交时的广播信号，发生误预测时对本模块进行冲刷</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>6.7 ld_issue_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>dis_uop <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Flipped(Valid(new DISPATCH_LDISSUE_uop())))</code></span><br>来自Dispatch Unit的输入</div>
+            <div>ld_issue_uop <span style="display: inline-block;"><code>Decoupled(new LDISSUE_LDPIPE_uop())</code></span><br>发射的指令</div>
+            <div>value_o1 <span style="display: inline-block;"><code>Output(UInt(p.XLEN.W))</code></span><br>发射的指令的操作数1</div>
+            <div>value_o2 <span style="display: inline-block;"><code>Output(UInt(p.XLEN.W))</code></span><br>发射的指令的操作数2</div>
+            <div>ld_issue_raddr1 <span style="display: inline-block;"><code>Output(UInt(log2Ceil(p.PRF_DEPTH).W))</code></span><br>PRF读地址1</div>
+            <div>raddr2 <span style="display: inline-block;"><code>Output(UInt(log2Ceil(p.PRF_DEPTH).W))</code></span><br>PRF读地址2</div>
+            <div>ld_issue_value1 <span style="display: inline-block;"><code>Input(UInt(p.XLEN.W))</code></span><br>操作数1</div>
+            <div>value_i2 <span style="display: inline-block;"><code>Input(UInt(p.XLEN.W))</code></span><br>操作数2</div>
+            <div>prf_valid <span style="display: inline-block;"><code>Input(Vec(p.PRF_DEPTH, Bool()))</code></span><br>PRF的valid信号</div>
+            <div>wb_uop2 <span style="display: inline-block;"><code>Flipped(Valid((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, new ALU_WB_uop()))))</code></span><br>来自alu、mul、div、load pipeline的uop</div>
+            <div>ldu_wb_uop2 <span style="display: inline-block;"><code>Flipped(Valid(new LDPIPE_WB_uop()))</code></span><br>来自ldu的uop</div>
+            <div>wb_uop1 <span style="display: inline-block;"><code>Flipped(Valid((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, new ALU_WB_uop()))))</code></span><br>来自alu、mul、div、load pipeline的uop</div>
+            <div>ldu_wb_uop1 <span style="display: inline-block;"><code>Flipped(Valid(new LDPIPE_WB_uop()))</code></span><br>来自ldu的uop</div>
+            <div>ld_issued_index <span style="display: inline-block;"><code>Output(UInt(log2Ceil(p.LDISSUE_DEPTH).W))</code></span><br>更新IQ Freelist</div>
+            <div>rob_commitsignal <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))</code></span><br>ROB提交时的广播信号，发生误预测时对本模块进行冲刷</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>6.8 st_issue_IO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>iq_id <span style="display: inline-block;"><code>Input(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W)))</code></span><br>IQ ID</div>
+            <div>dis_uop <span style="display: inline-block;"><code>Flipped(Valid(Vec(p.CORE_WIDTH, new DISPATCH_STISSUE_uop())))</code></span><br>来自Dispatch Unit的输入</div>
+            <div>st_issue_uop <span style="display: inline-block;"><code>Decoupled(new STISSUE_STPIPE_uop())</code></span><br>发射的指令</div>
+            <div>value_o1 <span style="display: inline-block;"><code>Output(UInt(p.XLEN.W))</code></span><br>发射的指令的操作数1</div>
+            <div>value_o2 <span style="display: inline-block;"><code>Output(UInt(p.XLEN.W))</code></span><br>发射的指令的操作数2</div>
+            <div>st_issue_raddr1 <span style="display: inline-block;"><code>Output(UInt(log2Ceil(p.PRF_DEPTH).W))</code></span><br>PRF读地址1</div>
+            <div>st_issue_raddr2 <span style="display: inline-block;"><code>Output(UInt(log2Ceil(p.PRF_DEPTH).W))</code></span><br>PRF读地址2</div>
+            <div>st_issue_value1 <span style="display: inline-block;"><code>Input(UInt(p.XLEN.W))</code></span><br>操作数1</div>
+            <div>st_issue_value2 <span style="display: inline-block;"><code>Input(UInt(p.XLEN.W))</code></span><br>操作数2</div>
+            <div>prf_valid <span style="display: inline-block;"><code>Input(Vec(p.PRF_DEPTH, Bool()))</code></span><br>PRF的valid信号</div>
+            <div>wb_uop2 <span style="display: inline-block;"><code>Flipped(Valid((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, new ALU_WB_uop()))))</code></span><br>来自alu、mul、div、load pipeline的uop</div>
+            <div>LDU_complete_uop2 <span style="display: inline-block;"><code>Flipped(Valid(new LDPIPE_WB_uop()))</code></span><br>来自ldu的uop</div>
+            <div>wb_uop1 <span style="display: inline-block;"><code>Flipped(Valid((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, new ALU_WB_uop()))))</code></span><br>来自alu、mul、div、load pipeline的uop</div>
+            <div>LDU_complete_uop1 <span style="display: inline-block;"><code>Flipped(Valid(new LDPIPE_WB_uop()))</code></span><br>来自ldu的uop</div>
+            <div>st_issued_index <span style="display: inline-block;"><code>Output(UInt(log2Ceil(p.STISSUE_DEPTH).W))</code></span><br>更新IQ Freelist</div>
+            <div>rob_commitsignal <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))</code></span><br>ROB提交时的广播信号，发生误预测时对本模块进行冲刷</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>6.9 ROBIO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>dis_uop <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, (new DISPATCH_ROB_uop()))</code></span><br>Dispatch Unit的uop,存入条目中</div>
+            <div>empty_full <span style="display: inline-block;"><code>Output(Bool())</code></span><br>ROB空标志(0表示非满，1表示满)</div>
+            <div>rob_head <span style="display: inline-block;"><code>Output(UInt(log2Ceil(p.ROB_DEPTH)))</code></span><br>ROB头指针</div>
+            <div>rob_tail <span style="display: inline-block;"><code>Output(UInt(log2Ceil(p.ROB_DEPTH).W))</code></span><br>ROB尾指针</div>
+            <div>alu_wb_uop <span style="display: inline-block;"><code>Flipped(Valid(Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, new ALU_WB_uop())))</code></span><br>来自alu、mul、div、load pipeline的uop</div>
+            <div>bu_wb_uop <span style="display: inline-block;"><code>Flipped(Valid(Vec(p.BU_NUM, new BU_WB_uop())))</code></span><br>来自bu的uop,更新就绪状态</div>
+            <div>stu_wb_uop <span style="display: inline-block;"><code>Flipped(Valid(new STPIPE_WB_uop()))</code></span><br>来自stu的uop,更新就绪状态</div>
+            <div>LDU_complete_uop <span style="display: inline-block;"><code>Flipped(Valid(new LDPIPE_WB_uop()))</code></span><br>来自ldu的uop,更新就绪状态</div>
+            <div>mispred <span style="display: inline-block;"><code>Input(Bool())</code></span><br>分支误预测信号</div>
+            <div>if_jump <span style="display: inline-block;"><code>Input(Bool())</code></span><br>分支指令跳转信号</div>
+            <div>rob_commitsignal <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Valid(new ROBContent()))</code></span><br>广播ROB条目</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>6.10 FUReq <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span></h3>
+    <h3>6.11 FUDataOut <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span><span style="display: inline-block;">HasUOP</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>data <span style="display: inline-block;"><code>UInt(p.XLEN.W)</code></span><br></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>6.12 uop <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>instr <span style="display: inline-block;"><code>UInt((32 - 7).W)</code></span><br>func3, func7, rd, rs1 , rs2, imm without opcode</div>
+            <div>instr_type <span style="display: inline-block;"><code>InstrType()</code></span><br></div>
+            <div>instr_addr <span style="display: inline-block;"><code>UInt(p.XLEN.W)</code></span><br></div>
+            <div>target_PC <span style="display: inline-block;"><code>UInt(p.XLEN.W)</code></span><br></div>
+            <div>GHR <span style="display: inline-block;"><code>UInt(p.GHR_WIDTH.W)</code></span><br></div>
+            <div>pdst <span style="display: inline-block;"><code>UInt(log2Ceil(p.PRF_DEPTH).W)</code></span><br></div>
+            <div>ps1 <span style="display: inline-block;"><code>UInt(log2Ceil(p.PRF_DEPTH).W)</code></span><br></div>
+            <div>ps2 <span style="display: inline-block;"><code>UInt(log2Ceil(p.PRF_DEPTH).W)</code></span><br></div>
+            <div>rob_index <span style="display: inline-block;"><code>UInt(log2Ceil(p.ROB_DEPTH).W)</code></span><br></div>
+            <div>branch_taken <span style="display: inline-block;"><code>Bool()</code></span><br></div>
+            <div>btb_hit <span style="display: inline-block;"><code>Bool()</code></span><br></div>
+            <div>fu_signals <span style="display: inline-block;"><code>new FUSignals()</code></span><br>opcode is compiled into fu specific control signals</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3>6.13 LSUIO <span style="display: inline-block;">class</span> <span style="display: inline-block;">Bundle</span></h3>
+    <div>
+      <div>
+        <div>
+          <div>
+            <div>data_addr <span style="display: inline-block;"><code>Output(UInt(64.W))</code></span><br>访存指令的目标地址</div>
+            <div>data_into_mem <span style="display: inline-block;"><code>Output(UInt(64.W))</code></span><br>需要写入储存器的数据</div>
+            <div>write_en <span style="display: inline-block;"><code>Output(Bool())</code></span><br>写使能信号</div>
+            <div>func3 <span style="display: inline-block;"><code>Output(UInt(3.W))</code></span><br>访存指令的fun3字段</div>
+            <div>data_out_mem <span style="display: inline-block;"><code>Input(UInt(64.W))</code></span><br>从储存器中读取的数据</div>
+            <div>st_issue_uop <span style="display: inline-block;"><code>Flipped(Valid(new STISSUE_STPIPE_uop()))</code></span><br>存储指令的uop</div>
+            <div>ld_issue_uop <span style="display: inline-block;"><code>Flipped(Decoupled(new LDISSUE_LDPIPE_uop()))</code></span><br>加载指令的uop</div>
+            <div>stq_tail <span style="display: inline-block;"><code>Output(log2Ceil(p.STQ_Depth).W)</code></span><br>stq的尾部索引</div>
+            <div>stq_head <span style="display: inline-block;"><code>Output(log2Ceil(p.STQ_Depth).W)</code></span><br>stq的头部索引</div>
+            <div>stq_full <span style="display: inline-block;"><code>Output(Bool())</code></span><br>stq是否为满,1表示满</div>
+            <div>st_dis <span style="display: inline-block;"><code>Input(Vec(p.CORE_WIDTH, Bool()))</code></span><br>存储指令被派遣的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）</div>
+            <div>rob_commitsignal <span style="display: inline-block;"><code>Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))</code></span><br>ROB的CommitSignal信号</div>
+            <div>stu_wb_uop <span style="display: inline-block;"><code>Valid((new STPIPE_WB_uop()))</code></span><br>存储完成的信号,wb to ROB</div>
+            <div>ldu_wb_uop <span style="display: inline-block;"><code>Valid((new ALU_WB_uop()))</code></span><br>加载完成的信号,wb to ROB and PRF</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

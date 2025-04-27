@@ -36,6 +36,6 @@ class Dispatcher_IO(implicit p:Parameters) extends Bundle {
   反馈给dispatch单元，dispatch单元会将该id存入freelist的tail处。
 */
 
-class Dispatcher(implicit p: Parameters) extends Module{
+class DispatchUnit(implicit p: Parameters) extends Module{
   val io = IO(new Dispatcher_IO)
 }

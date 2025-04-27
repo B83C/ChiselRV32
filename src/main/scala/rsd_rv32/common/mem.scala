@@ -27,12 +27,18 @@ class mem_lsu_c extends Bundle {
 
 class mem(memDepth: Int, instWidth: Int) extends Module {
   val io = IO(new Bundle {
-    val reset   = Input(Bool())
-    val if_mem  = Flipped(new if_mem())
-    val ex_mem  = Flipped(new lsu_mem_c)
+    val reset   = Input(Bool())           // Mem reset signal
+    val if_mem  = Flipped(new if_mem()) /*
+    multiline comment
+    saoehusnteo
+    */
+    val ex_mem  = Flipped( //comment
+      new lsu_mem_c
+    )
     val mem_id  = new mem_id(instWidth)
     val mem_lsu = new mem_lsu_c
   })
+
 
   val memInside = SyncReadMem(memDepth, Vec(4, UInt(8.W)))
 

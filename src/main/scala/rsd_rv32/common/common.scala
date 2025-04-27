@@ -8,11 +8,6 @@ case class Parameters(
   //PC_WIDTH: Int = 32,
   CORE_WIDTH: Int = 2,  //Dispatch, Issue, Commit Width
   INSTR_WIDTH: Int = 32,
-  // FETCH_WIDTH: Int = 2,
-  // SCALE: Int = 2,
-  // RENAME_WIDTH: Int = 2,
-  // DISPATCH_WIDTH: Int = 2,
-  // ISSUE_WIDTH: Int = 2,
   GHR_WIDTH: Int = 8,
 
   FU_NUM: Int = 7,
@@ -32,6 +27,8 @@ case class Parameters(
   EXUISSUE_DEPTH: Int = 16,
   LDISSUE_DEPTH: Int = 16,
   STISSUE_DEPTH: Int = 16
+
+  EXU_Fj_CNT_MAX: Int = 10, //一个执行单元所包含的FU最多的数量
 ) {
   
 }

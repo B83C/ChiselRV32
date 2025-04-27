@@ -7,6 +7,14 @@
 #let spacing = 1
 #let name_to_id = lower
 #let entry = (args) =>  arguments(x: 0, y: 0, ..args.named())
+#let left = (name, dy, ..args) => {
+  context {
+    let mod = s.get(name)
+    if mod != none {
+    }
+  }
+  block(space: 3, "Decode", 0, ..args)
+}
 #let left = (name, y, args, space: spacing) => arguments(x: (rel: - space - args.named().w, to: name_to_id(name) + ".west"), y: y, ..args.named())
 #let right = (name, y, args, space: spacing) => arguments(x: (rel: space, to: name_to_id(name) + ".east"), y: y, ..args.named())
 #let up = (name, y, args, ..varg) => {
@@ -29,6 +37,20 @@
   element.block(..misc)
 }
 
+#let c(block1, block2, name, display: true, ..args) = {
+  wire.wire(
+    "w-" + name,
+    // style: "dodge",
+    (lower(block1) + "-port-" + name, lower(block2) + "-port-" + name),
+    name: if display {name} else { none }, 
+    // name-pos: "middle",
+    // name: name,
+    directed: true,
+    ..args
+  )
+}
+#let cr(..args) = c(args.at(1), args.at(0), ..args.pos().slice(2), reverse: true)
+
 #set text(size: 5pt)
 #context[
    #circuit(length: 2em,{
@@ -36,78 +58,94 @@
       element.group(..id("Frontend"), {
         block(entry(arguments( ..bl, ..style1, ..id("Fetch"),
           ports: (
-            // east: (
-            //   id("FetchPacket"),
-            // ),
+            east: (
+              (id: "FetchPacket"),
+            ),
+            south: (
+              (id: "PC_BP"),
+              (id: "PC_NEXT"),
+            ),
           )
         )))
         block(down("Fetch", 5, arguments( ..bl, ..style1, ..id("Branch predictor"),
           ports: (
-            // north: (
-            //   id("PC"),
-            //   id("PC_Branch"),
-            // ),
-            // east: (
-            //   id("ROB"),
-            // ),
+            north: (
+              (id: "PC_BP"),
+              (id: "PC_NEXT"),
+            ),
           )
         )))
         block(right("Fetch", 0, arguments( ..bl, ..style1, ..id("Decode"),
           ports: (
-            // west: (
-            //   id("FetchPacket"),
-            // ),
-            // east: (
-            //   id("Decoded"),
-            // ),
+            west: (
+              (id: "FetchPacket"),
+            ),
+            east: (
+              (id: "Decoded"),
+            ),
           )
         )))
       })
       element.group(..id("Scheduler"),
       {
-        block(right(space: 2, "Decode", 0, arguments( ..bl, ..style1, ..id("Rename"),
+        block(right(space: 3, "Decode", 0, arguments( ..bl, ..style1, ..id("Rename"),
           ports: (
-            // west: (
-            //   id("Decoded"),
-            // ),
-            // east: (
-            //   id("Renamed"),
-            // ),
+            west: (
+              (id: "Decoded"),
+            ),
+            east: (
+              (id: "Renamed"),
+            ),
+            north: (
+              (id: "RMTReq"),
+            ),
+            south: (
+              (id: "PRFLookup"),
+              (id: "PRFResp"),
+            )
           )
         )))
-        block(up("Rename", 5, arguments( ..bs, ..style1, ..id("RMT1"),
-          ports: (
-            // nort: (
-            //   id("Renamed"),
-            // ),
-          )
-        )))
-        // block(right(space: 0, "RMT1", 5, arguments( ..bs, ..style1, ..id("RMT2"),
-        //   ports: (
-        //     // nort: (
-        //     //   id("Renamed"),
-        //     // ),
-        //   )
-        // )))
+        element.group(name-anchor: "north", ..id("PRF Mapping"), {
+          block(up("Rename", 5, arguments( ..bs, ..style1, ..id("AMT"),
+            ports: (
+              south: (
+                (id: "RMTReq"),
+              )
+            )
+          )))
+          block(up("AMT", 7 , arguments( ..bs, ..style1, ..id("RMT"),
+            ports: (
+            )
+          )))
+        }
+        )
         block(down("Rename", 5, arguments( ..bl, ..style1, ..id("PRF Freelist"),
           ports: (
             north: (
-              id(""),
+              (id: "PRFLookup"),
+              (id: "PRFResp"),
             ),
           )
         )))
         element.group(..id("Dispatch Unit"),
         {
-          element.group(..id("IQ Row Generator"),
-          {
-            block(right(space: 2, "Rename", 2, arguments( ..bs, ..style1, ..id("WAT"),
+          // element.group(..id("IQ Row Generator"),
+          // {
+            block(right(space: 2, "Rename", 0, arguments( ..bs, ..style1, ..id("Dispatcher"),
               ports: (
                 north: (
                   id(""),
                 ),
               )
             )))
-            block(down("WAT", 0, arguments( ..bs, ..style1, ..id("Ready Bit Table"),
+            block(down("Dispatcher", 3, arguments( ..bs, ..style1, ..id("Ready Bit Table"),
+              ports: (
+                north: (
+                  id(""),
+                ),
+              )
+            )))
+            block(up("Dispatcher", 3, arguments( ..bs, ..style1, ..id("IQ Free List"),
               ports: (
                 north: (
                   id(""),
@@ -115,46 +153,46 @@
               )
             )))
           })
-          block(up("WAT", 5, arguments( ..bs, ..style1, ..id("IQ Free List"),
-            ports: (
-              north: (
-                id(""),
-              ),
-            )
-          )))
-          block(down("Ready Bit Table", 4, arguments( ..bs, ..style1, ..id("Destination\nRam"),
-            ports: (
-              north: (
-                id(""),
-              ),
-            )
-          )))
         })
         element.group(..id("Issue Queue"),
         {
-          block(right(space: 2, "WAT", 2, arguments( ..bs, ..style1, ..id("Payload\nRam"),
+          block(right(space: 2, "Dispatcher", 2, arguments( ..bs, ..style1, ..id("Payload\nRam"),
             ports: (
               north: (
                 id(""),
               ),
             )
           )))
-          block(down("Payload\nRam", 1, arguments( ..bs, ..style1, ..id("Wakeup Logic"),
+          block(right(space:2, "Dispatcher", 4, arguments( ..bs, ..style1, ..id("Exu Issue"),
             ports: (
               north: (
                 id(""),
               ),
             )
           )))
-          block(right(space: 0, "Wakeup Logic", -1, arguments( ..bs, ..style1, ..id("Select Logic"),
+          block(down("Exu Issue", 2, arguments( ..bs, ..style1, ..id("LD Issue"),
             ports: (
               north: (
                 id(""),
               ),
             )
           )))
+          block(down("LD Issue", 5, arguments( ..bs, ..style1, ..id("ST Issue"),
+            ports: (
+              north: (
+                id(""),
+              ),
+            )
+          )))
+          // block(right(space: 0, "Wakeup Logic", -1, arguments( ..bs, ..style1, ..id("Select Logic"),
+          //   ports: (
+          //     north: (
+          //       id(""),
+          //     ),
+          //   )
+          // )))
         })
-        block(down("Wakeup Logic", 5, arguments( ..bs, ..style1, ..id("ROB"),
+        block(down("ST Issue", 6, arguments( ..bs, ..style1, ..id("ROB"),
           ports: (
             north: (
               id(""),
@@ -162,7 +200,7 @@
           )
         )))
       })
-      element.multiplexer(..right("Select Logic", -1, arguments(w: 1, h: 2, 
+      element.multiplexer(..right("Exu Issue", -1, arguments(w: 1, h: 2, 
         id: "multiplexer",
         entries: 2
       )))
@@ -185,7 +223,17 @@
           )
         )))
       })
+      c("fetch", "branch predictor", "PC_NEXT")
+      c("fetch", "decode", "FetchPacket", display: false)
+      cr("fetch", "branch predictor", "PC_BP")
+      c("decode", "rename", "Decoded")
+      c("rename", "amt", "RMTReq")
+      c("rename", "prf freelist", "PRFLookup")
+      cr("rename", "prf freelist", "PRFResp")
+      // c("fetch", "decode", "FetchPacket", display: false)
+      // c("branch predictor", "fetch", "PC_NEXT")
     })
+
   }) 
 ]
 

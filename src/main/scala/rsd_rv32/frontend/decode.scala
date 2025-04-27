@@ -15,6 +15,6 @@ class Decode_IO(implicit p: Parameters) extends Bundle {
   val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) // ROB提交时的广播信号，发生误预测时对本模块进行冲刷
 }
 
-class Decode(implicit p: Parameters) extends Module {
+class DecodeUnit(implicit p: Parameters) extends Module {
   val io = IO(new Decode_IO())
 }

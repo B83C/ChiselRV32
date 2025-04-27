@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 
 object InstrType extends ChiselEnum {
-    val ALU, Branch, LD, ST, CSR, MUL, DIV_REM= Value
+    val ALU, Branch, LD, ST, CSR, MUL, DIV_REM = Value
 }
 
 object BranchPred extends ChiselEnum {
@@ -51,7 +51,7 @@ class FUSignals extends Bundle {
 //     val instr = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode;
 // }
 
-/*abstract trait HasUOP() extends Bundle {
+abstract trait HasUOP() extends Bundle {
     val uop = new uop()
 }
 
@@ -70,7 +70,7 @@ class uop(implicit p: Parameters) extends Bundle {
     val btb_hit = Bool()
     
     val fu_signals = new FUSignals() //opcode is compiled into fu specific control signals
-}*/
+}
 
 class IF_ID_uop(implicit p: Parameters) extends Bundle {
     val instr = UInt(p.XLEN.W) 

@@ -23,8 +23,7 @@ class RenameUnit_IO(implicit p: Parameters) extends Bundle {
   当指令退休时，根据rob存储的rd条目索引AMT，并把对应物理寄存器地址改为提交的物理寄存器地址，并把旧的物理寄存器地址放入preg_freelist中（freelist的tail + 1 即可）。
   Rename单元通过ROB队首的广播信息来判断是否发生误预测，换言之，误预测指令到ROB队首后才会被处理，因而RMT到恢复只需将AMT复制到RMT，并冲刷掉该模块正在处理的指令。
 */
-
-class Rename(implicit p: Parameters) extends Module {
+class RenameUnit(implicit p: Parameters) extends Module {
   val io = IO(new RenameUnit_IO())
 }
 

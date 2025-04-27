@@ -24,6 +24,6 @@ class Fetch_IO(implicit p: Parameters) extends Bundle {
     val GHR = Input(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照
 }
 
-class Fetch(implicit p: Parameters) extends Module {
+class FetchUnit(implicit p: Parameters) extends Module {
     val io = IO(new Fetch_IO())
 }

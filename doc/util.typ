@@ -1,4 +1,5 @@
 #import "imports.typ": *
+#set par(first-line-indent: (amount: 2em, all: true), justify: true, leading: 1em)
 #set heading(numbering: "1.1")
 #set table(
   stroke: (x, y) => if y == 0 {
@@ -110,6 +111,9 @@
 
   matches.map(unit => {
     let comment = unit.captures.at(0).replace(regex("/{2,}\s*"), "").trim()
+    if comment == "" {
+      comment = none
+    }
     let type = unit.captures.at(1)
     let module = unit.captures.at(2)
     let params_inheritance = unit.captures.at(3)
@@ -125,8 +129,8 @@
     if params_c != none {
       let params = params_c.captures.first()
       params_c = params.matches(
-        regex("(?:^implicit\s+)?(?:val\s+)?(\w+)\s*:\s*([^/,\n\r)]*)")
-      ).filter(p => not p.text.contains("implicit")).map(p => { // TODO
+        regex("(?:implicit\s+)?(?:val\s+)?(\w+)\s*:\s*([^/,\n\r)]*)")
+      ).filter(p => not p.text.starts-with("impl")).map(p => { // TODO: avoid implicit parameters
         let comment = get_comment(params.slice(p.end))
         (p.captures.first(): (p.captures.at(1), comment.first()))
       }).reduce((acc, p) => acc + p)
@@ -176,7 +180,7 @@
 #let f(s) = r("frontend/" + ss(s))
 #let c(s) = r("common/" + ss(s))
 
-#let interfaces_used = state("interfaces_used", [])
+#let modules_shown = state("modules_shown", (:))
 #let interfaces_shown = state("interfaces_shown", (:))
 
 // 所有class的汇总
@@ -195,6 +199,7 @@
   c("mem"),
   c("ram"),
   c("uop"),
+  c("rob_content"),
   f("branch_predict"),
   f("decode"),
   f("fetch"),
@@ -203,6 +208,7 @@
   s("ld_issue"),
   s("rename"),
   s("st_issue"),
+  s("rob"),
   e("lsu"),
   e("prf"),
   e("execution"),
@@ -224,31 +230,40 @@
 )
 
 #let cm(i) = {
-  cmap.at(lower(i), default: yellow) 
+  if type(i) == str {
+    cmap.at(lower(i), default: luma(230)) 
+  } else {
+    luma(240)
+  }
 }
+
+
+
+#let tag(m, size: 0.6em) = box(baseline: 20%, fill: cm(m), inset: 4pt, radius: 4pt, text(size: size, m)) 
 
 #let module_desc(m) = {
   let module = m.name
-  let class_tag = box(baseline: 20%, fill: luma(230), inset: 4pt, radius: 4pt, text(size: 0.6em, m.type)) 
+  let class_tag = tag(m.type)
   let inheritance_tag =  if m.inheritance != none {
-    m.inheritance.map(it => [#box(baseline: 20%, fill: cm(it), inset: 4pt, radius: 4pt, text(size: 0.6em, it))]).reduce((acc, p) => acc + p)
+    m.inheritance.map(it => [#tag(it)]).reduce((acc, p) => acc + p)
   } else {
     none
   }
   {
-    [ == #module #class_tag #inheritance_tag
-      #label(module)
+    [ #[== #module #class_tag #inheritance_tag] #label(module) 
+      #line(stroke: (paint: blue, thickness: 1pt, dash: "dashed"), length: 100%)
+      // #box(height : 4pt, line(end: (100%, 0%)))
+      #m.desc
     ]
-    m.desc 
   }
 }
 
-#let module_content(m, auto_ref: true) = {
+#let module_params(m, auto_ref: true) = {
   let module = m.name
   let p = m.params
   if p != none  {
      {
-      [\ #module 的构造参数如下：]
+      [#module 的构造参数如下：]
       table(
         columns: 3,
         gutter: 3pt,
@@ -268,118 +283,148 @@
   }
 }
 
-#let io_content(m) = {
-  let io = m.io
+
+#let add_interface(name) = {
+  for i in names {
+    let t = name.contains(regex("\b" + i + "\b"))
+    if t {
+      context interfaces_shown.update(x => x + ((i): true) )
+    }
+  }
+}
+
+#let content(m) = {
+  let is_bundle = m.inheritance.contains("Bundle")
+  let members = if is_bundle { m.members } else { m.io }
+  // assert(m.inheritance.contains("Bundle"), message: "Only Bundles are accepted")
   {
-    [
-      #for kv in io.pairs(){
-        let (_, v) = kv
-        let (type, _) = v
-        for i in names {
-            let t = type.contains(regex("\b" +i + "\b"))
-            context {
-              let shown = interfaces_shown.get()
-              if t and not shown.at(i, default: false) {
-                interfaces_shown.update(x =>
-                  x + (i: true)
-                )
-                interfaces_used.update(x =>
-                  x + [
-                    #module_desc(c.at(i))
-                    #module_content(c.at(i))
-                  ]
-                )
+    if not is_bundle and members != none {
+      [
+        #for kv in members.pairs(){
+          let (_, v) = kv
+          let (type, _) = v
+          add_interface(type)
+        }
+      ]     
+    }
+
+    if members != none {
+       showybox(
+        breakable: true,
+        title: text(if is_bundle {"成员定义"} else {"IO 定义"}),
+        title-style: (boxed-style: (offset: (x: 2pt))),
+        stroke: (dash: "dashed"), 
+        inset: 6pt,
+        radius: 3pt,
+        members.pairs().map(kv => {
+          let (k, v) = kv
+          let (type, desc) = v
+          let type = [
+            #if not is_bundle {
+              show regex("\w+"): it => {
+                if names.contains(it.text) {
+                  link(label(it.text), [#it.text])
+                } else {
+                    it
+                }
               }
             }
-        }
-      }
-    ]
-    [\ IO端口定义如下：]
-    table(
-      columns: 3,
-      gutter: 3pt,
-      [*Name*], [*Type*], [*Description*],
-      ..io.pairs().map(kv => {
-        let (k, v) = kv
-        let (type, desc) = v
-        
-        let type = [
-          #show regex("\w+"): it => {
-            if names.contains(it.text) {
-              link(label(it.text), [#it.text])
-            } else {
-              it
-            }
+            #raw(type, lang: "scala")
+          ]
+          if desc == none {
+            desc = ""
           }
-          #raw(type, lang: "scala")
-        ]
-        if desc == none {
-          desc = ""
-        }
-        (k, type, desc.replace("\*\/", "").trim())
-      }).flatten()
-    )
+          block(
+            width: 100%,
+            spacing: 0.5em,
+            fill: luma(230),
+            inset: 5pt,
+            radius: 4pt,
+            [
+              #k #tag(size: 0.8em, type)\
+              #text(size: .8em, desc)
+            ]
+          )
+        }).reduce((x,y) => x + y)
+      )     
+    }
+
+    // table(
+    //   columns: 3,
+    //   gutter: 3pt,
+    //   [*Name*], [*Type*], [*Description*],
+    //   ..members.pairs().map(kv => {
+    //     let (k, v) = kv
+    //     let (type, desc) = v
+    //     if desc == none {
+    //       desc = ""
+    //     }
+    //     (k, raw(type, lang: "scala"), desc.replace("\*\/", "").trim())
+    //   }).flatten()
+    // )
   }
 }
 
-#let bundle_content(m) = {
-  let members = m.members
-  assert(m.inheritance.contains("Bundle"), message: "Only Bundles are accepted")
-  {
-    [\ 定义如下：]
-    table(
-      columns: 3,
-      gutter: 3pt,
-      [*Name*], [*Type*], [*Description*],
-      ..members.pairs().map(kv => {
-        let (k, v) = kv
-        let (type, desc) = v
-        if desc == none {
-          desc = ""
-        }
-        (k, raw(type, lang: "scala"), desc.replace("\*\/", "").trim())
-      }).flatten()
-    )
-  }
+#let p(..arg) = {
+  module_desc(..arg)
+  module_params(..arg)
 }
 
-#let param_content(m) = {
-  let params = m.params
-  {
-    [\ 定义如下：]
-    table(
-      columns: 3,
-      gutter: 3pt,
-      [*Name*], [*Type*], [*Description*],
-      ..params.pairs().map(kv => {
-        let (k, v) = kv
-        let (type, desc) = v
-        if desc == none {
-          desc = ""
-        }
-        (k, raw(type, lang: "scala"), desc.replace("\*\/", "").trim())
-      }).flatten()
-    )
-  }
+#let dp(..arg) = {
+  module_desc(..arg)
+  module_params(..arg)
 }
 
-#let dp(m, ..arg) = {
-  module_desc(m, ..arg)
-  module_content(m, ..arg)
+#let dpc(..arg) = {
+  module_desc(..arg)
+  module_params(..arg)
+  content(..arg)
 }
 
-#let dpio(m, ..arg) = {
-  module_desc(m, ..arg)
-  module_content(m, ..arg)
-  io_content(m, ..arg)
+#let hint(..c) = {
+  showybox(
+    frame: (
+      dash: "dashed",
+      border-color: blue,
+    ),
+     [
+      参见：
+      #c.pos().map( c => {
+       context {
+          modules_shown.update(x =>
+            x + (c.name: true)
+          )
+        }   
+        [#link(label(c.name), [#underline(c.name)]) ]
+      }).join([ | ])
+    ] 
+  )
 }
 
+#let interfaces = {
+  [#context interfaces_shown.final().keys().map(x => dpc(c.at(x))).reduce((x, p) => x + p)]
+}
+#let modules = {
+  [#context modules_shown.final().keys().map(x => dpc(c.at(x))).reduce((x, p) => x + p)]
+}
 
 // #context interfaces_used.final()
 
 // = Microarchitecture
 // 本处理器为乱序执行多发射RV32IM架构，其设计主要借鉴于RSD以及BOOM。  
 
-// #dpio(c.ExecutionUnit)
-// #dpio(c.ALU)
+// #dpc(c.ExecutionUnit)
+// #dpc(c.ALU)
+// #p(c.Parameters)
 
+// #lorem(1000000)
+
+
+// #hint(c.ExecutionUnit, c.PRFFreeList)
+// #hint(c.ExecutionUnit)
+// #hint(c.ExecutionUnit)
+// #hint(c.PRFFreeList)
+
+// // #context modules_used.final()
+// #interfaces
+// #modules

@@ -40,6 +40,6 @@ class BP_IO (implicit p: Parameters) extends Bundle {
     branch predictor单元通过ROB广播的信号来更新BTB，BHT以及修正GHR(如果发生误预测)。
 */
 
-class BranchPredictor(implicit p: Parameters) extends Module {
+class BranchPredictorUnit(implicit p: Parameters) extends Module {
     val io = IO(new BP_IO())
 }
