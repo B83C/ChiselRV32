@@ -20,8 +20,9 @@
   gutter: 3pt,
   [Author], [Description], [Date],
   [刘恒雨], [Initialised and updated spec doc], [2025/04/10],
-  [刘恒雨], [Finialised automatic code referencing logic], [2025/04/23],
+  [刘恒雨], [Finialised automatic code referencing logic], [2025/04/23], 
   [胡英瀚，杨钧铎，饶忠禹], [提供模块功能框图，以及功能部件阐述], [2025/04/23],
+  [刘恒雨], [完善spec文档], [2025/04/30],
 )
 
 #set heading(numbering: "1.1")
@@ -43,9 +44,8 @@
  entry-list
 )
 / PRF: Physical Register File
-/ WAT: Wakeup Allocation Table
 / RMT: Register Map Table
-/ SDA: Store Data Array
+/ RMT: Architectural Map Table
 / STQ: STore Queue
 / LDQ: LoaD Queue
 / LSU: Load Store Unit
@@ -163,7 +163,7 @@ Reorder Buffer(ROB)，是一个FIFO结构，用于按照程序序存储指令，
 #hint(c.ROB)
 
 === 寄存器访问和旁路 (RRDWB)
-指令被发射后会先通过寄存器访问和旁路单元(RRDWB)获得操作数。此时，若旁路有数据传回，则在寄存器写入地址（pdest）与当前指令psrc相同的条件下，载入传回数据，否则载入PRF数据。功能单元的每一个寄存器读端口均有一个RRDWB单元。
+指令被发射后会先通过寄存器访问和旁路单元(RRDWB)获得操作数。此时，若旁路有数据传回，则在寄存器写入地址（pdest）与当前指令psrc相同的条件下载入传回数据，否则载入PRF数据。功能单元的每一个寄存器读端口均有一个RRDWB单元。
 
 #hint(c.BypassNetwork)
 
@@ -196,12 +196,13 @@ CSR寄存器通过Memory mapping把地址映射到特定的寄存器（可以是
 ==== LSU
 #figure(image("lsu_internals.png"), caption: "LSU 工作原理图") <lsu>
 
+
 #hint(c.LSU)
 
 === 物理寄存器堆 (PRF)
 物理寄存器堆存有PRF_DEPTH个寄存器，寄存器宽度为XLEN。由于存在多个FU，PRF必须有多个读写端口。
 
-#hint(c.PRFFreeList)
+#hint(c.PRF)
 
 Summary:
 #table(

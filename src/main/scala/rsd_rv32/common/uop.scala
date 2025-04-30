@@ -51,10 +51,12 @@ class FUSignals extends Bundle {
 //     val instr = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode;
 // }
 
+// Well be removed!
 abstract trait HasUOP() extends Bundle {
     val uop = new uop()
 }
 
+// Will be removed!
 class uop(implicit p: Parameters) extends Bundle {
     val instr = UInt((32 - 7).W) //func3, func7, rd, rs1 , rs2, imm without opcode
     val instr_type = InstrType()

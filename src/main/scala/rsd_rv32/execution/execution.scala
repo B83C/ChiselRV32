@@ -94,12 +94,12 @@ abstract class FunctionalUnit(
   val io = IO(new Bundle {
     val req = new FUReq() 
     val out = new DecoupledIO(new ExuDataOut())
-    val rob_signal = if (needROBSignals) Input(new ROBSignal()) else null //仅有FU为BU时才有用
+    val rob_signal = if (needROBSignals) Input(new ROBSignal()) else null //仅有FU为CSR时才有用
     val branch_info = if (needInformBranch) Output(new FUBranchInfo()) else null //仅有FU为BU时才有用
   })
 }
 
-//未完成的ALU FU 实力
+//未完成的ALU FU 实例
 class ALUFU() extends FunctionalUnit {
   val internal_alu = new ALU()
   val alu_signals = io.req.uop.fu_signals.as_ALU
