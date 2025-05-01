@@ -87,6 +87,7 @@ class ID_RENAME_uop(implicit p: Parameters) extends Bundle {
 
     //opcode is compiled into fu specific control signals
     val instr_type = InstrType() 
+    val instr = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode
     val fu_signals = new FUSignals() 
 
     val instr_addr = UInt(p.XLEN.W)
