@@ -30,10 +30,10 @@ object ROB_Branch {
 }
 
 class ROB_Jump(implicit p: Parameters) extends Bundle {
-    val pdst = UInt(p.PRF_DEPTH.W) // Physical destination register
-    val rd = UInt(p.XLEN.W) // Destination register
     val btb_hit = BTBHit() // BTB hit flag
     val target_PC = UInt(p.XLEN.W) // Target address
+    val pdst = UInt(p.PRF_DEPTH.W) // Physical destination register
+    val rd = UInt(p.XLEN.W) // Destination register
 }
 
 object ROB_Jump {
