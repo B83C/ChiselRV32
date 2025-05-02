@@ -20,8 +20,8 @@ object ROB_Arithmetic {
 
 class ROB_Branch(implicit p: Parameters) extends Bundle {
     val btb_hit = BTBHit() // BTB hit flag
-    val branch_direction = Bool() // Branch direction(1 represents taken)
     val target_PC = UInt(p.XLEN.W) // Target address
+    val branch_direction = Bool() // Branch direction(1 represents taken)
     val GHR = UInt(p.GHR_WIDTH.W) // Global history register
 }
 
@@ -30,10 +30,10 @@ object ROB_Branch {
 }
 
 class ROB_Jump(implicit p: Parameters) extends Bundle {
-    val target_PC = UInt(p.XLEN.W) // Target address
-    val btb_hit = BTBHit() // BTB hit flag
     val pdst = UInt(p.PRF_DEPTH.W) // Physical destination register
     val rd = UInt(p.XLEN.W) // Destination register
+    val btb_hit = BTBHit() // BTB hit flag
+    val target_PC = UInt(p.XLEN.W) // Target address
 }
 
 object ROB_Jump {
