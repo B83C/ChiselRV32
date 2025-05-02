@@ -24,7 +24,7 @@ object OprSel extends ChiselEnum {
 }
 
 class FUSignals extends Bundle {
-    val req_immediate = Bool()
+    //val req_immediate = Bool()
     val opr1_sel = OprSel()
     val opr2_sel = OprSel()
 }
@@ -122,6 +122,7 @@ class DISPATCH_ROB_uop(implicit p: Parameters) extends Bundle {
 
 class DISPATCH_EXUISSUE_uop(implicit p: Parameters) extends Bundle {
     val instr = UInt((p.XLEN-7).W) //EXU need it to get imm,func,etc
+    val instr_addr = UInt(p.XLEN.W)
 
     val instr_type = InstrType()
     val fu_signals = new FUSignals()
