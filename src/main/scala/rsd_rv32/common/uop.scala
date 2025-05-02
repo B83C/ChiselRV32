@@ -97,6 +97,7 @@ class ID_RENAME_uop(implicit p: Parameters) extends Bundle {
     val btb_hit = BTBHit()
 }
 
+//继承ID_RENAME的uop
 class RENAME_DISPATCH_uop(implicit p: Parameters) extends ID_RENAME_uop {
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
