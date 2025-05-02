@@ -10,8 +10,8 @@ object ROBType extends ChiselEnum {
 }
 
 class ROB_Arithmetic(implicit p: Parameters) extends Bundle {
-    val pdst = UInt(p.PRF_DEPTH.W) // Physical destination register
-    val rd = UInt(p.XLEN.W) // Destination register
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W) // Physical destination register
+    val rd = UInt(5.W) // Destination register
 }
 
 object ROB_Arithmetic {
@@ -30,10 +30,10 @@ object ROB_Branch {
 }
 
 class ROB_Jump(implicit p: Parameters) extends Bundle {
-    val pdst = UInt(p.PRF_DEPTH.W) // Physical destination register
-    val rd = UInt(p.XLEN.W) // Destination register
     val btb_hit = BTBHit() // BTB hit flag
     val target_PC = UInt(p.XLEN.W) // Target address
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W) // Physical destination register
+    val rd = UInt(5.W) // Destination register
 }
 
 object ROB_Jump {
@@ -49,8 +49,8 @@ object ROB_Store {
 }
 
 class ROB_CSR(implicit p: Parameters) extends Bundle {
-    val pdst = UInt(p.PRF_DEPTH.W) // Physical destination register
-    val rd = UInt(p.XLEN.W) // Destination register
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W) // Physical destination register
+    val rd = UInt(5.W) // Destination register
 }
 
 object ROB_CSR {
