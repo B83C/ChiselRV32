@@ -107,7 +107,7 @@
   
   let sections = []
 
-  let matches = content.matches(regex("((?:/{2,}.*?\n)*)?(class|trait|abstract class|case class|object)\s+(\w+)\s*([^{]*)"))
+  let matches = content.matches(regex("((?:/{2,}.*?\n|/\*[^*]*\*/)*)?(class|trait|abstract class|case class|object)\s+(\w+)\s*([^{]*)"))
 
   matches.map(unit => {
     let comment = unit.captures.at(0).replace(regex("/{2,}\s*"), "").trim()
@@ -325,11 +325,13 @@
                 if names.contains(it.text) {
                   link(label(it.text), [#it.text])
                 } else {
-                    it
+                  it
                 }
               }
+              raw(type, lang: "scala")
+            } else {
+              raw(type, lang: "scala")
             }
-            #raw(type, lang: "scala")
           ]
           if desc == none {
             desc = ""
@@ -422,9 +424,9 @@
 
 // #hint(c.ExecutionUnit, c.PRFFreeList)
 // #hint(c.ExecutionUnit)
-// #hint(c.ExecutionUnit)
-// #hint(c.PRFFreeList)
+#hint(c.PRFFreeList)
+#hint(c.ALU)
 
-// // #context modules_used.final()
-// #interfaces
-// #modules
+// #context modules_used.final()
+#interfaces
+#modules

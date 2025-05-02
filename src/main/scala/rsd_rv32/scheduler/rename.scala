@@ -25,6 +25,108 @@ class RenameUnit_IO(implicit p: Parameters) extends Bundle {
 */
 class RenameUnit(implicit p: Parameters) extends Module {
   val io = IO(new RenameUnit_IO())
+
+  val rmt = RegInit(VecInit(Seq.fill(32)(0.U(log2Ceil(p.PRF_DEPTH).W)))) //重命名表，存储逻辑寄存器到物理寄存器的映射关系
+  val rmt_valid = RegInit(VecInit(Seq.fill(32)(false.B))) //重命名表有效位
+  val amt = RegInit(VecInit((0 to 31).map(i => i.U(log2Ceil(p.PRF_DEPTH).W)))) //架构寄存器表，存储逻辑寄存器到物理寄存器的映射关系
+
+  val freelist = RegInit(VecInit((32 to p.PRF_DEPTH - 1).map(i => i.U(log2Ceil(p.PRF_DEPTH).W)))) //空闲寄存器列表，存储空闲物理寄存器的地址
+  val freelist_head = RegInit(0.U(log2Ceil(p.PRF_DEPTH).W)) //空闲寄存器列表头指针
+  val freelist_tail = RegInit(0.U(log2Ceil(p.PRF_DEPTH).W)) //空闲寄存器列表尾指针
+  val freelist_full = RegInit(false.B) //空闲寄存器列表满标志
+
+  val rename_ready = WireDefault(true.B) //重命名单元准备好接收指令标志
+  val dis_uop = WireDefault(VecInit(Seq.fill(p.CORE_WIDTH)(0.U.asTypeOf(Valid(new RENAME_DISPATCH_uop()))))) //发往Dispatch单元的uop
+  io.rename_ready := rename_ready //反馈给ID单元
+  val reg_dis_uop = RegEnable(next = dis_uop, enable = io.dis_ready, init = VecInit(Seq.fill(p.CORE_WIDTH)(0.U.asTypeOf(Valid(new RENAME_DISPATCH_uop()))))) //寄存器存储发往Dispatch单元的uop
+  io.dis_uop := reg_dis_uop //发往Dispatch单元的uop
+
+  val flush = Wire(Bool()) //重命名单元冲刷标志
+  flush := io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred //发生误预测时冲刷重命名单元
+
+  val valid_bits = Wire(UInt(2.W))
+  valid_bits := io.id_uop(0).valid ## io.id_uop(1).valid //ID单元的指令有效位
+
+  val freelist_ready = Wire(Bool()) //空闲寄存器列表准备好接收指令标志
+  freelist_ready := (freelist_tail >= freelist_head + 2.U) || (freelist_tail === freelist_head && freelist_full)
+
+  when(flush){
+    freelist_head := freelist_tail
+    for(i <- 0 until 32){
+      rmt_valid(i) := false.B
+    }
+    freelist_full := true.B
+  }.otherwise{
+    switch(valid_bits){
+      is("b10".U){
+        switch(io.id_uop(0).bits.instr_type){
+          is(InstrType.Branch, InstrType.)
+        }
+        when(freelist_head =/= freelist_tail || freelist_full){
+          rename_ready := io.dis_ready
+
+          dis_uop(0).valid := true.B
+          dis_uop(0).bits.instr := io.id_uop(0).bits.instr
+          dis_uop(0).bits.instr_type := io.id_uop(0).bits.instr_type
+          dis_uop(0).bits.fu_signals := io.id_uop(0).bits.fu_signals
+          dis_uop(0).bits.instr_addr := io.id_uop(0).bits.instr_addr
+          dis_uop(0).bits.target_PC := io.id_uop(0).bits.target_PC
+          dis_uop(0).bits.GHR := io.id_uop(0).bits.GHR
+          dis_uop(0).bits.branch_pred := io.id_uop(0).bits.branch_pred
+          dis_uop(0).bits.btb_hit := io.id_uop(0).bits.btb_hit
+          
+          switch(io.id_uop(0).bits.instr_type){
+            is(InstrType.ALU, InstrType.MUL, InstrType.DIV_REM, InstrType.LD, InstrType.CSR){
+              dis_uop(0).bits.pdst := freelist(freelist_head) //从空闲寄存器列表中读出空闲物理寄存器地址
+              freelist_head := freelist_head + 1.U
+              when(freelist_head + 1.U === freelist_tail){
+                freelist_full := true.B //空闲寄存器列表满
+              }
+              rmt(io.id_uop(0).bits.instr(4,0)) := freelist(freelist_head) //更新重命名表
+              rmt_valid(io.id_uop(0).bits.instr(4,0)) := true.B //更新重命名表有效位
+            }
+          }
+          
+          dis_uop(0).bits.ps1 := Mux(rmt_valid(io.id_uop(0).bits.instr(12,8)), rmt(io.id_uop(0).bits.instr(12,8)), amt(io.id_uop(0).bits.instr(12,8))) //读出源操作数映射的物理寄存器地址
+          dis_uop(0).bits.ps2 := Mux(rmt_valid(io.id_uop(0).bits.instr(17,13)), rmt(io.id_uop(0).bits.instr(17,13)), amt(io.id_uop(0).bits.instr(17,13))) //读出源操作数映射的物理寄存器地址
+        }
+      }
+      is("b11".U){
+        when(freelist_tail - freelist_head >= 2.U || freelist_full){
+
+        }
+      }
+    }
+  }
+
+  /*when(!flush && (valid_bits === "b00".U )){
+    rename_ready := true.B
+  }.elsewhen(!flush && (valid_bits === "10".U)){
+    //
+    rename_ready := io.dis_ready && freelist_ready
+
+    dis_uop(0).valid := true.B
+    dis_uop(0).bits.instr := io.id_uop(0).bits.instr
+    dis_uop(0).bits.instr_type := io.id_uop(0).bits.instr_type
+    dis_uop(0).bits.fu_signals := io.id_uop(0).bits.fu_signals
+    dis_uop(0).bits.instr_addr := io.id_uop(0).bits.instr_addr
+    dis_uop(0).bits.target_PC := io.id_uop(0).bits.target_PC
+    dis_uop(0).bits.GHR := io.id_uop(0).bits.GHR
+    dis_uop(0).bits.branch_pred := io.id_uop(0).bits.branch_pred
+    dis_uop(0).bits.btb_hit := io.id_uop(0).bits.btb_hit
+    switch(io.id_uop(0).bits.instr_type){
+      is(InstrType.ALU, InstrType.MUL, InstrType.DIV_REM, InstrType.LD, InstrType.CSR){
+        dis_uop(0).bits.pdst := freelist(freelist_head) //从空闲寄存器列表中读出空闲物理寄存器地址
+        freelist_head := freelist_head + 1.U
+        when(freelist_head + 1.U === freelist_tail){
+          freelist_full := true.B //空闲寄存器列表满
+        }
+        rmt(io.id_uop(0).bits.instr(4,0)) := freelist(freelist_head) //更新重命名表
+        rmt_valid(io.id_uop(0).bits.instr(4,0)) := true.B //更新重命名表有效位
+      }
+    }
+    dis_uop(0).bits.ps1 := rmt(io.id_uop(0).bits.)
+  }*/
 }
 
 

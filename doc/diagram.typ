@@ -6,14 +6,22 @@
 #let bl = bs
 #let spacing = 1
 #let name_to_id = lower
+#let id = (name) => (id: name_to_id(name), name: name)
 #let entry = (args) =>  arguments(x: 0, y: 0, ..args.named())
-#let left = (name, dy, ..args) => {
-  context {
-    let mod = s.get(name)
+#let left_test = (to, name, dy, space: spacing, ..args) => {
+  let x = 0
+  let y = 0
+  let _  = context {
+    let mod = s.get(to)
+    let w = args.named().w
+    let h = args.named().h
     if mod != none {
+      x = (mod.x - w - space)
+      y = (mod.y + dy)
+      let _ = s.update(x => x + (lower(name):(x: x, y: y, w: w, h: h)))
     }
   }
-  block(space: 3, "Decode", 0, ..args)
+  element.block(x: x, y: y, ..id(name), ..args)
 }
 #let left = (name, y, args, space: spacing) => arguments(x: (rel: - space - args.named().w, to: name_to_id(name) + ".west"), y: y, ..args.named())
 #let right = (name, y, args, space: spacing) => arguments(x: (rel: space, to: name_to_id(name) + ".east"), y: y, ..args.named())
@@ -27,7 +35,6 @@
   arguments(x: (rel: 0, to: name_to_id(name) + ".west"), y: -y, ..args.named()) 
 }
 
-#let id = (name) => (id: name_to_id(name), name: name)
 #let style1 = (fill: util.colors.pink)
 #let block = (misc) => {
   let id = misc.at("id")
@@ -49,7 +56,11 @@
     ..args
   )
 }
-#let cr(..args) = c(args.at(1), args.at(0), ..args.pos().slice(2), reverse: true)
+#let cr(..args) = c(args.at(1), args.at(0), args.at(2), reverse: true, ..args.named())
+#let cz(..args) = c(..args, style: "zigzag")
+#let cd(..args) = c(..args, style: "dodge")
+#let crd(..args) = cr(..args, style: "dodge")
+#let crz(..args) = cr(..args, style: "zigzag")
 
 #set text(size: 5pt)
 #context[
@@ -67,6 +78,7 @@
             ),
           )
         )))
+        left_test("Fetch", "huh", 0, ..bl, ..style1)
         block(down("Fetch", 5, arguments( ..bl, ..style1, ..id("Branch predictor"),
           ports: (
             north: (
@@ -94,7 +106,7 @@
               (id: "Decoded"),
             ),
             east: (
-              (id: "Renamed"),
+              (id: "renamed"),
             ),
             north: (
               (id: "RMTReq"),
@@ -125,6 +137,9 @@
               (id: "PRFLookup"),
               (id: "PRFResp"),
             ),
+            east: (
+              (id: "renamed"),
+            )
           )
         )))
         element.group(..id("Dispatch Unit"),
@@ -133,93 +148,147 @@
           // {
             block(right(space: 2, "Rename", 0, arguments( ..bs, ..style1, ..id("Dispatcher"),
               ports: (
-                north: (
-                  id(""),
+                west: (
+                  (id: "renamed"),
                 ),
+                north: (
+                  (id: "freeiq"),
+                ),
+                east: (
+                  (id: "dispatched"),
+                )
               )
             )))
-            block(down("Dispatcher", 3, arguments( ..bs, ..style1, ..id("Ready Bit Table"),
+            // block(down("Dispatcher", 3, arguments( ..bs, ..style1, ..id("Ready Bit Table"),
+            //   ports: (
+            //     north: (
+            //       id(""),
+            //     ),
+            //   )
+            // )))
+            block(up("Dispatcher", 6, arguments( ..bs, ..style1, ..id("IQ Free List"),
               ports: (
-                north: (
-                  id(""),
-                ),
-              )
-            )))
-            block(up("Dispatcher", 3, arguments( ..bs, ..style1, ..id("IQ Free List"),
-              ports: (
-                north: (
-                  id(""),
-                ),
+                south: (
+                  (id: "freeiq"),
+                )
               )
             )))
           })
         })
         element.group(..id("Issue Queue"),
         {
-          block(right(space: 2, "Dispatcher", 2, arguments( ..bs, ..style1, ..id("Payload\nRam"),
+          block(right(space: 2, "Dispatcher", 9, arguments( ..bs, ..style1, ..id("Payload\nRam"),
             ports: (
-              north: (
-                id(""),
+              west: (
+                (id: "dispatched"),
               ),
             )
           )))
-          block(right(space:2, "Dispatcher", 4, arguments( ..bs, ..style1, ..id("Exu Issue"),
+          block(down("Payload\nRam", -6, arguments( ..bs, ..style1, ..id("Exu Issue"),
             ports: (
-              north: (
-                id(""),
+              west: (
+                (id: "dispatched"),
               ),
+              east: (
+                (id: "issued"),
+              )
             )
           )))
-          block(down("Exu Issue", 2, arguments( ..bs, ..style1, ..id("LD Issue"),
+          block(down("Exu Issue", -3, arguments( ..bs, ..style1, ..id("LD Issue"),
             ports: (
-              north: (
-                id(""),
+              west: (
+                (id: "dispatched"),
               ),
+              east: (
+                (id: "issued"),
+              )
             )
           )))
-          block(down("LD Issue", 5, arguments( ..bs, ..style1, ..id("ST Issue"),
+          block(down("LD Issue", -0, arguments( ..bs, ..style1, ..id("ST Issue"),
             ports: (
-              north: (
-                id(""),
+              west: (
+                (id: "dispatched"),
               ),
+              east: (
+                (id: "issued"),
+              )
             )
           )))
-          // block(right(space: 0, "Wakeup Logic", -1, arguments( ..bs, ..style1, ..id("Select Logic"),
-          //   ports: (
-          //     north: (
-          //       id(""),
-          //     ),
-          //   )
-          // )))
+          block(down("ST Issue", 4, arguments( ..bs, ..style1, ..id("ROB"),
+            ports: (
+              west: (
+                (id: "dispatched"),
+              ),
+              east: (
+                (id: "prf_wb"),
+              )
+            )
+          )))
         })
-        block(down("ST Issue", 6, arguments( ..bs, ..style1, ..id("ROB"),
+      })
+      // element.multiplexer(..right("Exu Issue", -1, arguments(w: 1, h: 2, 
+      //   id: "multiplexer",
+      //   entries: 2
+      // )))
+      element.group(..id("Execution"),
+      {
+        block(right(space: 2, "ST Issue", 4, arguments( ..bs, ..style1, ..id("PRF/\nBypass Read"),
           ports: (
             north: (
-              id(""),
+              (id: "bypassed"),
+            ),
+            west: (
+              (id: "issued"),
+            ),
+            east: (
+              (id: "issued_bypassed"),
+            ),
+            south: (
+              (id: "prf_read"),
             ),
           )
         )))
-      })
-      element.multiplexer(..right("Exu Issue", -1, arguments(w: 1, h: 2, 
-        id: "multiplexer",
-        entries: 2
-      )))
-      element.group(..id("Execution"),
-      {
-        block(right(space: 1, "multiplexer", 0, arguments( ..bs, ..style1, ..id("PRF/\nBypass Read"),
+        block(right(space: 2, "PRF/\nBypass Read", 6, arguments( ..bs, ..style1, ..id("Exec Unit"),
           ports: (
+            west: (
+              (id: "issued_bypassed"),
+            ),
+            east: (
+              (id: "executed"),
+            )
           )
         )))
-        block(right(space: 1, "PRF/\nBypass Read", 0, arguments( ..bs, ..style1, ..id("Exec Unit"),
+        block(right(space: 2, "Exec Unit", 4, arguments( ..bs, ..style1, ..id("PRF/\nBypass Write"),
           ports: (
+            north: (
+              (id: "bypassed"),
+            ),
+            west: (
+              (id: "executed"),
+            ),
+            south: (
+              (id: "prf_wb"),
+            )
           )
         )))
-        block(right(space: 1, "Exec Unit", 0, arguments( ..bs, ..style1, ..id("PRF/\nBypass Write"),
+        block(down(space: 1, "Exec Unit", -2, arguments( ..bs, ..style1, ..id("LSU"),
           ports: (
+            west: (
+              (id: "issued_bypassed"),
+            ),
+            east: (
+              (id: "executed"),
+            )
           )
         )))
-        block(down(space: 1, "Exec Unit", 3, arguments( ..bs, ..style1, ..id("PRF"),
+        block(down(space: 1, "PRF/\nBypass Read", 1, arguments( ..bs, ..style1, ..id("PRF"),
           ports: (
+            north: (
+              (id: "prf_read"),
+            ),
+            east: (
+              (id: "prf_wb"),
+            )
           )
         )))
       })
@@ -230,226 +299,27 @@
       c("rename", "amt", "RMTReq")
       c("rename", "prf freelist", "PRFLookup")
       cr("rename", "prf freelist", "PRFResp")
+      c("rename", "dispatcher", "renamed", display: false)
+      cr("dispatcher", "iq free list", "freeiq", display: false)
+      cz("dispatcher", "exu issue", "dispatched", display: false)
+      cz("dispatcher", "ld issue", "dispatched", display: false)
+      cz("dispatcher", "st issue", "dispatched", display: false)
+      cz("dispatcher", "payload\nram", "dispatched", display: false)
+      cz("dispatcher", "rob", "dispatched", display: false)
+      cz("exu issue", "PRF/\nBypass Read", "issued", display: false)
+      cz("ld issue", "PRF/\nBypass Read", "issued", display: false)
+      cz("st issue", "PRF/\nBypass Read", "issued", display: false)
+      crz("exec unit", "PRF/\nBypass Read", "issued_bypassed", display: false)
+      crz("lsu", "PRF/\nBypass Read", "issued_bypassed", display: false)
+      cz("exec unit", "PRF/\nBypass Write", "executed", display: false)
+      cz("lsu", "PRF/\nBypass Write", "executed", display: false)
+      crd("PRF/\nBypass Read", "PRF/\nBypass Write", "bypassed", dodge-y: 10, dodge-margins: (0.5, 0.5), display: false)
+      cr("prf", "PRF/\nBypass Read", "prf_read", display: false)
+      crd("prf", "PRF/\nBypass Write", "prf_wb", dodge-sides: ("south", "east"),display: false)
+      crd("rob", "PRF/\nBypass Write", "prf_wb", dodge-y: -5, display: false)
       // c("fetch", "decode", "FetchPacket", display: false)
       // c("branch predictor", "fetch", "PC_NEXT")
     })
 
   }) 
 ]
-
-// #circuit({
-//   element.group(id: "toplvl", name: "Toplevel", {
-//     element.group(
-//       id: "proc",
-//       name: "Processor",
-//       padding: 1.5em,
-//       stroke: (dash: "dashed"),
-//       {
-//       element.block(
-//         x: 0, y: 0, w: 8, h: 4,
-//         id: "dp",
-//         fill: util.colors.pink,
-//         name: "Datapath",
-//         ports: (
-//           north: (
-//             (id: "clk", clock: true, small: true),
-//             (id: "Zero"),
-//             (id: "Regsrc"),
-//             (id: "PCSrc"),
-//             (id: "ResultSrc"),
-//             (id: "ALUControl"),
-//             (id: "ImmSrc"),
-//             (id: "RegWrite"),
-//             (id: "dummy")
-//           ),
-//           east: (
-//             (id: "PC", name: "PC"),
-//             (id: "Instr", name: "Instr"),
-//             (id: "ALUResult", name: "ALUResult"),
-//             (id: "dummy"),
-//             (id: "WriteData", name: "WriteData"),
-//             (id: "ReadData", name: "ReadData"),
-//           ),
-//           west: (
-//             (id: "rst"),
-//           )
-//         ),
-//         ports-margins: (
-//           north: (0%, 0%),
-//           west: (0%, 70%)
-//         )
-//       )
-      
-//       element.block(
-//         x: 0, y: 7, w: 8, h: 3,
-//         id: "ctrl",
-//         fill: util.colors.orange,
-//         name: "Controller",
-//         ports: (
-//           east: (
-//             (id: "Instr", name: "Instr"),
-//           ),
-//           south: (
-//             (id: "dummy"),
-//             (id: "Zero"),
-//             (id: "Regsrc"),
-//             (id: "PCSrc"),
-//             (id: "ResultSrc"),
-//             (id: "ALUControl"),
-//             (id: "ImmSrc"),
-//             (id: "RegWrite"),
-//             (id: "MemWrite")
-//           )
-//         ),
-//         ports-margins: (
-//           south: (0%, 0%)
-//         )
-//       )
-//       wire.wire(
-//         "w-Zero",
-//         ("dp-port-Zero", "ctrl-port-Zero"),
-//         name: "Zero",
-//         name-pos: "start",
-//         directed: true
-//       )
-//       for p in ("Regsrc", "PCSrc", "ResultSrc", "ALUControl", "ImmSrc", "RegWrite") {
-//         wire.wire(
-//           "w-" + p,
-//           ("ctrl-port-"+p, "dp-port-"+p),
-//           name: p,
-//           name-pos: "start",
-//           directed: true
-//         )
-//       }
-
-//       draw.content(
-//         (rel: (0, 1em), to: "ctrl.north"),
-//         [*RISCV single*],
-//         anchor: "south"
-//       )
-//     })
-    
-//     element.block(
-//       x: (rel: 4.5, to: "dp.east"),
-//       y: (from: "dp-port-ReadData", to: "RD"),
-//       w: 3, h: 4,
-//       id: "dmem",
-//       fill: util.colors.green,
-//       name: "Data\n Memory",
-//       ports: (
-//         north: (
-//           (id: "clk", clock: true, small: true),
-//           (id: "WE", name: "WE")
-//         ),
-//         west: (
-//           (id: "dummy"),
-//           (id: "dummy"),
-//           (id: "A", name: "A"),
-//           (id: "dummy"),
-//           (id: "WD", name: "WD"),
-//           (id: "RD", name: "RD"),
-//         )
-//       ),
-//       ports-margins: (
-//         north: (0%, 10%)
-//       )
-//     )
-//     wire.wire(
-//       "w-DataAddr",
-//       ("dp-port-ALUResult", "dmem-port-A"),
-//       name: "DataAddr",
-//       name-pos: "end",
-//       directed: true
-//     )
-//     wire.wire(
-//       "w-WriteData",
-//       ("dp-port-WriteData", "dmem-port-WD"),
-//       name: "WriteData",
-//       name-pos: "end",
-//       directed: true
-//     )
-//     wire.wire(
-//       "w-ReadData",
-//       ("dmem-port-RD", "dp-port-ReadData"),
-//       name: "ReadData",
-//       name-pos: "end",
-//       reverse: true,
-//       directed: true
-//     )
-//     wire.wire(
-//       "w-MemWrite",
-//       ("ctrl-port-MemWrite", "dmem-port-WE"),
-//       style: "zigzag",
-//       name: "MemWrite",
-//       name-pos: "start",
-//       zigzag-dir: "horizontal",
-//       zigzag-ratio: 80%,
-//       directed: true
-//     )
-//     wire.stub(
-//       "dmem-port-clk", "north",
-//       name: "clk", length: 3pt
-//     )
-
-//     element.block(
-//       x: (rel: 3.5, to: "dp.east"),
-//       y: (from: "ctrl-port-Instr", to: "dummy"),
-//       w: 3, h: 4,
-//       id: "imem",
-//       fill: util.colors.green,
-//       name: "Instruction\n Memory",
-//       ports: (
-//         west: (
-//           (id: "A", name: "A"),
-//           (id: "dummy"),
-//           (id: "dummy2"),
-//           (id: "RD", name: "RD"),
-//         )
-//       )
-//     )
-//     wire.wire(
-//       "w-PC",
-//       ("dp-port-PC", "imem-port-A"),
-//       style: "zigzag",
-//       directed: true
-//     )
-//     wire.wire(
-//       "w-Instr1",
-//       ("imem-port-RD", "dp-port-Instr"),
-//       style: "zigzag",
-//       zigzag-ratio: 30%,
-//       directed: true
-//     )
-//     wire.wire(
-//       "w-Instr2",
-//       ("imem-port-RD", "ctrl-port-Instr"),
-//       style: "zigzag",
-//       zigzag-ratio: 30%,
-//       directed: true
-//     )
-//     wire.intersection("w-Instr1.zig", radius: 2pt)
-//     draw.content("w-Instr1.zig", "Instr", anchor: "south", padding: 4pt)
-//     draw.content("w-PC.zig", "PC", anchor: "south-east", padding: 2pt)
-
-//     draw.content("dmem.south-west", [*External Memories*], anchor: "north", padding: 10pt)
-//   })
-
-//   draw.line(name: "w-dp-clk",
-//     "dp-port-clk",
-//     (rel: (0, .5), to: ()),
-//     (
-//       rel: (-.5, 0),
-//       to: (horizontal: "toplvl.west", vertical: ())
-//     )
-//   )
-//   draw.content("w-dp-clk.end", "clk", anchor: "east", padding: 3pt)
-  
-//   draw.line(name: "w-dp-rst",
-//     "dp-port-rst",
-//     (
-//       rel: (-.5, 0),
-//       to: (horizontal: "toplvl.west", vertical: ())
-//     )
-//   )
-//   draw.content("w-dp-rst.end", "rst", anchor: "east", padding: 3pt)
-// })

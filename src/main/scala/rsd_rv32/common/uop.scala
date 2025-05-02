@@ -4,16 +4,16 @@ import chisel3._
 import chisel3.util._
 
 object InstrType extends ChiselEnum {
-    val ALU, Branch, LD, ST, CSR, MUL, DIV_REM = Value
+    val ALU, Branch, Jump, LD, ST, CSR, MUL, DIV_REM = Value
 }
 
 object BranchPred extends ChiselEnum {
     val T, NT = Value
 }
 
-object BranchType extends ChiselEnum {
-    val X, Branch, JAL, JALR = Value
-}
+/*object JumpType extends ChiselEnum {
+    val JAL, JALR = Value
+}*/
 
 object BTBHit extends ChiselEnum{
     val H, NH = Value
@@ -23,38 +23,40 @@ object OprSel extends ChiselEnum {
     val IMM, REG, PC, Z = Value
 }
 
-class ALUSignals extends Bundle {
-    val req_immediate = Bool()
+class FUSignals extends Bundle {
+    //val req_immediate = Bool()
     val opr1_sel = OprSel()
     val opr2_sel = OprSel()
 }
 
-object ALUSignals {
-    val width : Int = (new ALUSignals).getWidth
+object FUSignals {
+    val width : Int = (new FUSignals).getWidth
 }
 
-class BranchSignals extends Bundle with Signals{
-    val branch_type = BranchType()
+/*class BUSignals extends Bundle {
+    val jump_type = JumpType()
 }
 
-object BranchSignals {
-    val width : Int = (new BranchSignals).getWidth
-}
+object BUSignals {
+    val width : Int = (new BUSignals).getWidth
+}*/
 
-class FUSignals extends Bundle {
-    val bits = UInt((ALUSignals.width max BranchSignals.width).W)
+/*class FUSignals extends Bundle {
+    val bits = UInt((ALUSignals.width max BUSignals.width).W)
     def as_ALU : ALUSignals = bits.asTypeOf(new ALUSignals)
-    def as_Branch : BranchSignals = bits.asTypeOf(new BranchSignals)
-}
+    def as_BU : BUSignals = bits.asTypeOf(new BUSignals)
+}*/
 
 // abstract class BaseUOP()(implicit p: Parameters) extends Bundle {
 //     val instr = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode;
 // }
 
+// Well be removed!
 abstract trait HasUOP() extends Bundle {
     val uop = new uop()
 }
 
+// Will be removed!
 class uop(implicit p: Parameters) extends Bundle {
     val instr = UInt((32 - 7).W) //func3, func7, rd, rs1 , rs2, imm without opcode
     val instr_type = InstrType()
@@ -85,6 +87,7 @@ class ID_RENAME_uop(implicit p: Parameters) extends Bundle {
 
     //opcode is compiled into fu specific control signals
     val instr_type = InstrType() 
+    val instr = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode
     val fu_signals = new FUSignals() 
 
     val instr_addr = UInt(p.XLEN.W)
@@ -94,6 +97,7 @@ class ID_RENAME_uop(implicit p: Parameters) extends Bundle {
     val btb_hit = BTBHit()
 }
 
+//继承ID_RENAME的uop
 class RENAME_DISPATCH_uop(implicit p: Parameters) extends ID_RENAME_uop {
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
@@ -118,6 +122,7 @@ class DISPATCH_ROB_uop(implicit p: Parameters) extends Bundle {
 
 class DISPATCH_EXUISSUE_uop(implicit p: Parameters) extends Bundle {
     val instr = UInt((p.XLEN-7).W) //EXU need it to get imm,func,etc
+    val instr_addr = UInt(p.XLEN.W)
 
     val instr_type = InstrType()
     val fu_signals = new FUSignals()
