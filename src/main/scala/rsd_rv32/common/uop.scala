@@ -33,7 +33,7 @@ object ALUSignals {
     val width : Int = (new ALUSignals).getWidth
 }
 
-class BUSignals extends Bundle with Signals{
+class BUSignals extends Bundle {
     val jump_type = JumpType()
 }
 
