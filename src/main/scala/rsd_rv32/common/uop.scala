@@ -11,9 +11,9 @@ object BranchPred extends ChiselEnum {
     val T, NT = Value
 }
 
-object JumpType extends ChiselEnum {
+/*object JumpType extends ChiselEnum {
     val JAL, JALR = Value
-}
+}*/
 
 object BTBHit extends ChiselEnum{
     val H, NH = Value
@@ -23,29 +23,29 @@ object OprSel extends ChiselEnum {
     val IMM, REG, PC, Z = Value
 }
 
-class ALUSignals extends Bundle {
+class FUSignals extends Bundle {
     val req_immediate = Bool()
     val opr1_sel = OprSel()
     val opr2_sel = OprSel()
 }
 
-object ALUSignals {
-    val width : Int = (new ALUSignals).getWidth
+object FUSignals {
+    val width : Int = (new FUSignals).getWidth
 }
 
-class BUSignals extends Bundle {
+/*class BUSignals extends Bundle {
     val jump_type = JumpType()
 }
 
 object BUSignals {
     val width : Int = (new BUSignals).getWidth
-}
+}*/
 
-class FUSignals extends Bundle {
+/*class FUSignals extends Bundle {
     val bits = UInt((ALUSignals.width max BUSignals.width).W)
     def as_ALU : ALUSignals = bits.asTypeOf(new ALUSignals)
     def as_BU : BUSignals = bits.asTypeOf(new BUSignals)
-}
+}*/
 
 // abstract class BaseUOP()(implicit p: Parameters) extends Bundle {
 //     val instr = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode;
