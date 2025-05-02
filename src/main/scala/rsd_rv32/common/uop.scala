@@ -4,15 +4,15 @@ import chisel3._
 import chisel3.util._
 
 object InstrType extends ChiselEnum {
-    val ALU, Branch, LD, ST, CSR, MUL, DIV_REM = Value
+    val ALU, Branch, Jump, LD, ST, CSR, MUL, DIV_REM = Value
 }
 
 object BranchPred extends ChiselEnum {
     val T, NT = Value
 }
 
-object BranchType extends ChiselEnum {
-    val X, Branch, JAL, JALR = Value
+object JumpType extends ChiselEnum {
+    val JAL, JALR = Value
 }
 
 object BTBHit extends ChiselEnum{
@@ -33,18 +33,18 @@ object ALUSignals {
     val width : Int = (new ALUSignals).getWidth
 }
 
-class BranchSignals extends Bundle with Signals{
-    val branch_type = BranchType()
+class BUSignals extends Bundle with Signals{
+    val jump_type = JumpType()
 }
 
-object BranchSignals {
-    val width : Int = (new BranchSignals).getWidth
+object BUSignals {
+    val width : Int = (new BUSignals).getWidth
 }
 
 class FUSignals extends Bundle {
-    val bits = UInt((ALUSignals.width max BranchSignals.width).W)
+    val bits = UInt((ALUSignals.width max BUSignals.width).W)
     def as_ALU : ALUSignals = bits.asTypeOf(new ALUSignals)
-    def as_Branch : BranchSignals = bits.asTypeOf(new BranchSignals)
+    def as_BU : BUSignals = bits.asTypeOf(new BUSignals)
 }
 
 // abstract class BaseUOP()(implicit p: Parameters) extends Bundle {
