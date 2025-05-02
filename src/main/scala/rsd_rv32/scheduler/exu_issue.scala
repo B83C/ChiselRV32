@@ -62,7 +62,7 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
 
     //来自Dispatch的入队指令
     when(io.dis_uop(0).valid && !io.dis_uop(1).valid){
-        payload(io.dis_uop(0).bits.iq_index) := io.dis_uop(0)
+        payload(io.dis_uop(0).bits.iq_index) := io.dis_uop(0).bits
         issue_queue(io.dis_uop(0).bits.iq_index).busy := true.B
         issue_queue(io.dis_uop(0).bits.iq_index).instr_type := io.dis_uop(0).bits.instr_type
         issue_queue(io.dis_uop(0).bits.iq_index).ps1 := io.dis_uop(0).bits.ps1
@@ -88,7 +88,7 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
         //结束ready信号赋值
     } .elsewhen(io.dis_uop(0).valid && io.dis_uop(1).valid){
         for (k <- 0 until 2){
-            payload(io.dis_uop(k).bits.iq_index) := io.dis_uop(k)
+            payload(io.dis_uop(k).bits.iq_index) := io.dis_uop(k).bits
             issue_queue(io.dis_uop(k).bits.iq_index).busy := true.B
             issue_queue(io.dis_uop(k).bits.iq_index).instr_type := io.dis_uop(k).bits.instr_type
             issue_queue(io.dis_uop(k).bits.iq_index).ps1 := io.dis_uop(k).bits.ps1

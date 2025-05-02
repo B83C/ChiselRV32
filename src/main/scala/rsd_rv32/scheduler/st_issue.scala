@@ -1,3 +1,9 @@
+package rsd_rv32.scheduler
+
+import chisel3._
+import chisel3.util._
+import rsd_rv32.common._
+
 class st_issue_IO(implicit p: Parameters) extends Bundle {
     //来自Dispatch Unit的输入
     //val iq_id = Input(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID
