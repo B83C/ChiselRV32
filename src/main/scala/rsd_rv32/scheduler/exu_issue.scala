@@ -6,8 +6,8 @@ import rsd_rv32.common._
 
 class exu_issue_IO(implicit p: Parameters) extends Bundle {
     //来自Dispatch Unit的输入
-    // val iq_id = Input(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID,
-    val dis_uop = Flipped(Valid(Vec(p.CORE_WIDTH, new DISPATCH_EXUISSUE_uop())))  //来自Dispatch Unit的输入
+    // val bits.iq_index = Input(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID,
+    val dis_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop())))  //来自Dispatch Unit的输入
 
     //with EXU
     val exu_issue_uop = Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())) //发往EXU的uop
@@ -43,67 +43,73 @@ class exu_issue_IO(implicit p: Parameters) extends Bundle {
 class exu_issue_content(implicit p: Parameters) extends Bundle {
     val busy = Bool() //busy flag
     val instr_type = InstrType() //指令类型
-    val ps1 = UInt(log2Ceil(p.PRF_DEPTH)) //操作数1的物理寄存器地址
+    val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W) //操作数1的物理寄存器地址
     val ready1 = Bool() //操作数1的ready信号
-    val ps2 = UInt(log2Ceil(p.PRF_DEPTH)) //操作数2的物理寄存器地址
+    val ps2 = UInt(log2Ceil(p.PRF_DEPTH).W) //操作数2的物理寄存器地址
     val ready2 = Bool() //操作数2的ready信号
 }
 
 class exu_issue_queue(implicit p: Parameters) extends Module {
     val io = IO(new exu_issue_IO())
-    val issue_queue = RegInit(Seq.fill(p.EXUISSUE_DEPTH)(0.U.asTypeOf(new exu_issue_content()))) //发射队列
-    val payload = RegInit(Seq.fill(p.EXUISSUE_DEPTH)(0.U.asTypeOf(new DISPATCH_EXUISSUE_uop()))) //发射队列的有效载荷
+    val issue_queue = RegInit(
+        VecInit(Seq.fill(p.EXUISSUE_DEPTH) {
+            0.U.asTypeOf(new exu_issue_content())
+        })
+    )
+    val payload = RegInit(
+        VecInit(List.fill(p.EXUISSUE_DEPTH)(
+            0.U.asTypeOf(new DISPATCH_EXUISSUE_uop())))) //发射队列的有效载荷
 
     //来自Dispatch的入队指令
     when(io.dis_uop(0).valid && !io.dis_uop(1).valid){
-        payload(io.dis_uop(0).iq_id) := io.dis_uop(0)
-        issue_queue(io.dis_uop(0).iq_id).busy := true.B
-        issue_queue(io.dis_uop(0).iq_id).instr_type := io.dis_uop(0).instr_type
-        issue_queue(io.dis_uop(0).iq_id).ps1 := io.dis_uop(0).ps1
-        issue_queue(io.dis_uop(0).iq_id).ps2 := io.dis_uop(0).ps2
+        payload(io.dis_uop(0).bits.iq_index) := io.dis_uop(0)
+        issue_queue(io.dis_uop(0).bits.iq_index).busy := true.B
+        issue_queue(io.dis_uop(0).bits.iq_index).instr_type := io.dis_uop(0).bits.instr_type
+        issue_queue(io.dis_uop(0).bits.iq_index).ps1 := io.dis_uop(0).bits.ps1
+        issue_queue(io.dis_uop(0).bits.iq_index).ps2 := io.dis_uop(0).bits.ps2
 
         //入队时判断ps1和ps2的ready信号
         val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-            io.prf_valid(io.dis_uop(0).ps1) ||
-            (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).ps1) ||
-            (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).ps1)
+            io.prf_valid(io.dis_uop(0).bits.ps1) ||
+            (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps1) ||
+            (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).bits.ps1)
         }
         val conditions2 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-            io.prf_valid(io.dis_uop(0).ps2) ||
-            (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).ps2) ||
-            (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).ps2)
+            io.prf_valid(io.dis_uop(0).bits.ps2) ||
+            (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps2) ||
+            (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).bits.ps2)
         }
         when (conditions1.reduce(_ || _)) {
-            issue_queue(io.dis_uop(0).iq_id).ready1 := true.B
+            issue_queue(io.dis_uop(0).bits.iq_index).ready1 := true.B
         }
         when (conditions2.reduce(_ || _)) {
-            issue_queue(io.dis_uop(0).iq_id).ready2 := true.B
+            issue_queue(io.dis_uop(0).bits.iq_index).ready2 := true.B
         }
         //结束ready信号赋值
     } .elsewhen(io.dis_uop(0).valid && io.dis_uop(1).valid){
         for (k <- 0 until 2){
-            payload(io.dis_uop(k).iq_id) := io.dis_uop(k)
-            issue_queue(io.dis_uop(k).iq_id).busy := true.B
-            issue_queue(io.dis_uop(k).iq_id).instr_type := io.dis_uop(k).instr_type
-            issue_queue(io.dis_uop(k).iq_id).ps1 := io.dis_uop(k).ps1
-            issue_queue(io.dis_uop(k).iq_id).ps2 := io.dis_uop(k).ps2
+            payload(io.dis_uop(k).bits.iq_index) := io.dis_uop(k)
+            issue_queue(io.dis_uop(k).bits.iq_index).busy := true.B
+            issue_queue(io.dis_uop(k).bits.iq_index).instr_type := io.dis_uop(k).bits.instr_type
+            issue_queue(io.dis_uop(k).bits.iq_index).ps1 := io.dis_uop(k).bits.ps1
+            issue_queue(io.dis_uop(k).bits.iq_index).ps2 := io.dis_uop(k).bits.ps2
 
             //入队时判断ps1和ps2的ready信号
             val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                io.prf_valid(io.dis_uop(k).ps1) ||
-                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).ps1) ||
-                (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).ps1)
+                io.prf_valid(io.dis_uop(k).bits.ps1) ||
+                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps1) ||
+                (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).bits.ps1)
             }
             val conditions2 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                io.prf_valid(io.dis_uop(k).ps2) ||
-                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).ps2) ||
-                (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).ps2)
+                io.prf_valid(io.dis_uop(k).bits.ps2) ||
+                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps2) ||
+                (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).bits.ps2)
             }
             when (conditions1.reduce(_ || _)) {
-                issue_queue(io.dis_uop(k).iq_id).ready1 := true.B
+                issue_queue(io.dis_uop(k).bits.iq_index).ready1 := true.B
             }
             when (conditions2.reduce(_ || _)) {
-                issue_queue(io.dis_uop(k).iq_id).ready2 := true.B
+                issue_queue(io.dis_uop(k).bits.iq_index).ready2 := true.B
             }
             //结束ready信号赋值
         }

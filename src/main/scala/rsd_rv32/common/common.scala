@@ -26,8 +26,7 @@ case class Parameters(
 
   EXUISSUE_DEPTH: Int = 16,
   LDISSUE_DEPTH: Int = 16,
-  STISSUE_DEPTH: Int = 16
-
+  STISSUE_DEPTH: Int = 16,
   EXU_Fj_CNT_MAX: Int = 10, //一个执行单元所包含的FU最多的数量
 ) {
   
