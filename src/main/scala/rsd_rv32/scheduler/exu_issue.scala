@@ -34,7 +34,7 @@ class exu_issue_IO(implicit p: Parameters) extends Bundle {
     //val ldu_wb_uop1 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
 
     //输出至Dispatch Unit的信号
-    val exu_issued_index = Output(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.EXUISSUE_DEPTH).W))) //更新IQ Freelist
+    val exu_issued_index = Output(Vec(p.CORE_WIDTH, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W)))) //更新IQ Freelist
 
     //with ROB
     val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
@@ -49,7 +49,6 @@ class exu_issue_content(implicit p: Parameters) extends Bundle {
     val ready2 = Bool() //操作数2的ready信号
 }
 
-//需要完善！如何避免同时选到两条乘法或两条除法
 class select_logic(implicit p: Parameters) extends Module {
     val io = IO(new Bundle {
         val mul_ready = Input(Vec(p.MUL_NUM, Bool())) //乘法器的ready信号
@@ -57,13 +56,44 @@ class select_logic(implicit p: Parameters) extends Module {
         val issue_queue = Input(Vec(p.EXUISSUE_DEPTH, new exu_issue_content()))
         val sel_index = Output(Vec(2, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W)))) //选择的指令的索引
     })
-
-    val tuples = (0 until p.EXUISSUE_DEPTH).map { i =>
-        (io.issue_queue(i).busy && io.issue_queue(i).ready1 && io.issue_queue(i).ready2 && (
-        io.issue_queue(i).instr_type === InstrType.ALU ||
-        (io.issue_queue(i).instr_type === InstrType.MUL && )), i.U)
+    //选出乘除法各自的第一条就绪指令
+    def select_top1(pred: exu_issue_content => Bool): (Bool, UInt) = {
+        val conditions = for (0 until p.EXUISSUE_DEPTH).map { i=>
+            val queue = io.issue_queue(i)
+            val valid = queue.busy && queue.ready1 && queue.ready2 && pred(queue)
+            (valid, i.U)
+        }
+        val valid_conditions = conditions.filter(_._1)
+        val res = VecInit(valid_conditions ++ Seq(
+            (false.B, 0.U)
+        )).take(1)
+        res(0)
     }
-    val validTuples = tuples.filter(_._1)
+    val (mul_valid, mul_index) = select_top1 { q =>
+        q.instr_type === InstrType.MUL && io.mul_ready
+    }
+    val (div_valid, div_index) = select_top1 { q =>
+        q.instr_type === InstrType.DIV_REM && io.div_ready
+    }
+    //筛选ALU就绪指令
+    val alu_tuples = (0 until p.EXUISSUE_DEPTH).map { i =>
+        val valid = io.issue_queue(i).busy && io.issue_queue(i).ready1 && io.issue_queue(i).ready2 && (
+        io.issue_queue(i).instr_type === InstrType.ALU)
+        (valid, i.U)
+    }
+    val valid_alu_Tuples = tuples.filter(_._1)
+    val padded_alu_Tuples = VecInit(
+        (validTuples ++ Seq(
+            (false.B, 0.U),
+            (false.B, 0.U)
+        )).take(2)
+    )
+    //合并乘除法与ALU指令
+    val allTuples = Seq(
+        (mul_valid, mul_index),
+        (div_valid, div_index)
+    ) ++ padded_alu_Tuples
+    val validTuples = allTuples.filter(_._1)
     val paddedTuples = VecInit(
         (validTuples ++ Seq(
             (false.B, 0.U),
@@ -198,7 +228,7 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
         }
     }
 
-    //Select logicPRF
+    //Select logic
     val select = Module(new select_logic())
     select.io.issue_queue := issue_queue
     select_index := select.io.sel_index
@@ -209,7 +239,16 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
             io.prf_raddr2(i) := issue_queue(select_index(i).bits).ps2
         }
     }
-
+    //更新IQ Freelist的信号
+    for (i <- 0 until 2){
+        when (select_index(i).valid){
+            io.exu_issued_index(i).valid := true.B
+            io.exu_issued_index(i).bits := select_index(i).bits
+        }.otherwise{
+            io.exu_issued_index(i).valid := false.B
+            io.exu_issued_index(i).bits := 0.U
+        }
+    }
     //发射命令到级间寄存器
     val issue_to_exu = Module(new issue2exu())
     for (i <- 0 until 2){
@@ -227,6 +266,4 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
         issue_queue(select_index(i).bits).ready1 := false.B
         issue_queue(select_index(i).bits).ready2 := false.B
     }
-
-    //更新IQ Freelist
 }
