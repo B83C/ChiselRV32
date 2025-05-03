@@ -11,8 +11,8 @@ class exu_issue_IO(implicit p: Parameters) extends Bundle {
 
     //with EXU
     val issue_exu_uop = Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())) //发往EXU的uop
-    val mul_ready = Input(Vec(p.MUL_NUM, Bool())) //乘法器的ready信号
-    val div_ready = Input(Vec(p.DIV_NUM, Bool())) //除法器的ready信号
+    val mul_ready = Input(Bool()) //乘法器的ready信号
+    val div_ready = Input(Bool()) //除法器的ready信号
 
     //val dst_FU = Output(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.ALU_NUM).W)))  //发射的指令的目标功能单元
     //val issue_uop = Valid(Vec(p.CORE_WIDTH, new EXUISSUE_EXU_uop()))  //发射的指令(包含操作数的值)
@@ -23,7 +23,7 @@ class exu_issue_IO(implicit p: Parameters) extends Bundle {
     val prf_raddr1 = Output(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W))) //PRF读地址1
     val prf_raddr2 = Output(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W))) //PRF读地址2
     val ps1_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数1
-    val ps2_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数2    
+    val ps2_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数2
 
     //监听PRF的valid信号用于更新ready状态
     val prf_valid = Input(Vec(p.PRF_DEPTH, Bool())) //PRF的valid信号
@@ -59,18 +59,15 @@ class select_logic(implicit p: Parameters) extends Module {
     //生成ready序列
     val readyMul = VecInit((0 until p.EXUISSUE_DEPTH).map { i =>
         val q = io.issue_queue(i)
-        q.busy && q.ready1 && q.ready2 &&
-          q.instr_type === InstrType.MUL && io.mul_ready
+        q.busy && q.ready1 && q.ready2 && q.instr_type === InstrType.MUL && io.mul_ready
     })
     val readyDiv = VecInit((0 until p.EXUISSUE_DEPTH).map { i =>
         val q = io.issue_queue(i)
-        q.busy && q.ready1 && q.ready2 &&
-          q.instr_type === InstrType.DIV_REM && io.div_ready
+        q.busy && q.ready1 && q.ready2 && q.instr_type === InstrType.DIV_REM && io.div_ready
     })
     val readyAlu = VecInit((0 until p.EXUISSUE_DEPTH).map { i =>
         val q = io.issue_queue(i)
-        q.busy && q.ready1 && q.ready2 &&
-          q.instr_type === InstrType.ALU
+        q.busy && q.ready1 && q.ready2 && q.instr_type === InstrType.ALU
     })
     //选择乘除法就绪命令
     val mulOH = PriorityEncoderOH(readyMul)
@@ -154,21 +151,21 @@ class issue2exu(implicit p: Parameters) extends Module {
         val if_valid =Input(Vec(p.CORE_WIDTH, Bool())) //指令是否有效
         val ps1_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数1
         val ps2_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数2
-        val dis_issue_uop = Input(Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop()))) //来自Dispatch的uop
+        val dis_issue_uop = Input(Vec(p.CORE_WIDTH, new DISPATCH_EXUISSUE_uop())) //来自Dispatch的uop
         val issue_exu_uop = Output(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop()))) //发往EXU的uop
     })
     val uop = Reg(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())))
     for (i <-0 until p.CORE_WIDTH){
-        uop(i).valid := io.dis_issue_uop(i).valid && io.if_valid(i)
-        uop(i).bits.instr := io.dis_issue_uop(i).bits.instr
-        uop(i).bits.instr_type := io.dis_issue_uop(i).bits.instr_type
-        uop(i).bits.fu_signals := io.dis_issue_uop(i).bits.fu_signals
+        uop(i).valid := io.if_valid(i)
+        uop(i).bits.instr := io.dis_issue_uop(i).instr
+        uop(i).bits.instr_type := io.dis_issue_uop(i).instr_type
+        uop(i).bits.fu_signals := io.dis_issue_uop(i).fu_signals
         uop(i).bits.ps1_value := io.ps1_value(i)
         uop(i).bits.ps2_value := io.ps2_value(i)
-        uop(i).bits.pdst := io.dis_issue_uop(i).bits.pdst
-        uop(i).bits.branch_pred := io.dis_issue_uop(i).bits.branch_pred
-        uop(i).bits.target_PC := io.dis_issue_uop(i).bits.target_PC
-        uop(i).bits.rob_index := io.dis_issue_uop(i).bits.rob_index
+        uop(i).bits.pdst := io.dis_issue_uop(i).pdst
+        uop(i).bits.branch_pred := io.dis_issue_uop(i).branch_pred
+        uop(i).bits.target_PC := io.dis_issue_uop(i).target_PC
+        uop(i).bits.rob_index := io.dis_issue_uop(i).rob_index
     }
     io.issue_exu_uop := uop
 }
@@ -192,7 +189,7 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
         })
     )
 
-    val select_index = Vec(2, Wire(Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))))
+    val select_index = Wire(Vec(2, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))))
 
     //来自Dispatch的入队指令
     when(io.dis_uop(0).valid && !io.dis_uop(1).valid){
@@ -252,19 +249,17 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
     for (i <- 0 until p.EXUISSUE_DEPTH){
         when (issue_queue(i).busy){
             val update_conditions1 = for (j <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                io.prf_valid(io.dis_uop(0).bits.ps1) ||
-                  (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === io.dis_uop(i).bits.ps1) ||
-                  (io.wb_uop2(j).valid && io.wb_uop2(j).bits.pdst === io.dis_uop(i).bits.ps1)
+                (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === issue_queue(i).ps1) ||
+                  (io.wb_uop2(j).valid && io.wb_uop2(j).bits.pdst === issue_queue(i).ps1)
             }
             val update_conditions2 = for (j <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                io.prf_valid(io.dis_uop(0).bits.ps2) ||
-                  (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === io.dis_uop(i).bits.ps2) ||
-                  (io.wb_uop2(j).valid && io.wb_uop2(j).bits.pdst === io.dis_uop(i).bits.ps2)
+                (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === issue_queue(i).ps2) ||
+                  (io.wb_uop2(j).valid && io.wb_uop2(j).bits.pdst === issue_queue(i).ps2)
             }
-            when (update_conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(i).bits.ps1)) {
+            when (update_conditions1.reduce(_ || _) || io.prf_valid(issue_queue(i).ps1)) {
                 issue_queue(i).ready1 := true.B
             }
-            when (update_conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(i).bits.ps2)) {
+            when (update_conditions2.reduce(_ || _) || io.prf_valid(issue_queue(i).ps2)) {
                 issue_queue(i).ready2 := true.B
             }
         }
@@ -272,6 +267,8 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
 
     //Select logic
     val select = Module(new select_logic())
+    select.io.mul_ready := io.mul_ready
+    select.io.div_ready := io.div_ready
     select.io.issue_queue := issue_queue
     select_index := select.io.sel_index
     //读PRF
@@ -279,6 +276,9 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
         when (select_index(i).valid){
             io.prf_raddr1(i) := issue_queue(select_index(i).bits).ps1
             io.prf_raddr2(i) := issue_queue(select_index(i).bits).ps2
+        }.otherwise{
+            io.prf_raddr1(i) := 0.U
+            io.prf_raddr2(i) := 0.U
         }
     }
     //更新IQ Freelist的信号
