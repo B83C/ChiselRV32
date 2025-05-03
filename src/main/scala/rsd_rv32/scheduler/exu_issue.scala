@@ -51,58 +51,100 @@ class exu_issue_content(implicit p: Parameters) extends Bundle {
 
 class select_logic(implicit p: Parameters) extends Module {
     val io = IO(new Bundle {
-        val mul_ready = Input(Vec(p.MUL_NUM, Bool())) //乘法器的ready信号
-        val div_ready = Input(Vec(p.DIV_NUM, Bool())) //除法器的ready信号
+        val mul_ready = Input(Bool()) //乘法器的ready信号
+        val div_ready = Input(Bool()) //除法器的ready信号
         val issue_queue = Input(Vec(p.EXUISSUE_DEPTH, new exu_issue_content()))
         val sel_index = Output(Vec(2, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W)))) //选择的指令的索引
     })
-    //选出乘除法各自的第一条就绪指令
-    def select_top1(pred: exu_issue_content => Bool): (Bool, UInt) = {
-        val conditions = for (0 until p.EXUISSUE_DEPTH).map { i=>
-            val queue = io.issue_queue(i)
-            val valid = queue.busy && queue.ready1 && queue.ready2 && pred(queue)
-            (valid, i.U)
-        }
-        val valid_conditions = conditions.filter(_._1)
-        val res = VecInit(valid_conditions ++ Seq(
-            (false.B, 0.U)
-        )).take(1)
-        res(0)
-    }
-    val (mul_valid, mul_index) = select_top1 { q =>
+    //生成ready序列
+    val readyMul = VecInit((0 until p.EXUISSUE_DEPTH).map { i =>
+        val q = io.issue_queue(i)
+        q.busy && q.ready1 && q.ready2 &&
         q.instr_type === InstrType.MUL && io.mul_ready
-    }
-    val (div_valid, div_index) = select_top1 { q =>
+    })
+    val readyDiv = VecInit((0 until p.EXUISSUE_DEPTH).map { i =>
+        val q = io.issue_queue(i)
+        q.busy && q.ready1 && q.ready2 &&
         q.instr_type === InstrType.DIV_REM && io.div_ready
+    })
+    val readyAlu = VecInit((0 until p.EXUISSUE_DEPTH).map { i =>
+        val q = io.issue_queue(i)
+        q.busy && q.ready1 && q.ready2 &&
+        q.instr_type === InstrType.ALU
+    })
+    //选择乘除法就绪命令
+    val mulOH = PriorityEncoderOH(readyMul)
+    val mulIdx = OHToUInt(mulOH)
+    val mulV = readyMul.asUInt.orR
+
+    val divOH = PriorityEncoderOH(readyDiv)
+    val divIdx = OHToUInt(divOH)
+    val divV = readyDiv.asUInt.orR
+    //选择alu就绪命令
+    val aluOH1 = PriorityEncoderOH(readyAlu)
+    val aluIdx1 = OHToUInt(aluOH1)
+    val aluV1 = aluMasked.asUInt.orR
+
+    val aluMasked2 = Wire(Vec(p.EXUISSUE_DEPTH, Bool()))
+    for (i <- 0 until p.EXUISSUE_DEPTH) {
+        aluMasked2(i) := aluMasked(i) && !aluOH1(i)
     }
-    //筛选ALU就绪指令
-    val alu_tuples = (0 until p.EXUISSUE_DEPTH).map { i =>
-        val valid = io.issue_queue(i).busy && io.issue_queue(i).ready1 && io.issue_queue(i).ready2 && (
-        io.issue_queue(i).instr_type === InstrType.ALU)
-        (valid, i.U)
-    }
-    val valid_alu_Tuples = tuples.filter(_._1)
-    val padded_alu_Tuples = VecInit(
-        (validTuples ++ Seq(
-            (false.B, 0.U),
-            (false.B, 0.U)
-        )).take(2)
-    )
-    //合并乘除法与ALU指令
-    val allTuples = Seq(
-        (mul_valid, mul_index),
-        (div_valid, div_index)
-    ) ++ padded_alu_Tuples
-    val validTuples = allTuples.filter(_._1)
-    val paddedTuples = VecInit(
-        (validTuples ++ Seq(
-            (false.B, 0.U),
-            (false.B, 0.U)
-        )).take(2)
-    )
-    for (i <- 0 until 2) {
-        io.sel_index(i).valid := paddedTuples(i)._1
-        io.sel_index(i).bits := paddedTuples(i)._2
+    val aluOH2 = PriorityEncoderOH(aluMasked2)
+    val aluIdx2 = OHToUInt(aluOH2)
+    val aluV2 = aluMasked2.asUInt.orR
+    //暴力枚举出应该发射的命令
+    when (mulV) {
+        when (divV){
+            io.sel_index(0).valid := true.B
+            io.sel_index(0).bits := mulIdx
+            io.sel_index(1).valid := true.B
+            io.sel_index(1).bits := divIdx
+        }.otherwise{
+            when (aluV1) {
+                io.sel_index(0).valid := true.B
+                io.sel_index(0).bits := mulIdx
+                io.sel_index(1).valid := true.B
+                io.sel_index(1).bits := aluIdx1
+            }.otherwise{
+                io.sel_index(0).valid := true.B
+                io.sel_index(0).bits := mulIdx
+                io.sel_index(1).valid := false.B
+                io.sel_index(1).bits := 0.U
+            }
+        }
+    }.otherwise{
+        when (divV){
+            when (aluV1) {
+                io.sel_index(0).valid := true.B
+                io.sel_index(0).bits := divIdx
+                io.sel_index(1).valid := true.B
+                io.sel_index(1).bits := aluIdx1
+            }.otherwise{
+                io.sel_index(0).valid := true.B
+                io.sel_index(0).bits := divIdx
+                io.sel_index(1).valid := false.B
+                io.sel_index(1).bits := 0.U
+            }
+        }.otherwise{
+            when (aluV1){
+                when (aluV2) {
+                    io.sel_index(0).valid := true.B
+                    io.sel_index(0).bits := aluIdx1
+                    io.sel_index(1).valid := true.B
+                    io.sel_index(1).bits := aluIdx2
+                }.otherwise{
+                    io.sel_index(0).valid := true.B
+                    io.sel_index(0).bits := aluIdx1
+                    io.sel_index(1).valid := false.B
+                    io.sel_index(1).bits := 0.U
+                }
+            }.otherwise{
+                io.sel_index(0).valid := false.B
+                io.sel_index(0).bits := 0.U
+                io.sel_index(1).valid := false.B
+                io.sel_index(1).bits := 0.U
+            }
+        }
     }
 }
 
