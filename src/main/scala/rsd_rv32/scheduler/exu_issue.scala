@@ -60,17 +60,17 @@ class select_logic(implicit p: Parameters) extends Module {
     val readyMul = VecInit((0 until p.EXUISSUE_DEPTH).map { i =>
         val q = io.issue_queue(i)
         q.busy && q.ready1 && q.ready2 &&
-        q.instr_type === InstrType.MUL && io.mul_ready
+          q.instr_type === InstrType.MUL && io.mul_ready
     })
     val readyDiv = VecInit((0 until p.EXUISSUE_DEPTH).map { i =>
         val q = io.issue_queue(i)
         q.busy && q.ready1 && q.ready2 &&
-        q.instr_type === InstrType.DIV_REM && io.div_ready
+          q.instr_type === InstrType.DIV_REM && io.div_ready
     })
     val readyAlu = VecInit((0 until p.EXUISSUE_DEPTH).map { i =>
         val q = io.issue_queue(i)
         q.busy && q.ready1 && q.ready2 &&
-        q.instr_type === InstrType.ALU
+          q.instr_type === InstrType.ALU
     })
     //选择乘除法就绪命令
     val mulOH = PriorityEncoderOH(readyMul)
@@ -83,11 +83,11 @@ class select_logic(implicit p: Parameters) extends Module {
     //选择alu就绪命令
     val aluOH1 = PriorityEncoderOH(readyAlu)
     val aluIdx1 = OHToUInt(aluOH1)
-    val aluV1 = aluMasked.asUInt.orR
+    val aluV1 = readyAlu.asUInt.orR
 
     val aluMasked2 = Wire(Vec(p.EXUISSUE_DEPTH, Bool()))
     for (i <- 0 until p.EXUISSUE_DEPTH) {
-        aluMasked2(i) := aluMasked(i) && !aluOH1(i)
+        aluMasked2(i) := readyAlu(i) && !aluOH1(i)
     }
     val aluOH2 = PriorityEncoderOH(aluMasked2)
     val aluIdx2 = OHToUInt(aluOH2)
@@ -205,17 +205,17 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
         //入队时判断ps1和ps2的ready信号
         val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
             (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps1) ||
-            (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).bits.ps1)
+              (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).bits.ps1)
         }
         val conditions2 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
             io.prf_valid(io.dis_uop(0).bits.ps2) ||
-            (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps2) ||
-            (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).bits.ps2)
+              (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps2) ||
+              (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).bits.ps2)
         }
-        when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps1) || (io.dis_uop(k).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
+        when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps1) || (io.dis_uop(0).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
             issue_queue(io.dis_uop(0).bits.iq_index).ready1 := true.B
         }
-        when (conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps1) || (io.dis_uop(k).bits.fu_signals.opr2_sel =/= OprSel.REG)) {
+        when (conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps2) || (io.dis_uop(0).bits.fu_signals.opr2_sel =/= OprSel.REG)) {
             issue_queue(io.dis_uop(0).bits.iq_index).ready2 := true.B
         }
         //结束ready信号赋值
@@ -230,11 +230,11 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
             //入队时判断ps1和ps2的ready信号
             val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
                 (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps1) ||
-                (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).bits.ps1)
+                  (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).bits.ps1)
             }
             val conditions2 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
                 (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps2) ||
-                (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).bits.ps2)
+                  (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).bits.ps2)
             }
             when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps1) || (io.dis_uop(k).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
                 issue_queue(io.dis_uop(k).bits.iq_index).ready1 := true.B
@@ -253,13 +253,13 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
         when (issue_queue(i).busy){
             val update_conditions1 = for (j <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
                 io.prf_valid(io.dis_uop(0).bits.ps1) ||
-                (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === io.dis_uop(i).bits.ps1) ||
-                (io.wb_uop2(j).valid && io.wb_uop2(j).bits.pdst === io.dis_uop(i).bits.ps1)
+                  (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === io.dis_uop(i).bits.ps1) ||
+                  (io.wb_uop2(j).valid && io.wb_uop2(j).bits.pdst === io.dis_uop(i).bits.ps1)
             }
             val update_conditions2 = for (j <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
                 io.prf_valid(io.dis_uop(0).bits.ps2) ||
-                (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === io.dis_uop(i).bits.ps2) ||
-                (io.wb_uop2(j).valid && io.wb_uop2(j).bits.pdst === io.dis_uop(i).bits.ps2)
+                  (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === io.dis_uop(i).bits.ps2) ||
+                  (io.wb_uop2(j).valid && io.wb_uop2(j).bits.pdst === io.dis_uop(i).bits.ps2)
             }
             when (update_conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(i).bits.ps1)) {
                 issue_queue(i).ready1 := true.B
