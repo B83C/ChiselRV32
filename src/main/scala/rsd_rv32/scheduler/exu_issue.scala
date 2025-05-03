@@ -189,123 +189,138 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
         })
     )
 
-    val select_index = Wire(Vec(2, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))))
 
-    //来自Dispatch的入队指令
-    when(io.dis_uop(0).valid && !io.dis_uop(1).valid){
-        payload(io.dis_uop(0).bits.iq_index) := io.dis_uop(0).bits
-        issue_queue(io.dis_uop(0).bits.iq_index).busy := true.B
-        issue_queue(io.dis_uop(0).bits.iq_index).instr_type := io.dis_uop(0).bits.instr_type
-        issue_queue(io.dis_uop(0).bits.iq_index).ps1 := io.dis_uop(0).bits.ps1
-        issue_queue(io.dis_uop(0).bits.iq_index).ps2 := io.dis_uop(0).bits.ps2
+    io.issue_exu_uop := 0.U.asTypeOf(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())))
+    io.exu_issued_index := 0.U.asTypeOf(Vec(p.CORE_WIDTH, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))))
+    io.issue_exu_uop := 0.U.asTypeOf(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())))
+    io.prf_raddr1 := 0.U.asTypeOf(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W)))
+    io.prf_raddr2 := 0.U.asTypeOf(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W)))
 
-        //入队时判断ps1和ps2的ready信号
-        val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-            (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps1) ||
-              (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).bits.ps1)
+    when (io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred || io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred){
+        for (i <- 0 until p.EXUISSUE_DEPTH){
+            issue_queue(i).busy := false.B
+            issue_queue(i).ready1 := false.B
+            issue_queue(i).ready2 := false.B
         }
-        val conditions2 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-            io.prf_valid(io.dis_uop(0).bits.ps2) ||
-              (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps2) ||
-              (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).bits.ps2)
-        }
-        when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps1) || (io.dis_uop(0).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
-            issue_queue(io.dis_uop(0).bits.iq_index).ready1 := true.B
-        }
-        when (conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps2) || (io.dis_uop(0).bits.fu_signals.opr2_sel =/= OprSel.REG)) {
-            issue_queue(io.dis_uop(0).bits.iq_index).ready2 := true.B
-        }
-        //结束ready信号赋值
-    } .elsewhen(io.dis_uop(0).valid && io.dis_uop(1).valid){
-        for (k <- 0 until 2){
-            payload(io.dis_uop(k).bits.iq_index) := io.dis_uop(k).bits
-            issue_queue(io.dis_uop(k).bits.iq_index).busy := true.B
-            issue_queue(io.dis_uop(k).bits.iq_index).instr_type := io.dis_uop(k).bits.instr_type
-            issue_queue(io.dis_uop(k).bits.iq_index).ps1 := io.dis_uop(k).bits.ps1
-            issue_queue(io.dis_uop(k).bits.iq_index).ps2 := io.dis_uop(k).bits.ps2
+    }.otherwise{
+        //来自Dispatch的入队指令
+        when(io.dis_uop(0).valid && !io.dis_uop(1).valid){
+            payload(io.dis_uop(0).bits.iq_index) := io.dis_uop(0).bits
+            issue_queue(io.dis_uop(0).bits.iq_index).busy := true.B
+            issue_queue(io.dis_uop(0).bits.iq_index).instr_type := io.dis_uop(0).bits.instr_type
+            issue_queue(io.dis_uop(0).bits.iq_index).ps1 := io.dis_uop(0).bits.ps1
+            issue_queue(io.dis_uop(0).bits.iq_index).ps2 := io.dis_uop(0).bits.ps2
 
             //入队时判断ps1和ps2的ready信号
             val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps1) ||
-                  (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).bits.ps1)
+                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps1) ||
+                (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).bits.ps1)
             }
             val conditions2 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps2) ||
-                  (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).bits.ps2)
+                io.prf_valid(io.dis_uop(0).bits.ps2) ||
+                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps2) ||
+                (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).bits.ps2)
             }
-            when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps1) || (io.dis_uop(k).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
-                issue_queue(io.dis_uop(k).bits.iq_index).ready1 := true.B
+            when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps1) || (io.dis_uop(0).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
+                issue_queue(io.dis_uop(0).bits.iq_index).ready1 := true.B
             }
-            when (conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps2) || (io.dis_uop(k).bits.fu_signals.opr2_sel =/= OprSel.REG)) {
-                issue_queue(io.dis_uop(k).bits.iq_index).ready2 := true.B
+            when (conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps2) || (io.dis_uop(0).bits.fu_signals.opr2_sel =/= OprSel.REG)) {
+                issue_queue(io.dis_uop(0).bits.iq_index).ready2 := true.B
             }
             //结束ready信号赋值
-        }
-    }.otherwise{
-        //不入队
-    }
+        } .elsewhen(io.dis_uop(0).valid && io.dis_uop(1).valid){
+            for (k <- 0 until 2){
+                payload(io.dis_uop(k).bits.iq_index) := io.dis_uop(k).bits
+                issue_queue(io.dis_uop(k).bits.iq_index).busy := true.B
+                issue_queue(io.dis_uop(k).bits.iq_index).instr_type := io.dis_uop(k).bits.instr_type
+                issue_queue(io.dis_uop(k).bits.iq_index).ps1 := io.dis_uop(k).bits.ps1
+                issue_queue(io.dis_uop(k).bits.iq_index).ps2 := io.dis_uop(k).bits.ps2
 
-    //每周期监听后续寄存器的ready信号，更新ready状态
-    for (i <- 0 until p.EXUISSUE_DEPTH){
-        when (issue_queue(i).busy){
-            val update_conditions1 = for (j <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === issue_queue(i).ps1) ||
-                  (io.wb_uop2(j).valid && io.wb_uop2(j).bits.pdst === issue_queue(i).ps1)
+                //入队时判断ps1和ps2的ready信号
+                val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
+                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps1) ||
+                    (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).bits.ps1)
+                }
+                val conditions2 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
+                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps2) ||
+                    (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).bits.ps2)
+                }
+                when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps1) || (io.dis_uop(k).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
+                    issue_queue(io.dis_uop(k).bits.iq_index).ready1 := true.B
+                }
+                when (conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps2) || (io.dis_uop(k).bits.fu_signals.opr2_sel =/= OprSel.REG)) {
+                    issue_queue(io.dis_uop(k).bits.iq_index).ready2 := true.B
+                }
+                //结束ready信号赋值
             }
-            val update_conditions2 = for (j <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === issue_queue(i).ps2) ||
-                  (io.wb_uop2(j).valid && io.wb_uop2(j).bits.pdst === issue_queue(i).ps2)
-            }
-            when (update_conditions1.reduce(_ || _) || io.prf_valid(issue_queue(i).ps1)) {
-                issue_queue(i).ready1 := true.B
-            }
-            when (update_conditions2.reduce(_ || _) || io.prf_valid(issue_queue(i).ps2)) {
-                issue_queue(i).ready2 := true.B
-            }
+        }.otherwise{
+            //不入队
         }
-    }
 
-    //Select logic
-    val select = Module(new select_logic())
-    select.io.mul_ready := io.mul_ready
-    select.io.div_ready := io.div_ready
-    select.io.issue_queue := issue_queue
-    select_index := select.io.sel_index
-    //读PRF
-    for (i <- 0 until 2){
-        when (select_index(i).valid){
-            io.prf_raddr1(i) := issue_queue(select_index(i).bits).ps1
-            io.prf_raddr2(i) := issue_queue(select_index(i).bits).ps2
-        }.otherwise{
-            io.prf_raddr1(i) := 0.U
-            io.prf_raddr2(i) := 0.U
+        //每周期监听后续寄存器的ready信号，更新ready状态
+        for (i <- 0 until p.EXUISSUE_DEPTH){
+            when (issue_queue(i).busy){
+                val update_conditions1 = for (j <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
+                    (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === issue_queue(i).ps1) ||
+                    (io.wb_uop2(j).valid && io.wb_uop2(j).bits.pdst === issue_queue(i).ps1)
+                }
+                val update_conditions2 = for (j <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
+                    (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === issue_queue(i).ps2) ||
+                    (io.wb_uop2(j).valid && io.wb_uop2(j).bits.pdst === issue_queue(i).ps2)
+                }
+                when (update_conditions1.reduce(_ || _) || io.prf_valid(issue_queue(i).ps1)) {
+                    issue_queue(i).ready1 := true.B
+                }
+                when (update_conditions2.reduce(_ || _) || io.prf_valid(issue_queue(i).ps2)) {
+                    issue_queue(i).ready2 := true.B
+                }
+            }
         }
-    }
-    //更新IQ Freelist的信号
-    for (i <- 0 until 2){
-        when (select_index(i).valid){
-            io.exu_issued_index(i).valid := true.B
-            io.exu_issued_index(i).bits := select_index(i).bits
-        }.otherwise{
-            io.exu_issued_index(i).valid := false.B
-            io.exu_issued_index(i).bits := 0.U
-        }
-    }
-    //发射命令到级间寄存器
-    val issue_to_exu = Module(new issue2exu())
-    for (i <- 0 until 2){
-        when (select_index(i).valid){
-            issue_to_exu.io.if_valid(i) := true.B
-        }.otherwise{
-            issue_to_exu.io.if_valid(i) := false.B
-        }
-        issue_to_exu.io.dis_issue_uop(i) := payload(select_index(i).bits)
-        issue_to_exu.io.ps1_value(i) := io.ps1_value(i)
-        issue_to_exu.io.ps2_value(i) := io.ps2_value(i)
-        io.issue_exu_uop(i) := issue_to_exu.io.issue_exu_uop(i)
 
-        issue_queue(select_index(i).bits).busy := false.B
-        issue_queue(select_index(i).bits).ready1 := false.B
-        issue_queue(select_index(i).bits).ready2 := false.B
+        //Select logic
+        val select = Module(new select_logic())
+        val select_index = Wire(Vec(2, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))))
+        select.io.mul_ready := io.mul_ready
+        select.io.div_ready := io.div_ready
+        select.io.issue_queue := issue_queue
+        select_index := select.io.sel_index
+        //读PRF
+        for (i <- 0 until 2){
+            when (select_index(i).valid){
+                io.prf_raddr1(i) := issue_queue(select_index(i).bits).ps1
+                io.prf_raddr2(i) := issue_queue(select_index(i).bits).ps2
+            }.otherwise{
+                io.prf_raddr1(i) := 0.U
+                io.prf_raddr2(i) := 0.U
+            }
+        }
+        //更新IQ Freelist的信号
+        for (i <- 0 until 2){
+            when (select_index(i).valid){
+                io.exu_issued_index(i).valid := true.B
+                io.exu_issued_index(i).bits := select_index(i).bits
+            }.otherwise{
+                io.exu_issued_index(i).valid := false.B
+                io.exu_issued_index(i).bits := 0.U
+            }
+        }
+        //发射命令到级间寄存器
+        val issue_to_exu = Module(new issue2exu())
+        for (i <- 0 until 2){
+            when (select_index(i).valid){
+                issue_to_exu.io.if_valid(i) := true.B
+            }.otherwise{
+                issue_to_exu.io.if_valid(i) := false.B
+            }
+            issue_to_exu.io.dis_issue_uop(i) := payload(select_index(i).bits)
+            issue_to_exu.io.ps1_value(i) := io.ps1_value(i)
+            issue_to_exu.io.ps2_value(i) := io.ps2_value(i)
+            io.issue_exu_uop(i) := issue_to_exu.io.issue_exu_uop(i)
+
+            issue_queue(select_index(i).bits).busy := false.B
+            issue_queue(select_index(i).bits).ready1 := false.B
+            issue_queue(select_index(i).bits).ready2 := false.B
+        }
     }
+    
 }
