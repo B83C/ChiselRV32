@@ -24,17 +24,56 @@ class Fetch_IO(implicit p: Parameters) extends Bundle {
     val GHR = Input(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照
 }
 
+
+
+
 class FetchUnit(implicit p: Parameters) extends Module {
     val io = IO(new Fetch_IO())
 
     val pc_reg = RegInit(0.UInt(p.XLEN.W))        //存储当前PC
     val pc_next = Wire(UInt(p.XLEN.W))            //下一个PC
-    val pc_aligned = Wire(UInt(p.XLEN.W))     //对齐后的当前PC
+    val pc_aligned = Wire(UInt(p.XLEN.W))         //对齐后的当前PC
     val whether_flush = Wire(Bool())              //是否需要冲刷一下
 
     pc_aligned := pc_reg & ~((p.CORE_WIDTH.U << 2) - 1.U)
     val pc_next_default = pc_aligned + (p.CORE_WIDTH.U <<2)
     
+    //需不需要flush
+    whether_flush := io.rob_commitsignal
+    val rob_flush_pc = Mux1H(io.rob_commitsignal.map(s => s.valid -> s.bits.pc))
 
+    //分支预测
+    val whether_take_bp = io.branch_pred
+    val bp_target = io.target_PC
+
+    //决定下个pc(ROB>BP>default)
+    pc_next := Mux(whether_flush,rob_flush_pc,
+                  Mux(whether_take_bp,bp_target,pc_next_default))
+
+    //更新PC寄存器
+    when(io.id_ready){
+        pc_reg := pc_next
+    }
+    io.instr_addr := pc_reg
+
+    //生成uop
+    for(i <- 0 until p.CORE_WIDTH){
+        val uop = Wire(new IF_ID_uop())
+
+        val current_pc = pc_aligned +(i.U << 2)
+        uop.pc := current_pc
+        uop.instr := io.instr(i)
+        uop.valid := false.B
+        uop.GHR := io.GHR
+
+        uop.valid := (current_pc >=pc_reg)&&(!whether_flush)&&(io.id_ready)&&(!(io.btb_hit(i)&&whether_take_bp))
+        io.id_uop(i).valid := uop.valid
+        io.id_uop(i).bits := uop
+
+        
+    }
+
+    
+    
     
 }
