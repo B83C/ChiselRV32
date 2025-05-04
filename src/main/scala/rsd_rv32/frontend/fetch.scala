@@ -26,4 +26,15 @@ class Fetch_IO(implicit p: Parameters) extends Bundle {
 
 class FetchUnit(implicit p: Parameters) extends Module {
     val io = IO(new Fetch_IO())
+
+    val pc_reg = RegInit(0.UInt(p.XLEN.W))        //存储当前PC
+    val pc_next = Wire(UInt(p.XLEN.W))            //下一个PC
+    val pc_aligned = Wire(UInt(p.XLEN.W))     //对齐后的当前PC
+    val whether_flush = Wire(Bool())              //是否需要冲刷一下
+
+    pc_aligned := pc_reg & ~((p.CORE_WIDTH.U << 2) - 1.U)
+    val pc_next_default = pc_aligned + (p.CORE_WIDTH.U <<2)
+    
+
+    
 }
