@@ -108,10 +108,26 @@ class DecodeUnit(implicit p: Parameters) extends Module {
       
     }//switch的后括号
 
+    val fuSignals = FUDecoder(opcode, funct3, funct7)
+
+    val instr_trimmed = Cat(funct3, funct7, rd, rs1, rs2,immExt)
+
+    //传递给RENAME
+    val uop = Wire(new ID_RENAME_uop())
+    rename.uop.bits.instr := instr_trimmed
+    rename.uop.bits.instr_type := instr_type
+    rename.uop.bits.fu_signals := fuSignals
+
+    //if给的部分
+    rename.uop.bits.instr_addr := if_uop.instr_addr
+    rename_uop.bits.target_PC := if_uop.target_PC
+    rename_uop.bits.GHR := if_uop.GHR
+    rename_uop.bits.branch_pred := if_uop.branch_pred
+    rename_uop.bits.btb_hit := if_uop.btb_hit
 
     
-    
-    
+    //输出完成
+    io.rename_uop(i) :=rename_uop
     
     
   }//for的后括号
