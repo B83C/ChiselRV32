@@ -49,7 +49,7 @@ class exu_issue_content(implicit p: Parameters) extends Bundle {
     val ready2 = Bool() //操作数2的ready信号
 }
 
-class select_logic(implicit p: Parameters) extends Module {
+class exu_iq_select_logic(implicit p: Parameters) extends Module {
     val io = IO(new Bundle {
         val mul_ready = Input(Bool()) //乘法器的ready信号
         val div_ready = Input(Bool()) //除法器的ready信号
@@ -192,11 +192,10 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
 
     io.issue_exu_uop := 0.U.asTypeOf(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())))
     io.exu_issued_index := 0.U.asTypeOf(Vec(p.CORE_WIDTH, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))))
-    io.issue_exu_uop := 0.U.asTypeOf(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())))
     io.prf_raddr1 := 0.U.asTypeOf(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W)))
     io.prf_raddr2 := 0.U.asTypeOf(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W)))
 
-    when (io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred || io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred){
+    when(io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred){
         for (i <- 0 until p.EXUISSUE_DEPTH){
             issue_queue(i).busy := false.B
             issue_queue(i).ready1 := false.B
@@ -277,8 +276,8 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
             }
         }
 
-        //Select logic
-        val select = Module(new select_logic())
+        //Select Logic
+        val select = Module(new exu_iq_select_logic())
         val select_index = Wire(Vec(2, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))))
         select.io.mul_ready := io.mul_ready
         select.io.div_ready := io.div_ready
@@ -309,6 +308,9 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
         for (i <- 0 until 2){
             when (select_index(i).valid){
                 issue_to_exu.io.if_valid(i) := true.B
+                issue_queue(select_index(i).bits).busy := false.B
+                issue_queue(select_index(i).bits).ready1 := false.B
+                issue_queue(select_index(i).bits).ready2 := false.B
             }.otherwise{
                 issue_to_exu.io.if_valid(i) := false.B
             }
@@ -317,9 +319,7 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
             issue_to_exu.io.ps2_value(i) := io.ps2_value(i)
             io.issue_exu_uop(i) := issue_to_exu.io.issue_exu_uop(i)
 
-            issue_queue(select_index(i).bits).busy := false.B
-            issue_queue(select_index(i).bits).ready1 := false.B
-            issue_queue(select_index(i).bits).ready2 := false.B
+
         }
     }
     
