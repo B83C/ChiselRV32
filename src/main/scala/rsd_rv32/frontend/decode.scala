@@ -57,53 +57,53 @@ class DecodeUnit(implicit p: Parameters) extends Module {
       //根据操作数分类
     switch(opcode){
       is("b0110011".U){
-        instr_type := InstrType.R
+        instr_type := InstrType.ALU
         immExt := 0.U
       }
 
       is("b0010011".U){
-        instr_type := InstrType.I
+        instr_type := InstrType.ALU
         immExt := Cat(Fill(20, immI(11)), immI)
       }
 
       is("b0000011".U) { //Load
-        instr_type := InstrType.I
+        instr_type := InstrType.LD
         immExt := Cat(Fill(20, immI(11)), immI)
       }
 
       is("b0100011".U) {
-        instr_type := InstrType.S
+        instr_type := InstrType.ST
         immExt := Cat(Fill(20, immS(11)), immS)
       }
 
       is("b1100011".U) {
-        instr_type := InstrType.B
+        instr_type := InstrType.Branch
         immExt := Cat(Fill(19, immB(12)), immB)
       }
-
-      is("b0110111".U) { //LUI
-        instr_type := InstrType.U
-        immExt := immU
-      }
-
-      is("b0010111".U) { //AUIPC
-        instr_type := InstrType.U
-        immExt := immU
-      }
-
+      
       is("b1101111".U) {
-        instr_type := InstrType.J
+        instr_type := InstrType.Jump
         immExt := Cat(Fill(11, immJ(20)), immJ)
       }
 
       is("b1100111".U) {
-        instr_type := InstrType.I
+        instr_type := InstrType.Jump
         immExt := Cat(Fill(20, immI(11)), immI)
       }
       
       is("b1110011".U) { //CSR
-        instr_type := InstrType.I
+        instr_type := InstrType.CSR
         immExt := Cat(Fill(20, immI(11)), immI)
+      }
+
+      is("b0110111".U){ //LUI
+        instr_typ := InstrType.ALU
+        immExt := immU
+      }
+
+      is("b0010111".U){ //AUIPC
+        instr_typ := InstrType.ALU
+        immExt := immU
       }
       
     }//switch的后括号
