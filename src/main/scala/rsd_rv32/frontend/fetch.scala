@@ -26,14 +26,6 @@ class Fetch_IO(implicit p: Parameters) extends Bundle {
 
 
 
-//定义给ID的uop
-class IF_ID_uop(implicit p:parameters) extends Bundle{
-    val pc = UInt(p.XLEN.W)
-    val instr = UInt(32.W)
-    val valid = Bool()
-    val GHR = (UInt(p.GHR_WIDTH.W))
-}
-
 
 class FetchUnit(implicit p: Parameters) extends Module {
     val io = IO(new Fetch_IO())
@@ -71,7 +63,7 @@ class FetchUnit(implicit p: Parameters) extends Module {
         val uop = Wire(new IF_ID_uop())
 
         val current_pc = pc_aligned +(i.U << 2)
-        uop.pc := current_pc
+        uop.instr_addr := current_pc
         uop.instr := io.instr(i)
         uop.valid := false.B
         uop.GHR := io.GHR
