@@ -53,62 +53,83 @@ class DecodeUnit(implicit p: Parameters) extends Module {
     val instr_type = Wire(InstrType())
     instr_type := InstrType.R
 
+    val fuSignals = Wire(new FUSignals())
+    fu_signals.opr1_sel := OprSel.REG
+    fu_signals.opr2_sel := OprSel.REG
 
       //根据操作数分类
     switch(opcode){
       is("b0110011".U){
         instr_type := InstrType.ALU
         immExt := 0.U
+        fu_signals.opr1_sel := OprSel.REG
+        fu_signals.opr2_sel := OprSel.REG
       }
 
       is("b0010011".U){
         instr_type := InstrType.ALU
         immExt := Cat(Fill(20, immI(11)), immI)
+        fu_signals.opr1_sel := OprSel.REG
+        fu_signals.opr2_sel := OprSel.IMM
       }
 
       is("b0000011".U) { //Load
         instr_type := InstrType.LD
         immExt := Cat(Fill(20, immI(11)), immI)
+        fu_signals.opr1_sel := OprSel.REG
+        fu_signals.opr2_sel := OprSel.IMM
       }
 
       is("b0100011".U) {
         instr_type := InstrType.ST
         immExt := Cat(Fill(20, immS(11)), immS)
+        fu_signals.opr1_sel := OprSel.REG
+        fu_signals.opr2_sel := OprSel.IMM
       }
 
       is("b1100011".U) {
         instr_type := InstrType.Branch
         immExt := Cat(Fill(19, immB(12)), immB)
+        fu_signals.opr1_sel := OprSel.REG
+        fu_signals.opr2_sel := OprSel.REG
       }
       
-      is("b1101111".U) {
+      is("b1101111".U) {//JAL
         instr_type := InstrType.Jump
         immExt := Cat(Fill(11, immJ(20)), immJ)
+        fu_signals.opr1_sel := OprSel.PC
+        fu_signals.opr2_sel := OprSel.IMM
       }
 
-      is("b1100111".U) {
+      is("b1100111".U) {//JALR
         instr_type := InstrType.Jump
         immExt := Cat(Fill(20, immI(11)), immI)
+        fu_signals.opr1_sel := OprSel.REG
+        fu_signals.opr2_sel := OprSel.IMM
       }
       
       is("b1110011".U) { //CSR
         instr_type := InstrType.CSR
         immExt := Cat(Fill(20, immI(11)), immI)
+        fu_signals.opr1_sel := OprSel.REG
+        fu_signals.opr2_sel := OprSel.IMM
       }
 
       is("b0110111".U){ //LUI
         instr_typ := InstrType.ALU
         immExt := immU
+        fu_signals.opr1_sel := OprSel.IMM
+        fu_signals.opr2_sel := OprSel.Z
       }
 
       is("b0010111".U){ //AUIPC
         instr_typ := InstrType.ALU
         immExt := immU
+        fu_signals.opr1_sel := OprSel.PC
+        fu_signals.opr2_sel := OprSel.IMM
       }
       
     }//switch的后括号
-
-    val fuSignals = FUDecoder(opcode, funct3, funct7)
 
     val instr_trimmed = Cat(funct3, funct7, rd, rs1, rs2,immExt)
 
