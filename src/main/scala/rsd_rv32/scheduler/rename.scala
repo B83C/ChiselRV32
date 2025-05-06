@@ -34,8 +34,8 @@ class RenameUnit(implicit p: Parameters) extends Module {
   val amt = RegInit(VecInit((0 to 31).map(i => i.U(log2Ceil(p.PRF_DEPTH).W)))) //架构寄存器表，存储逻辑寄存器到物理寄存器的映射关系
 
   val freelist = RegInit(VecInit((32 to p.PRF_DEPTH - 1).map(i => i.U(log2Ceil(p.PRF_DEPTH).W)))) //空闲寄存器列表，存储空闲物理寄存器的地址
-  val freelist_head = RegInit(0.U(log2Ceil(p.PRF_DEPTH).W)) //空闲寄存器列表头指针
-  val freelist_tail = RegInit(0.U(log2Ceil(p.PRF_DEPTH).W)) //空闲寄存器列表尾指针
+  val freelist_head = RegInit(0.U(log2Ceil(p.PRF_DEPTH - 32).W)) //空闲寄存器列表头指针
+  val freelist_tail = RegInit(0.U(log2Ceil(p.PRF_DEPTH - 32).W)) //空闲寄存器列表尾指针
   val freelist_empty = RegInit(false.B) //空闲寄存器列表空标志
 
   val rename_ready = WireDefault(true.B) //重命名单元准备好接收指令标志
@@ -104,11 +104,11 @@ class RenameUnit(implicit p: Parameters) extends Module {
           
               dis_uop(0).bits.pdst := freelist(freelist_head) //从空闲寄存器列表中读出空闲物理寄存器地址
 
-              head_next := freelist_head + 1.U
+              head_next := Mux(freelist_head =/= (p.PRF_DEPTH - 32 - 1).U, freelist_head + 1.U, 0.U)
               /*when(freelist_head + 1.U === freelist_tail){
                 freelist_empty := true.B //空闲寄存器列表空
               }*/
-              empty_next := freelist_head + 1.U === freelist_tail
+              empty_next := head_next === freelist_tail
 
               rmt(io.id_uop(0).bits.instr(4,0)) := freelist(freelist_head) //更新重命名表
               rmt_valid(io.id_uop(0).bits.instr(4,0)) := true.B //更新重命名表有效位
@@ -147,11 +147,11 @@ class RenameUnit(implicit p: Parameters) extends Module {
               dis_uop(0).bits.pdst := freelist(freelist_head)
               dis_uop(1).bits.pdst := freelist(freelist_head + 1.U) //从空闲寄存器列表中读出空闲物理寄存器地址
 
-              head_next := freelist_head + 2.U
+              head_next := Mux(freelist_head =/= (p.PRF_DEPTH - 32 - 2), freelist_head + 2.U, 0.U)
               /*when(freelist_head + 2.U === freelist_tail){
                 freelist_empty := true.B //空闲寄存器列表空
               }*/
-              empty_next := freelist_head + 2.U === freelist_tail
+              empty_next := head_next === freelist_tail
 
               when(io.id_uop(0).bits.instr(4,0) === io.id_uop(1).bits.instr(4,0)){
                 //两个指令的目的寄存器相同
@@ -208,11 +208,11 @@ class RenameUnit(implicit p: Parameters) extends Module {
 
               dis_uop(0).bits.pdst := freelist(freelist_head) //从空闲寄存器列表中读出空闲物理寄存器地址
 
-              head_next := freelist_head + 1.U
+              head_next := Mux(freelist_head =/= (p.PRF_DEPTH - 32 - 1).U, freelist_head + 1.U, 0.U)
               /*when(freelist_head + 1.U === freelist_tail){
                 freelist_empty := true.B //空闲寄存器列表空
               }*/
-              empty_next := freelist_head + 1.U === freelist_tail
+              empty_next := head_next === freelist_tail
 
               rmt(io.id_uop(0).bits.instr(4,0)) := freelist(freelist_head) //更新重命名表
               rmt_valid(io.id_uop(0).bits.instr(4,0)) := true.B //更新重命名表有效位
@@ -260,11 +260,11 @@ class RenameUnit(implicit p: Parameters) extends Module {
 
               dis_uop(1).bits.pdst := freelist(freelist_head) //从空闲寄存器列表中读出空闲物理寄存器地址
 
-              head_next := freelist_head + 1.U
+              head_next := Mux(freelist_head =/= (p.PRF_DEPTH - 32 - 1).U, freelist_head + 1.U, 0.U)
               /*when(freelist_head + 1.U === freelist_tail){
                 freelist_empty := true.B //空闲寄存器列表空
               }*/
-              empty_next := freelist_head + 1.U === freelist_tail
+              empty_next := head_next === freelist_tail
 
               rmt(io.id_uop(1).bits.instr(4,0)) := freelist(freelist_head) //更新重命名表
               rmt_valid(io.id_uop(1).bits.instr(4,0)) := true.B //更新重命名表有效位
@@ -317,28 +317,28 @@ class RenameUnit(implicit p: Parameters) extends Module {
     switch(rob_valid_bits){
       is("b10".U){
         when(io.rob_commitsignal(0).bits.rob_type.hasPd){
-          amt(io.rob_commitsignal(0).bits(4,0)) := io.rob_commitsignal(0).bits(5 + p.PRF_DEPTH - 1,5)
-          tail_next := freelist_tail + 1.U
+          amt(io.rob_commitsignal(0).bits(4,0)) := io.rob_commitsignal(0).bits(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+          tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1), freelist_tail + 1.U, 0.U)
         }
       }
       is("b11".U){
         when(io.rob_commitsignal(0).bits.rob_type.hasPd){
           when(io.rob_commitsignal(1).bits.rob_type.hasPd){
-            tail_next := freelist_tail + 2.U
+            tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 2).U, freelist_tail + 2.U, 0.U)
             when(io.rob_commitsignal(0).bits(4,0) === io.rob_commitsignal(1).bits(4,0)){
-              amt(io.rob_commitsignal(1).bits(4,0)) := io.rob_commitsignal(1).bits(5 + p.PRF_DEPTH - 1,5)
+              amt(io.rob_commitsignal(1).bits(4,0)) := io.rob_commitsignal(1).bits(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
             }.otherwise{
-              amt(io.rob_commitsignal(0).bits(4,0)) := io.rob_commitsignal(0).bits(5 + p.PRF_DEPTH - 1,5)
-              amt(io.rob_commitsignal(1).bits(4,0)) := io.rob_commitsignal(1).bits(5 + p.PRF_DEPTH - 1,5)
+              amt(io.rob_commitsignal(0).bits(4,0)) := io.rob_commitsignal(0).bits(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+              amt(io.rob_commitsignal(1).bits(4,0)) := io.rob_commitsignal(1).bits(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
             }
           }.otherwise{
-            tail_next := freelist_tail + 1.U
-            amt(io.rob_commitsignal(0).bits(4,0)) := io.rob_commitsignal(0).bits(5 + p.PRF_DEPTH - 1,5)
+            tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1).U, freelist_tail + 1.U, 0.U)
+            amt(io.rob_commitsignal(0).bits(4,0)) := io.rob_commitsignal(0).bits(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
           }
         }.otherwise{
           when(io.rob_commitsignal(1).bits.rob_type.hasPd){
-            tail_next := freelist_tail + 1.U
-            amt(io.rob_commitsignal(1).bits(4,0)) := io.rob_commitsignal(1).bits(5 + p.PRF_DEPTH - 1,5)
+            tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1).U, freelist_tail + 1.U, 0.U)
+            amt(io.rob_commitsignal(1).bits(4,0)) := io.rob_commitsignal(1).bits(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
           }
         }
       }
