@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
 
-/*class BP_IFU_Interface(implicit p: Parameters) extends Bundle {
+/*class BP_IFU_Interface(implicit p: Parameters) extends CustomBundle {
     val PC_cur = Input(UInt(p.XLEN.W)) //当前IFU的PC值
     val target_PC = Output(UInt(p.XLEN.W)) //预测的下个cycle取指的目标地址
     val btb_hit = Output(Vec(p.CORE_WIDTH, Bool())) //1代表hit，0相反；将最年轻的命中BTB的置为1，其余为0
@@ -12,7 +12,7 @@ import rsd_rv32.common._
     val GHR = Output(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照
 }
 
-class BP_ROB_Interface(implicit p: Parameters) extends Bundle {
+class BP_ROB_Interface(implicit p: Parameters) extends CustomBundle {
     val PC = Input(UInt(p.XLEN.W)) //当前ROB的PC值
     val instrType = Input(UInt(3.W)) //当前指令类型,该模块需要区分条件分支和无条件分支
     val btb_hit = Input(Bool()) //该分支指令最初是否命中BTB
@@ -21,7 +21,7 @@ class BP_ROB_Interface(implicit p: Parameters) extends Bundle {
     val actualTargetPC = Input(UInt(p.XLEN.W)) //目标地址
 } */
 
-class BP_IO (implicit p: Parameters) extends Bundle {
+class BP_IO (implicit p: Parameters) extends CustomBundle {
     //with IF
     val instr_addr = Input(UInt(p.XLEN.W)) //当前PC值，用于访问BTB获得跳转目标地址，以及访问BHT获得跳转预测结果
     val target_PC = Output(UInt(p.XLEN.W)) //预测的下个cycle取指的目标地址

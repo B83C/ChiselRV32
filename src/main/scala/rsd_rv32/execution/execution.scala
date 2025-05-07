@@ -8,7 +8,7 @@ import rsd_rv32.common._
 import rsd_rv32.frontend._
 
 // ALU 的 interface
-class ALUIO(implicit p: Parameters) extends Bundle {
+class ALUIO(implicit p: Parameters) extends CustomBundle {
   //输入操作数
   val in1 = Input(UInt(p.XLEN.W))  
   val in2 = Input(UInt(p.XLEN.W))  
@@ -19,7 +19,7 @@ class ALUIO(implicit p: Parameters) extends Bundle {
   val cmp_out = Output(Bool())      
 }
 
-class ALU(implicit p: Parameters) extends Module {
+class ALU(implicit p: Parameters) extends Module with ALUConsts {
   val io = IO(new ALUIO)
   //运算逻辑
   io.out := MuxLookup(io.fn, 0.U, Seq(
@@ -41,7 +41,7 @@ class ALU(implicit p: Parameters) extends Module {
 
 
 class BypassNetworkIO(
-)(implicit p: Parameters) extends Bundle with HasUOP {
+)(implicit p: Parameters) extends CustomBundle with HasUOP {
   // 寄存器读取请求
   val preg_rd    = Input(UInt(log2Ceil(p.PRF_DEPTH).W))
   
@@ -67,21 +67,21 @@ class BypassNetwork(
 }
 
 //每个FunctionalUnit都能通过uop的原指令生成立即数，并且判定操作数的类型
-class FUReq()(implicit p: Parameters) extends Bundle with HasUOP {
+class FUReq()(implicit p: Parameters) extends CustomBundle with HasUOP {
     val kill = Input(Bool())   //Killed upon misprediction/exception
     val rs1 = Input(UInt(p.XLEN.W))  //通过RRDWB获得的rs1数据
     val rs2 = Input(UInt(p.XLEN.W))  //通过RRDWB获得的rs1数据
 }
 
 class ExuDataOut(
-)(implicit p: Parameters) extends Bundle with HasUOP {
+)(implicit p: Parameters) extends CustomBundle with HasUOP {
   val data = UInt(p.XLEN.W)
 }
 
-class FUBranchInfo(implicit p: Parameters) extends Bundle {
+class FUBranchInfo(implicit p: Parameters) extends CustomBundle {
 }
 
-class ROBSignal(implicit p: Parameters) extends Bundle {
+class ROBSignal(implicit p: Parameters) extends CustomBundle {
 }
 
 //功能单元的抽象类，定义了底层模块端口

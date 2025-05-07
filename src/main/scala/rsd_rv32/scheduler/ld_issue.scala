@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
 
-class ld_issue_IO(implicit p: Parameters) extends Bundle {
+class ld_issue_IO(implicit p: Parameters) extends CustomBundle {
     //来自Dispatch Unit的输入
     val dis_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new DISPATCH_LDISSUE_uop())))  //来自Dispatch Unit的输入
 

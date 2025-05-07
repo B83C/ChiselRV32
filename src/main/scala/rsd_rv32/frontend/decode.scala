@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
 
-class Decode_IO(implicit p: Parameters) extends Bundle {
+class Decode_IO(implicit p: Parameters) extends CustomBundle {
   // with IF
   val if_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new IF_ID_uop())))
   val id_ready = Output(Bool()) // ID是否准备好接收指令

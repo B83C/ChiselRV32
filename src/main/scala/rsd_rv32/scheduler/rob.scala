@@ -7,7 +7,7 @@ import rsd_rv32.common._
 
 
 /*
-class Dispatch_ROB_Interface(implicit p: Parameters) extends Bundle {
+class Dispatch_ROB_Interface(implicit p: Parameters) extends CustomBundle {
     val dis_uops = Valid(Vec(p.DISPATCH_WIDTH, new uop()))  //Dispatch Unit的uop
 
     val rob_empty = Input(Bool())  //ROB空标志(0表示空，1表示非空)
@@ -15,19 +15,19 @@ class Dispatch_ROB_Interface(implicit p: Parameters) extends Bundle {
     val rob_tail = Input(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
 }
 
-class WB_ROB_Interface(implicit p: Parameters) extends Bundle {
+class WB_ROB_Interface(implicit p: Parameters) extends CustomBundle {
     val complete_map = Input(Vec(p.FU_NUM, Bool()))  //完成映射表
     val complete_uop = Input(Vec(p.FU_NUM, new uop()))  //来自exu的uop
     val mispred = Input(Bool()) //分支误预测信号
     val if_jump = Input(Bool()) //分支指令跳转信号
 }
 
-class ROB_broadcast(implicit p: Parameters) extends Bundle {
+class ROB_broadcast(implicit p: Parameters) extends CustomBundle {
     val commit_signal = Valid(Vec(p.DISPATCH_WIDTH, UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))) //ROB条目
 }
 */
 
-class ROBIO(implicit p: Parameters) extends Bundle {
+class ROBIO(implicit p: Parameters) extends CustomBundle {
     val dis_uop = Vec(p.CORE_WIDTH, (new DISPATCH_ROB_uop()))  //Dispatch Unit的uop,存入条目中
 
     val empty_full = Output(Bool())  //ROB空标志(0表示非满，1表示满)

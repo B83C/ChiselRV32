@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
 
-class exu_issue_IO(implicit p: Parameters) extends Bundle {
+class exu_issue_IO(implicit p: Parameters) extends CustomBundle {
     //来自Dispatch Unit的输入
     // val bits.iq_index = Input(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID,
     val dis_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop())))  //来自Dispatch Unit的输入

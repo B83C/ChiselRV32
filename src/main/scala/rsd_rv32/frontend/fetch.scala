@@ -4,7 +4,7 @@ import chisel13._
 import chisel13.util._
 import rsd_rv32.common._
 
-class Fetch_IO(implicit p: Parameters) extends Bundle {
+class Fetch_IO(implicit p: Parameters) extends CustomBundle {
     // with MEM
     val instr_addr = Output(UInt(p.XLEN.W)) //当前IFU的PC值
     val instr = Input(Vec(p.CORE_WIDTH, UInt(32.W)))

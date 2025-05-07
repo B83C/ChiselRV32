@@ -9,7 +9,7 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.must.Matchers
 
 
-class CircuitTest(implicit p: Parameters) extends AnyFreeSpec with Matchers {
+class CircuitTest extends AnyFreeSpec with Matchers {
   "Comb adder" in {
     simulate(new Core()) {c=>
       // println(s"Testing ${a} + ${b}")

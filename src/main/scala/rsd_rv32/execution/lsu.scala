@@ -6,7 +6,7 @@ import rsd_rv32.scheduler._
 import rsd_rv32.common._
 
 //该Bundle用于后续向Arbiter传输信号,不是interface
-class Req_Abter(implicit p: Parameters) extends Bundle {
+class Req_Abter(implicit p: Parameters) extends CustomBundle {
 
   val func3     = UInt(3.W) //访存指令的fun3字段
   val data      = UInt(64.W)
@@ -15,7 +15,7 @@ class Req_Abter(implicit p: Parameters) extends Bundle {
 
 }
 
-class LSUIO(implicit p: Parameters) extends Bundle {
+class LSUIO(implicit p: Parameters) extends CustomBundle {
   //with MEM
   val data_addr     = Output(UInt(64.W))//访存指令的目标地址
   val data_into_mem = Output(UInt(64.W))//需要写入储存器的数据

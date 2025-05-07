@@ -8,7 +8,7 @@ object ROBType extends ChiselEnum {
     val Arithmetic, Branch, Jump, Store, CSR = Value
 }
 
-class ROB_Arithmetic(implicit p: Parameters) extends Bundle {
+class ROB_Arithmetic(implicit p: Parameters) extends CustomBundle {
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W) // Physical destination register
     val rd = UInt(5.W) // Destination register
 }
@@ -17,7 +17,7 @@ object ROB_Arithmetic {
     def width(implicit p: Parameters): Int = (new ROB_Arithmetic).getWidth
 }
 
-class ROB_Branch(implicit p: Parameters) extends Bundle {
+class ROB_Branch(implicit p: Parameters) extends CustomBundle {
     val btb_hit = BTBHit() // BTB hit flag
     val target_PC = UInt(p.XLEN.W) // Target address
     val branch_direction = Bool() // Branch direction(1 represents taken)
@@ -28,7 +28,7 @@ object ROB_Branch {
     def width(implicit p: Parameters): Int = (new ROB_Branch).getWidth
 }
 
-class ROB_Jump(implicit p: Parameters) extends Bundle {
+class ROB_Jump(implicit p: Parameters) extends CustomBundle {
     val btb_hit = BTBHit() // BTB hit flag
     val target_PC = UInt(p.XLEN.W) // Target address
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W) // Physical destination register
@@ -39,7 +39,7 @@ object ROB_Jump {
     def width(implicit p: Parameters): Int = (new ROB_Jump).getWidth
 }
 
-class ROB_Store(implicit p: Parameters) extends Bundle {
+class ROB_Store(implicit p: Parameters) extends CustomBundle {
 
 }
 
@@ -47,7 +47,7 @@ object ROB_Store {
     def width(implicit p: Parameters): Int = (new ROB_Store).getWidth
 }
 
-class ROB_CSR(implicit p: Parameters) extends Bundle {
+class ROB_CSR(implicit p: Parameters) extends CustomBundle {
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W) // Physical destination register
     val rd = UInt(5.W) // Destination register
 }
@@ -60,7 +60,7 @@ object Payload {
     def width(implicit p: Parameters): Int = (ROB_Arithmetic.width max ROB_Branch.width max ROB_Jump.width max ROB_Store.width max ROB_CSR.width)
 }
 
-class ROBContent(implicit p: Parameters) extends Bundle {
+class ROBContent(implicit p: Parameters) extends CustomBundle {
     val instr_addr = UInt(p.XLEN.W) // Instruction address
     val rob_type = ROBType() // Instruction type
     val mispred = Bool() // Misprediction flag(1 represents misprediction)

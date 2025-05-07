@@ -10,7 +10,7 @@ import rsd_rv32.frontend._
 import rsd_rv32.execution._
 
 // Top Level Structure
-class Core()(implicit p: Parameters) extends Module {
+class Core() extends Module {
   val io = IO(new Bundle {
     // val mem = new MemInterface
   })

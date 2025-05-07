@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
 
-class Dispatcher_IO(implicit p:Parameters) extends Bundle {
+class Dispatcher_IO(implicit p:Parameters) extends CustomBundle {
   // with Rename
   val rename_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new RENAME_DISPATCH_uop()))) //来自rename单元的uop
   val dis_ready = Output(Bool()) // 反馈给rename单元，显示Dispatch单元是否准备好接收指令

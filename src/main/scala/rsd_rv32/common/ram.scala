@@ -7,7 +7,7 @@ class Port(
   val addr_width: Int,
    val data_width: Int,
    val read: Boolean,
- )(implicit p: Parameters) extends Bundle {
+ )(implicit p: Parameters) extends CustomBundle {
   val addr = Input(UInt(addr_width.W))
   val data = if (read) Output(UInt(data_width.W)) else Input(UInt(data_width.W))
 }
