@@ -43,7 +43,7 @@ class RenameUnit(implicit p: Parameters) extends Module {
   val head_next = WireDefault(freelist_head)
   val tail_next = WireDefault(freelist_tail)
   val empty_next = WireDefault(false.B)
-  val reg_dis_uop = RegEnable(next = dis_uop, enable = io.dis_ready, init = VecInit(Seq.fill(p.CORE_WIDTH)(0.U.asTypeOf(Valid(new RENAME_DISPATCH_uop()))))) //寄存器存储发往Dispatch单元的uop
+  val reg_dis_uop = RegEnable(dis_uop, VecInit(Seq.fill(p.CORE_WIDTH)(0.U.asTypeOf(Valid(new RENAME_DISPATCH_uop())))), io.dis_ready) //寄存器存储发往Dispatch单元的uop
 
   io.rename_ready := rename_ready //反馈给ID单元
   io.dis_uop := reg_dis_uop //发往Dispatch单元的uop
@@ -119,8 +119,8 @@ class RenameUnit(implicit p: Parameters) extends Module {
         dis_uop(0).bits.ps2 := Mux(rmt_valid(io.id_uop(0).bits.instr(17,13)), rmt(io.id_uop(0).bits.instr(17,13)), amt(io.id_uop(0).bits.instr(17,13))) //读出源操作数映射的物理寄存器地址
       }
       is("b11".U){
-        when(io.id_uop(0).instr_type.needPd){
-          when(io.id_uop(1).instr_type.needPd){
+        when(needPd(io.id_uop(0).bits.instr_type)){
+          when(needPd(io.id_uop(1).bits.instr_type)){
             rename_ready := io.dis_ready && (freelist_tail - freelist_head >= 2.U || (freelist_head === freelist_tail && !freelist_empty))
             when(rename_ready){
               dis_uop(0).valid := true.B
@@ -147,7 +147,7 @@ class RenameUnit(implicit p: Parameters) extends Module {
               dis_uop(0).bits.pdst := freelist(freelist_head)
               dis_uop(1).bits.pdst := freelist(freelist_head + 1.U) //从空闲寄存器列表中读出空闲物理寄存器地址
 
-              head_next := Mux(freelist_head =/= (p.PRF_DEPTH - 32 - 2), freelist_head + 2.U, 0.U)
+              head_next := Mux(freelist_head =/= (p.PRF_DEPTH - 32 - 2).U, freelist_head + 2.U, 0.U)
               /*when(freelist_head + 2.U === freelist_tail){
                 freelist_empty := true.B //空闲寄存器列表空
               }*/
@@ -171,12 +171,12 @@ class RenameUnit(implicit p: Parameters) extends Module {
               dis_uop(0).bits.ps2 := Mux(rmt_valid(io.id_uop(0).bits.instr(17,13)), rmt(io.id_uop(0).bits.instr(17,13)), amt(io.id_uop(0).bits.instr(17,13))) //读出源操作数映射的物理寄存器地址
 
               when(io.id_uop(1).bits.instr(12,8) === io.id_uop(0).bits.instr(4,0)){
-                dis_uop(1).bits.ps1 := freelists(freelist_head)
+                dis_uop(1).bits.ps1 := freelist(freelist_head)
               }.otherwise{
                 dis_uop(1).bits.ps1 := Mux(rmt_valid(io.id_uop(1).bits.instr(12,8)), rmt(io.id_uop(1).bits.instr(12,8)), amt(io.id_uop(1).bits.instr(12,8))) //读出源操作数映射的物理寄存器地址
               }
               when(io.id_uop(1).bits.instr(17,13) === io.id_uop(0).bits.instr(4,0)){
-                dis_uop(1).bits.ps2 := freelists(freelist_head)
+                dis_uop(1).bits.ps2 := freelist(freelist_head)
               }.otherwise{
                 dis_uop(1).bits.ps2 := Mux(rmt_valid(io.id_uop(1).bits.instr(17,13)), rmt(io.id_uop(1).bits.instr(17,13)), amt(io.id_uop(1).bits.instr(17,13))) //读出源操作数映射的物理寄存器地址
               }
@@ -221,19 +221,19 @@ class RenameUnit(implicit p: Parameters) extends Module {
               dis_uop(0).bits.ps2 := Mux(rmt_valid(io.id_uop(0).bits.instr(17,13)), rmt(io.id_uop(0).bits.instr(17,13)), amt(io.id_uop(0).bits.instr(17,13)))
 
               when(io.id_uop(1).bits.instr(12,8) === io.id_uop(0).bits.instr(4,0)){
-                dis_uop(1).bits.ps1 := freelists(freelist_head)
+                dis_uop(1).bits.ps1 := freelist(freelist_head)
               }.otherwise{
                 dis_uop(1).bits.ps1 := Mux(rmt_valid(io.id_uop(1).bits.instr(12,8)), rmt(io.id_uop(1).bits.instr(12,8)), amt(io.id_uop(1).bits.instr(12,8))) //读出源操作数映射的物理寄存器地址
               }
               when(io.id_uop(1).bits.instr(17,13) === io.id_uop(0).bits.instr(4,0)){
-                dis_uop(1).bits.ps2 := freelists(freelist_head)
+                dis_uop(1).bits.ps2 := freelist(freelist_head)
               }.otherwise{
                 dis_uop(1).bits.ps2 := Mux(rmt_valid(io.id_uop(1).bits.instr(17,13)), rmt(io.id_uop(1).bits.instr(17,13)), amt(io.id_uop(1).bits.instr(17,13))) //读出源操作数映射的物理寄存器地址
               }
             }
           }
         }.otherwise{
-          when(io.id_uop(1).instr_type.needPd){
+          when(needPd(io.id_uop(1).bits.instr_type)){
             rename_ready := io.dis_ready && (freelist_head =/= freelist_tail || !freelist_empty)
 
             when(rename_ready){
@@ -316,29 +316,29 @@ class RenameUnit(implicit p: Parameters) extends Module {
   when(!flush){
     switch(rob_valid_bits){
       is("b10".U){
-        when(io.rob_commitsignal(0).bits.rob_type.hasPd){
-          amt(io.rob_commitsignal(0).bits(4,0)) := io.rob_commitsignal(0).bits(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
-          tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1), freelist_tail + 1.U, 0.U)
+        when(hasPd(io.rob_commitsignal(0).bits.rob_type)){
+          amt(io.rob_commitsignal(0).bits.payload(4,0)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+          tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1).U, freelist_tail + 1.U, 0.U)
         }
       }
       is("b11".U){
-        when(io.rob_commitsignal(0).bits.rob_type.hasPd){
-          when(io.rob_commitsignal(1).bits.rob_type.hasPd){
+        when(hasPd(io.rob_commitsignal(0).bits.rob_type)){
+          when(hasPd(io.rob_commitsignal(1).bits.rob_type)){
             tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 2).U, freelist_tail + 2.U, 0.U)
-            when(io.rob_commitsignal(0).bits(4,0) === io.rob_commitsignal(1).bits(4,0)){
-              amt(io.rob_commitsignal(1).bits(4,0)) := io.rob_commitsignal(1).bits(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+            when(io.rob_commitsignal(0).bits.payload(4,0) === io.rob_commitsignal(1).bits.payload(4,0)){
+              amt(io.rob_commitsignal(1).bits.payload(4,0)) := io.rob_commitsignal(1).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
             }.otherwise{
-              amt(io.rob_commitsignal(0).bits(4,0)) := io.rob_commitsignal(0).bits(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
-              amt(io.rob_commitsignal(1).bits(4,0)) := io.rob_commitsignal(1).bits(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+              amt(io.rob_commitsignal(0).bits.payload(4,0)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+              amt(io.rob_commitsignal(1).bits.payload(4,0)) := io.rob_commitsignal(1).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
             }
           }.otherwise{
             tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1).U, freelist_tail + 1.U, 0.U)
-            amt(io.rob_commitsignal(0).bits(4,0)) := io.rob_commitsignal(0).bits(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+            amt(io.rob_commitsignal(0).bits.payload(4,0)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
           }
         }.otherwise{
-          when(io.rob_commitsignal(1).bits.rob_type.hasPd){
+          when(hasPd(io.rob_commitsignal(1).bits.rob_type)){
             tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1).U, freelist_tail + 1.U, 0.U)
-            amt(io.rob_commitsignal(1).bits(4,0)) := io.rob_commitsignal(1).bits(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+            amt(io.rob_commitsignal(1).bits.payload(4,0)) := io.rob_commitsignal(1).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
           }
         }
       }
