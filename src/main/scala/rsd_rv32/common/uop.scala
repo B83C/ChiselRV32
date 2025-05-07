@@ -2,7 +2,7 @@ package rsd_rv32.common
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.ChiselEnum
+import chisel3.ChiselEnum
 
 object InstrType extends ChiselEnum {
     val ALU, Branch, Jump, LD, ST, CSR, MUL, DIV_REM = Value
@@ -52,8 +52,10 @@ object BUSignals {
 //     val instr = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode;
 // }
 
-// Well be removed!
-abstract trait HasUOP() extends Bundle {
+class CustomBundle(implicit val p: Parameters) extends Bundle
+
+// Will be removed!
+abstract trait HasUOP extends CustomBundle {
     val uop = new uop()
 }
 

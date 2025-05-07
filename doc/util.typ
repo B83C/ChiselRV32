@@ -192,27 +192,29 @@
 //   params: dictonary, 存储数据结构为parameter name: (type, comment)
 //   members: dictionary, 同上, 是类型的所有成员，对于Bundle来说，是有意义的
 //   io: dictionary, 同上, io是members的特例，即val blabla = IO(...)归属与IO的一部分
-#let c = (
-  r("core.scala"),
-  c("common"),
-  c("freelist"),
-  c("mem"),
-  c("ram"),
-  c("uop"),
-  c("rob_content"),
-  f("branch_predict"),
-  f("decode"),
-  f("fetch"),
-  s("dispatch"),
-  s("exu_issue"),
-  s("ld_issue"),
-  s("rename"),
-  s("st_issue"),
-  s("rob"),
-  e("lsu"),
-  e("prf"),
-  e("execution"),
-).fold((:), (acc, p) => acc + add_modules(p))
+// #let c = (
+//   r("core.scala"),
+//   c("common"),
+//   c("freelist"),
+//   c("mem"),
+//   c("ram"),
+//   c("uop"),
+//   c("rob_content"),
+//   f("branch_predict"),
+//   f("decode"),
+//   f("fetch"),
+//   s("dispatch"),
+//   s("exu_issue"),
+//   s("ld_issue"),
+//   s("rename"),
+//   s("st_issue"),
+//   s("rob"),
+//   e("lsu"),
+//   e("prf"),
+//   e("execution"),
+// ).fold((:), (acc, p) => acc + add_modules(p))
+
+#let c = read("srcs_files_list.txt").split("\n").fold((:), (acc, p) => acc + add_modules(p))
 
 #let names = c.keys()
 

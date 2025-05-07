@@ -1,6 +1,7 @@
 package rsd_rv32
 
 import chisel3._
+import chisel3.common._
 
 import chisel3.experimental.BundleLiterals._
 import chisel3.simulator.EphemeralSimulator._
@@ -8,7 +9,7 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.must.Matchers
 
 
-class CircuitTest extends AnyFreeSpec with Matchers {
+class CircuitTest(implicit p: Parameters) extends AnyFreeSpec with Matchers {
   "Comb adder" in {
     simulate(new Core()) {c=>
       // println(s"Testing ${a} + ${b}")

@@ -2,7 +2,6 @@ package rsd_rv32.execution
 
 import chisel3._
 import chisel3.util._
-import freechips.rocketchip.config.Parameters
 
 import rsd_rv32.common._
 
@@ -11,18 +10,17 @@ import rsd_rv32.frontend._
 // ALU 的 interface
 class ALUIO(implicit p: Parameters) extends Bundle {
   //输入操作数
-  val in1 = Input(UInt(p(XLen).W))  
-  val in2 = Input(UInt(p(XLen).W))  
+  val in1 = Input(UInt(p.XLEN.W))  
+  val in2 = Input(UInt(p.XLEN.W))  
   val fn  = Input(UInt(4.W))        
 
   // 输出结果
-  val out = Output(UInt(p(XLen).W)) 
+  val out = Output(UInt(p.XLEN.W)) 
   val cmp_out = Output(Bool())      
 }
 
 class ALU(implicit p: Parameters) extends Module {
   val io = IO(new ALUIO)
-
   //运算逻辑
   io.out := MuxLookup(io.fn, 0.U, Seq(
     ALU_ADD -> (io.in1 + io.in2),
@@ -71,8 +69,8 @@ class BypassNetwork(
 //每个FunctionalUnit都能通过uop的原指令生成立即数，并且判定操作数的类型
 class FUReq()(implicit p: Parameters) extends Bundle with HasUOP {
     val kill = Input(Bool())   //Killed upon misprediction/exception
-    val rs1 = Input(UInt(p(XLen).W))  //通过RRDWB获得的rs1数据
-    val rs2 = Input(UInt(p(XLen).W))  //通过RRDWB获得的rs1数据
+    val rs1 = Input(UInt(p.XLEN.W))  //通过RRDWB获得的rs1数据
+    val rs2 = Input(UInt(p.XLEN.W))  //通过RRDWB获得的rs1数据
 }
 
 class ExuDataOut(

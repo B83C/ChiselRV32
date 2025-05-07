@@ -283,7 +283,7 @@ import chisel3.util._
 // }
 
 /* 多端口读写物理寄存器*/
-class PRF[T:< Data](
+class PRF[T<: Data](
   dType: T,
   regDepth: Int,
   numReadPorts: Int,

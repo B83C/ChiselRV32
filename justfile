@@ -7,6 +7,10 @@ test unittest="_.test": fetchMill
 	@{{MILL}} {{unittest}}
 
 [working-directory: 'doc']
+update_src_list:
+	(cd ../; find src -type f -name "*.scala") > srcs_files_list.txt
+
+[working-directory: 'doc']
 diagram_pdf:
 	typst compile diagram_standalone.typ diagram.pdf
 
@@ -15,5 +19,5 @@ diagram:
 	typst compile --format svg diagram_standalone.typ diagram.svg
 
 [working-directory: 'doc']
-spec: diagram 
+spec: update_src_list diagram 
 	typst compile spec.typ --root ..

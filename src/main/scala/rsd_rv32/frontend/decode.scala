@@ -36,7 +36,7 @@ class DecodeUnit(implicit p: Parameters) extends Module {
     val funct3 = instr(14,12)
     val rs1 = instr(19,15)
     val rs2 = instr(24,20)
-    val funct7(31,25)
+    // val funct7(31,25)
 
     //读取可能的立即数
     val immI = instr(31,20)
