@@ -1,0 +1,10 @@
+<component name="libraryTable">
+    <library name="coursier-env_2.13-2.1.21.jar">
+        <CLASSES>
+            <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/io/get-coursier/coursier-env_2.13/2.1.21/coursier-env_2.13-2.1.21.jar!/"/>
+        </CLASSES>
+        <SOURCES>
+            <root url="jar://$USER_HOME$/AppData/Local/Coursier/cache/v1/https/repo1.maven.org/maven2/io/get-coursier/coursier-env_2.13/2.1.21/coursier-env_2.13-2.1.21-sources.jar!/"/>
+        </SOURCES>
+    </library>
+</component>
