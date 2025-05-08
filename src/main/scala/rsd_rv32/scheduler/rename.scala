@@ -2,13 +2,12 @@ package rsd_rv32.scheduler
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental._
 
 import rsd_rv32.common._
 
 
 // 重命名单元将逻辑寄存器地址映射成实际寄存器。逻辑寄存器指的是ISA定义的x0-x31，而实际寄存器数量多于32个，一般可达128个。主要解决WAW，WAR等问题。
-class RenameUnit_IO(implicit p: Parameters) extends CustomBundle {
+class RenameUnit_IO(implicit p: Parameters) extends Bundle {
   //with ID
   val id_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new ID_RENAME_uop()))) //来自ID单元的uop
   val rename_ready = Output(Bool()) // 反馈给IDU，显示Rename单元是否准备好接收指令
@@ -42,7 +41,7 @@ class RenameUnit(implicit p: Parameters) extends Module {
   val dis_uop = WireDefault(VecInit(Seq.fill(p.CORE_WIDTH)(0.U.asTypeOf(Valid(new RENAME_DISPATCH_uop()))))) //发往Dispatch单元的uop
   val head_next = WireDefault(freelist_head)
   val tail_next = WireDefault(freelist_tail)
-  val empty_next = WireDefault(false.B)
+  val empty_next = WireDefault(freelist_empty)
   val reg_dis_uop = RegEnable(dis_uop, VecInit(Seq.fill(p.CORE_WIDTH)(0.U.asTypeOf(Valid(new RENAME_DISPATCH_uop())))), io.dis_ready) //寄存器存储发往Dispatch单元的uop
 
   io.rename_ready := rename_ready //反馈给ID单元
@@ -74,7 +73,52 @@ class RenameUnit(implicit p: Parameters) extends Module {
   when(!flush){
     switch(valid_bits){
       is("b10".U){
-        switch(io.id_uop(0).bits.instr_type){
+        when(needPd(io.id_uop(0).bits.instr_type)){
+          rename_ready := io.dis_ready && (freelist_head =/= freelist_tail || !freelist_empty)
+
+          when(rename_ready){
+            dis_uop(0).valid := true.B
+            dis_uop(0).bits.instr := io.id_uop(0).bits.instr
+            dis_uop(0).bits.instr_type := io.id_uop(0).bits.instr_type
+            dis_uop(0).bits.fu_signals := io.id_uop(0).bits.fu_signals
+            dis_uop(0).bits.instr_addr := io.id_uop(0).bits.instr_addr
+            dis_uop(0).bits.target_PC := io.id_uop(0).bits.target_PC
+            dis_uop(0).bits.GHR := io.id_uop(0).bits.GHR
+            dis_uop(0).bits.branch_pred := io.id_uop(0).bits.branch_pred
+            dis_uop(0).bits.btb_hit := io.id_uop(0).bits.btb_hit
+
+            //从空闲寄存器列表中读出空闲物理寄存器地址
+            dis_uop(0).bits.pdst := freelist(freelist_head)
+
+            head_next := Mux(freelist_head === (p.PRF_DEPTH - 32 - 1).U, 0.U, freelist_head + 1.U)
+            /*when(freelist_head + 1.U === freelist_tail){
+              freelist_empty := true.B //空闲寄存器列表空
+            }*/
+            empty_next := head_next === freelist_tail
+
+            rmt(io.id_uop(0).bits.instr(4,0)) := freelist(freelist_head) //更新重命名表
+            rmt_valid(io.id_uop(0).bits.instr(4,0)) := true.B //更新重命名表有效位
+
+            dis_uop(0).bits.ps1 := Mux(rmt_valid(io.id_uop(0).bits.instr(12,8)), rmt(io.id_uop(0).bits.instr(12,8)), amt(io.id_uop(0).bits.instr(12,8))) //读出源操作数映射的物理寄存器地址
+            dis_uop(0).bits.ps2 := Mux(rmt_valid(io.id_uop(0).bits.instr(17,13)), rmt(io.id_uop(0).bits.instr(17,13)), amt(io.id_uop(0).bits.instr(17,13))) //读出源操作数映射的物理寄存器地址
+          }
+        }.otherwise{
+          rename_ready := io.dis_ready
+
+          dis_uop(0).valid := true.B
+          dis_uop(0).bits.instr := io.id_uop(0).bits.instr
+          dis_uop(0).bits.instr_type := io.id_uop(0).bits.instr_type
+          dis_uop(0).bits.fu_signals := io.id_uop(0).bits.fu_signals
+          dis_uop(0).bits.instr_addr := io.id_uop(0).bits.instr_addr
+          dis_uop(0).bits.target_PC := io.id_uop(0).bits.target_PC
+          dis_uop(0).bits.GHR := io.id_uop(0).bits.GHR
+          dis_uop(0).bits.branch_pred := io.id_uop(0).bits.branch_pred
+          dis_uop(0).bits.btb_hit := io.id_uop(0).bits.btb_hit
+          dis_uop(0).bits.ps1 := Mux(rmt_valid(io.id_uop(0).bits.instr(12,8)), rmt(io.id_uop(0).bits.instr(12,8)), amt(io.id_uop(0).bits.instr(12,8))) //读出源操作数映射的物理寄存器地址
+          dis_uop(0).bits.ps2 := Mux(rmt_valid(io.id_uop(0).bits.instr(17,13)), rmt(io.id_uop(0).bits.instr(17,13)), amt(io.id_uop(0).bits.instr(17,13))) //读出源操作数映射的物理寄存器地址
+        }
+
+        /*switch(io.id_uop(0).bits.instr_type){
           is(InstrType.Branch, InstrType.ST){
             rename_ready := io.dis_ready
 
@@ -116,7 +160,7 @@ class RenameUnit(implicit p: Parameters) extends Module {
           }
         }
         dis_uop(0).bits.ps1 := Mux(rmt_valid(io.id_uop(0).bits.instr(12,8)), rmt(io.id_uop(0).bits.instr(12,8)), amt(io.id_uop(0).bits.instr(12,8))) //读出源操作数映射的物理寄存器地址
-        dis_uop(0).bits.ps2 := Mux(rmt_valid(io.id_uop(0).bits.instr(17,13)), rmt(io.id_uop(0).bits.instr(17,13)), amt(io.id_uop(0).bits.instr(17,13))) //读出源操作数映射的物理寄存器地址
+        dis_uop(0).bits.ps2 := Mux(rmt_valid(io.id_uop(0).bits.instr(17,13)), rmt(io.id_uop(0).bits.instr(17,13)), amt(io.id_uop(0).bits.instr(17,13))) //读出源操作数映射的物理寄存器地址 */
       }
       is("b11".U){
         when(needPd(io.id_uop(0).bits.instr_type)){
@@ -145,9 +189,12 @@ class RenameUnit(implicit p: Parameters) extends Module {
 
               //从空闲寄存器列表中读出空闲物理寄存器地址
               dis_uop(0).bits.pdst := freelist(freelist_head)
-              dis_uop(1).bits.pdst := freelist(freelist_head + 1.U) //从空闲寄存器列表中读出空闲物理寄存器地址
+              dis_uop(1).bits.pdst := freelist(Mux(freelist_head === (p.PRF_DEPTH - 32 - 1).U, 0.U, freelist_head + 1.U)) //从空闲寄存器列表中读出空闲物理寄存器地址
 
-              head_next := Mux(freelist_head =/= (p.PRF_DEPTH - 32 - 2).U, freelist_head + 2.U, 0.U)
+              head_next := MuxLookup(freelist_head, freelist_head + 2.U)(Seq(
+                (p.PRF_DEPTH - 32 - 2).U -> 0.U,
+                (p.PRF_DEPTH - 32 - 1).U -> 1.U
+              ))
               /*when(freelist_head + 2.U === freelist_tail){
                 freelist_empty := true.B //空闲寄存器列表空
               }*/
@@ -155,13 +202,13 @@ class RenameUnit(implicit p: Parameters) extends Module {
 
               when(io.id_uop(0).bits.instr(4,0) === io.id_uop(1).bits.instr(4,0)){
                 //两个指令的目的寄存器相同
-                rmt(io.id_uop(1).bits.instr(4,0)) := freelist(freelist_head + 1.U) //更新重命名表
+                rmt(io.id_uop(1).bits.instr(4,0)) := freelist(Mux(freelist_head === (p.PRF_DEPTH - 32 - 1).U, 0.U, freelist_head + 1.U)) //更新重命名表
 
                 rmt_valid(io.id_uop(1).bits.instr(4,0)) := true.B //更新重命名表有效位
               }.otherwise{
                 //两个指令的目的寄存器不同
                 rmt(io.id_uop(0).bits.instr(4,0)) := freelist(freelist_head) //更新重命名表
-                rmt(io.id_uop(1).bits.instr(4,0)) := freelist(freelist_head + 1.U) //更新重命名表
+                rmt(io.id_uop(1).bits.instr(4,0)) := freelist(Mux(freelist_head === (p.PRF_DEPTH - 32 - 1).U, 0.U, freelist_head + 1.U)) //更新重命名表
 
                 rmt_valid(io.id_uop(0).bits.instr(4,0)) := true.B //更新重命名表有效位
                 rmt_valid(io.id_uop(1).bits.instr(4,0)) := true.B //更新重命名表有效位
@@ -318,27 +365,37 @@ class RenameUnit(implicit p: Parameters) extends Module {
       is("b10".U){
         when(hasPd(io.rob_commitsignal(0).bits.rob_type)){
           amt(io.rob_commitsignal(0).bits.payload(4,0)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+          freelist(freelist_tail) := amt(io.rob_commitsignal(0).bits.payload(4,0))
           tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1).U, freelist_tail + 1.U, 0.U)
         }
       }
       is("b11".U){
         when(hasPd(io.rob_commitsignal(0).bits.rob_type)){
           when(hasPd(io.rob_commitsignal(1).bits.rob_type)){
-            tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 2).U, freelist_tail + 2.U, 0.U)
+            tail_next := MuxLookup(freelist_tail, freelist_tail + 2.U)(Seq(
+              (p.PRF_DEPTH - 32 - 2).U -> 0.U,
+              (p.PRF_DEPTH - 32 - 1).U -> 1.U
+            ))
             when(io.rob_commitsignal(0).bits.payload(4,0) === io.rob_commitsignal(1).bits.payload(4,0)){
               amt(io.rob_commitsignal(1).bits.payload(4,0)) := io.rob_commitsignal(1).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+              freelist(freelist_tail) := amt(io.rob_commitsignal(0).bits.payload(4,0))
+              freelist(Mux(freelist_tail === (p.PRF_DEPTH - 32 - 1).U, 0.U, freelist_tail + 1.U)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
             }.otherwise{
               amt(io.rob_commitsignal(0).bits.payload(4,0)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
               amt(io.rob_commitsignal(1).bits.payload(4,0)) := io.rob_commitsignal(1).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+              freelist(freelist_tail) := amt(io.rob_commitsignal(0).bits.payload(4,0))
+              freelist(Mux(freelist_tail === (p.PRF_DEPTH - 32 - 1).U, 0.U, freelist_tail + 1.U)) := amt(io.rob_commitsignal(0).bits.payload(4,0))
             }
           }.otherwise{
             tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1).U, freelist_tail + 1.U, 0.U)
             amt(io.rob_commitsignal(0).bits.payload(4,0)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+            freelist(freelist_tail) := amt(io.rob_commitsignal(0).bits.payload(4,0))
           }
         }.otherwise{
           when(hasPd(io.rob_commitsignal(1).bits.rob_type)){
             tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1).U, freelist_tail + 1.U, 0.U)
             amt(io.rob_commitsignal(1).bits.payload(4,0)) := io.rob_commitsignal(1).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+            freelist(freelist_tail) := amt(io.rob_commitsignal(1).bits.payload(4,0))
           }
         }
       }
@@ -348,5 +405,38 @@ class RenameUnit(implicit p: Parameters) extends Module {
   //freelist_empty的逻辑
   when(!flush){
     freelist_empty := Mux(head_next === tail_next, empty_next, false.B)
+  }
+
+  printf("\nstart printing-------------------------------------------\n")
+
+  //output
+  printf("\nrename_ready: %d\n", io.rename_ready)
+
+  printf("\n--dis_uop(0)\n")
+  printf("valid: %d\n", io.dis_uop(0).valid)
+  printf("pdst: %d\n", io.dis_uop(0).bits.pdst)
+  printf("ps1: %d\n", io.dis_uop(0).bits.ps1)
+  printf("ps2: %d\n", io.dis_uop(0).bits.ps2)
+  printf("\n--dis_uop(1)\n")
+  printf("valid: %d\n", io.dis_uop(1).valid)
+  printf("pdst: %d\n", io.dis_uop(1).bits.pdst)
+  printf("ps1: %d\n", io.dis_uop(1).bits.ps1)
+  printf("ps2: %d\n", io.dis_uop(1).bits.ps2)
+
+  //signals inside
+  printf("\n--rmt\n")
+  for(i <- 0 until 32){
+    printf("rmt_%d: valid = %d, value = %d\n", i.U, rmt_valid(i), rmt(i))
+  }
+
+  printf("\n--amt\n")
+  for(i <- 0 until 32){
+    printf("amt_%d: %d\n", i.U, amt(i))
+  }
+
+  printf("\n--freelist\n")
+  printf("freelist_head: %d, freelist_tail: %d, freelist_empty: %d\n", freelist_head, freelist_tail, freelist_empty)
+  for(i <- 0 until p.PRF_DEPTH - 32){
+    printf("freelist_%d: %d\n", i.U, freelist(i))
   }
 }
