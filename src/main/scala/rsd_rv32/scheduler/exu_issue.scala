@@ -38,6 +38,9 @@ class exu_issue_IO(implicit p: Parameters) extends CustomBundle {
 
     //with ROB
     val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
+
+    //以下是测试时需要的输出
+    val queue = Output(Vec(p.EXUISSUE_DEPTH, new exu_issue_content())) //发射队列的内容
 }
 
 class exu_issue_content(implicit p: Parameters) extends Bundle {
@@ -178,6 +181,7 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
             0.U.asTypeOf(new exu_issue_content())
         })
     )
+    io.queue := issue_queue
     /*
     val payload = RegInit(
         VecInit(List.fill(p.EXUISSUE_DEPTH)(
@@ -322,5 +326,5 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
 
         }
     }
-    
+
 }
