@@ -24,6 +24,7 @@ object `rsd_rv32` extends SbtModule { m =>
   )
   override def ivyDeps = Agg(
     ivy"org.chipsalliance::chisel:6.6.0",
+    ivy"edu.berkeley.cs::chiseltest:6.0.0"
   )
   override def scalacPluginIvyDeps = Agg(
     ivy"org.chipsalliance:::chisel-plugin:6.6.0",
