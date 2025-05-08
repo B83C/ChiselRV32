@@ -2,7 +2,6 @@ package rsd_rv32.common
 
 import chisel3._
 import chisel3.util._
-import rsd_rv32.common._
 
 object ROBType extends ChiselEnum {
     val Arithmetic, Branch, Jump, Store, CSR = Value

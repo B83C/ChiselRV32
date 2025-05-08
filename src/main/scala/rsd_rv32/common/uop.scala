@@ -2,7 +2,6 @@ package rsd_rv32.common
 
 import chisel3._
 import chisel3.util._
-import chisel3.ChiselEnum
 
 object InstrType extends ChiselEnum {
     val ALU, Branch, Jump, LD, ST, CSR, MUL, DIV_REM = Value
