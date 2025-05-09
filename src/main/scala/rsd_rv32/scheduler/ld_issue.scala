@@ -68,9 +68,9 @@ class issue2ld(implicit p: Parameters) extends Module {
         val if_valid = Input(Bool()) //指令是否有效
         val ps_value = Input(UInt(p.XLEN.W)) //操作数1
         val dis_issue_uop = Input(new DISPATCH_LDISSUE_uop()) //被select的uop
-        val issue_ld_uop = Decoupled(new LDISSUE_LDPIPE_uop()) //发往STPIPE的uop
+        val issue_ld_uop = Output(Valid((new LDISSUE_LDPIPE_uop()))) //发往STPIPE的uop
     })
-    val uop = Reg(Decoupled(new LDISSUE_LDPIPE_uop()))
+    val uop = Reg(Valid(new LDISSUE_LDPIPE_uop()))
     uop.valid := io.if_valid
     uop.bits.instr := io.dis_issue_uop.instr
     uop.bits.pdst := io.dis_issue_uop.pdst
@@ -218,6 +218,7 @@ class ld_issue_queue(implicit p: Parameters) extends Module {
         }
         issue_to_ld.io.dis_issue_uop := payload(select_index.bits)
         issue_to_ld.io.ps_value := io.prf_value
-        io.issue_ld_uop := issue_to_ld.io.issue_ld_uop
+        io.issue_ld_uop.bits := issue_to_ld.io.issue_ld_uop.bits
+        io.issue_ld_uop.valid := issue_to_ld.io.issue_ld_uop.valid
     }
 }

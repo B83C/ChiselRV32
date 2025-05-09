@@ -181,6 +181,7 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
             0.U.asTypeOf(new exu_issue_content())
         })
     )
+
     //调试用代码
     io.queue := issue_queue
     printf(p"------ Issue Queue Contents ------\n\n")

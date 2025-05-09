@@ -37,6 +37,9 @@ class st_issue_IO(implicit p: Parameters) extends CustomBundle {
 
     //To ld_issue_queue
     val st_queue_state = Output(Vec(p.STISSUE_DEPTH, Bool()))//在ld_issue中要进一步处理
+
+    //测试用
+    val queue = Output(Vec(p.STISSUE_DEPTH, new st_issue_content()))
 }
 
 class st_iq_select_logic(implicit p: Parameters) extends Module{
@@ -71,9 +74,9 @@ class issue2st(implicit p: Parameters) extends Module {
         val ps1_value = Input(UInt(p.XLEN.W)) //操作数1
         val ps2_value = Input(UInt(p.XLEN.W)) //操作数2
         val dis_issue_uop = Input(new DISPATCH_STISSUE_uop()) //被select的uop
-        val issue_st_uop = Decoupled(new STISSUE_STPIPE_uop()) //发往STPIPE的uop
+        val issue_st_uop = Output(Valid(new STISSUE_STPIPE_uop())) //发往STPIPE的uop
     })
-    val uop = Reg(Decoupled(new STISSUE_STPIPE_uop()))
+    val uop = Reg(Valid(new STISSUE_STPIPE_uop()))
     uop.valid := io.if_valid
     uop.bits.instr := io.dis_issue_uop.instr
     uop.bits.ps1_value := io.ps1_value
@@ -101,6 +104,19 @@ class st_issue_queue(implicit p: Parameters) extends Module {
             0.U.asTypeOf(new st_issue_content())
         })
     )
+
+    //调试用代码
+    io.queue := issue_queue
+    printf(p"------ Issue Queue Contents ------\n\n")
+    for (i <- 0 until p.EXUISSUE_DEPTH) {
+        val entry = issue_queue(i)
+        printf(p"Entry ${"%02d".format(i)}: " +
+          p"Busy=${entry.busy} " +
+          p"PS1=0x${Hexadecimal(entry.ps1)}[${entry.ready1}] " +
+          p"PS2=0x${Hexadecimal(entry.ps2)}[${entry.ready2}]\n")
+    }
+    printf(p"-----------------------------------\n\n")
+
     val payload = RegInit(
         VecInit(Seq.fill(p.STISSUE_DEPTH) {
             0.U.asTypeOf(new DISPATCH_STISSUE_uop())
@@ -243,8 +259,8 @@ class st_issue_queue(implicit p: Parameters) extends Module {
         issue_to_st.io.dis_issue_uop := payload(select_index.bits)
         issue_to_st.io.ps1_value := io.ps1_value
         issue_to_st.io.ps2_value := io.ps2_value
-        io.issue_st_uop := issue_to_st.io.issue_st_uop
-
+        io.issue_st_uop.bits := issue_to_st.io.issue_st_uop.bits
+        io.issue_st_uop.valid := issue_to_st.io.issue_st_uop.valid
 
         //发射st_queue状态至ld_queue
         for (i <- 0 until p.STISSUE_DEPTH){
