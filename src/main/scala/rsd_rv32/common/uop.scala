@@ -110,7 +110,7 @@ class DISPATCH_ROB_uop(implicit p: Parameters) extends CustomBundle {
     val instr_addr = UInt(p.XLEN.W)
 
     val instr_type = InstrType()
-    val fu_signals = new FUSignals() //needed to distinguish between conditional branches and unconditioal ones
+    //val fu_signals = new FUSignals() //needed to distinguish between conditional branches and unconditioal ones
 
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val rd = UInt(5.W)
@@ -119,7 +119,7 @@ class DISPATCH_ROB_uop(implicit p: Parameters) extends CustomBundle {
     val branch_pred = BranchPred()
     val btb_hit = BTBHit()
     
-    val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+    //val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
 }
 
 class DISPATCH_EXUISSUE_uop(implicit p: Parameters) extends CustomBundle {

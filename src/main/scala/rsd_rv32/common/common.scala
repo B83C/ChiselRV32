@@ -10,13 +10,14 @@ case class Parameters(
   INSTR_WIDTH: Int = 32,
   GHR_WIDTH: Int = 8,
 
-  FU_NUM: Int = 7,
+  FU_NUM: Int = 8,
   ALU_NUM: Int = 2,
   BU_NUM: Int = 1,
   MUL_NUM: Int = 1,
   DIV_NUM: Int = 1,
   STU_NUM: Int = 1,
   LDU_NUM: Int = 1,
+  CSRU_NUM: Int = 1,
 
   PRF_DEPTH: Int = 128,
 
