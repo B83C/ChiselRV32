@@ -181,7 +181,19 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
             0.U.asTypeOf(new exu_issue_content())
         })
     )
+    //调试用代码
     io.queue := issue_queue
+    printf(p"------ Issue Queue Contents ------\n\n")
+    for (i <- 0 until p.EXUISSUE_DEPTH) {
+        val entry = issue_queue(i)
+        printf(p"Entry ${"%02d".format(i)}: " +
+          p"Busy=${entry.busy} " +
+          p"Type=${entry.instr_type} " +
+          p"PS1=0x${Hexadecimal(entry.ps1)}[${entry.ready1}] " +
+          p"PS2=0x${Hexadecimal(entry.ps2)}[${entry.ready2}]\n")
+    }
+    printf(p"-----------------------------------\n\n")
+
     /*
     val payload = RegInit(
         VecInit(List.fill(p.EXUISSUE_DEPTH)(

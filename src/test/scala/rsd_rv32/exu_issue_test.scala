@@ -26,8 +26,10 @@ import chiseltest.testableClock
 
 class exu_issue_test extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = Parameters()
-  "exu_issue" should "accept the instrs from dispatch unit" in {
+  "exu_issue" should "accept the instrs from dispatch unit and issue correctly" in {
     test(new exu_issue_queue()) { dut =>
+      //接收信号后马上发出
+      println("the case that can directly issue")
       dut.io.dis_uop(0).valid.poke(1.U)
       dut.io.dis_uop(0).bits.iq_index.poke(2.U)
       dut.io.dis_uop(0).bits.instr_type.poke(InstrType.ALU)
@@ -38,6 +40,107 @@ class exu_issue_test extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.queue(1).busy.expect(0.U)
       dut.clock.step()
       dut.io.queue(2).busy.expect(0.U)
+      dut.clock.step()
+      //储存
+      println("the case that can't issue")
+      dut.io.dis_uop(0).valid.poke(0.U)
+      dut.clock.step()
+      dut.io.dis_uop(0).bits.fu_signals.opr1_sel.poke(OprSel.REG)
+      dut.io.dis_uop(0).valid.poke(1.U)
+      dut.io.dis_uop(0).bits.iq_index.poke(2.U)
+      dut.io.dis_uop(0).bits.instr_type.poke(InstrType.ALU)
+      dut.io.dis_uop(1).valid.poke(0.U)
+      dut.io.dis_uop(1).bits.iq_index.poke(1.U)
+      dut.clock.step()
+      dut.io.queue(2).busy.expect(1.U)
+      dut.io.queue(1).busy.expect(0.U)
+      dut.clock.step()
+      dut.io.queue(2).busy.expect(1.U)
+      dut.clock.step()
+      //一次性接收两条条目
+      println("the case that receive 2 content")
+      dut.io.dis_uop(0).valid.poke(0.U)
+      dut.io.dis_uop(1).valid.poke(0.U)
+      dut.clock.step()
+      dut.io.dis_uop(0).valid.poke(1.U)
+      dut.io.dis_uop(1).valid.poke(1.U)
+      dut.io.dis_uop(0).bits.iq_index.poke(5.U)
+      dut.io.dis_uop(1).bits.iq_index.poke(6.U)
+      dut.io.dis_uop(0).bits.ps1.poke(2.U)
+      dut.io.dis_uop(0).bits.fu_signals.opr1_sel.poke(OprSel.REG)
+      dut.clock.step()
+      dut.clock.step()
+      dut.clock.step()
+      println("test pass")
+    }
+  }
+  "exu_issue" should "accept 2 instrs from dispatch unit and issue correctly" in {
+    test(new exu_issue_queue()) { dut =>
+      //一次性接收两条条目
+      println("the case that receive 2 content")
+      dut.io.dis_uop(0).valid.poke(1.U)
+      dut.io.dis_uop(1).valid.poke(1.U)
+      dut.io.dis_uop(0).bits.iq_index.poke(5.U)
+      dut.io.dis_uop(1).bits.iq_index.poke(6.U)
+      dut.io.dis_uop(0).bits.ps1.poke(2.U)
+      dut.io.dis_uop(0).bits.fu_signals.opr1_sel.poke(OprSel.REG)
+      dut.clock.step()
+      dut.io.dis_uop(0).valid.poke(0.U)
+      dut.io.dis_uop(1).valid.poke(0.U)
+      dut.clock.step()
+      dut.clock.step()
+      dut.io.prf_valid(2).poke(1)
+      dut.io.dis_uop(0).valid.poke(1.U)
+      dut.io.dis_uop(0).bits.iq_index.poke(4.U)
+      dut.clock.step(3)
+      println("test pass")
+    }
+  }
+  //检查乘除法是否可以正常发送
+  "exu_issue" should "deal with MUL or DIV correctly" in {
+    test(new exu_issue_queue()) { dut =>
+      //一次性接收两条条目
+      dut.io.mul_ready.poke(1)
+      dut.io.dis_uop(0).valid.poke(1.U)
+      dut.io.dis_uop(0).bits.instr_type.poke(InstrType.MUL)
+      dut.io.dis_uop(0).bits.iq_index.poke(1.U)
+      dut.io.dis_uop(1).valid.poke(1.U)
+      dut.io.dis_uop(1).bits.instr_type.poke(InstrType.MUL)
+      dut.io.dis_uop(1).bits.iq_index.poke(0.U)
+      dut.clock.step()
+      dut.io.dis_uop(0).valid.poke(0.U)
+      dut.io.dis_uop(1).valid.poke(0.U)
+      dut.clock.step()
+      dut.io.exu_issued_index(0).valid.expect(1.U)
+      dut.io.exu_issued_index(0).bits.expect(1.U)
+      dut.io.exu_issued_index(1).valid.expect(0.U)
+      dut.io.mul_ready.poke(0)
+      dut.clock.step(3)
+      println("test pass")
+    }
+  }
+  //检查乘法和加法是否能够一起发射
+  "exu_issue" should "deal with MUL and ALU correctly" in {
+    test(new exu_issue_queue()) { dut =>
+      //一次性接收两条条目
+      dut.io.mul_ready.poke(1)
+      dut.io.dis_uop(0).valid.poke(1.U)
+      dut.io.dis_uop(0).bits.instr_type.poke(InstrType.MUL)
+      dut.io.dis_uop(0).bits.iq_index.poke(1.U)
+      dut.io.dis_uop(1).valid.poke(1.U)
+      dut.io.dis_uop(1).bits.instr_type.poke(InstrType.ALU)
+      dut.io.dis_uop(1).bits.iq_index.poke(0.U)
+      dut.clock.step()
+      dut.io.dis_uop(0).valid.poke(0.U)
+      dut.io.dis_uop(1).valid.poke(0.U)
+      dut.io.exu_issued_index(0).valid.expect(1.U)
+      dut.io.exu_issued_index(0).bits.expect(1.U)
+      dut.io.exu_issued_index(1).valid.expect(1.U)
+      dut.io.exu_issued_index(1).bits.expect(0.U)
+      dut.clock.step()
+      dut.io.issue_exu_uop(0).valid.expect(1.U)
+      dut.io.mul_ready.poke(0)
+      dut.clock.step(3)
       println("test pass")
     }
   }
