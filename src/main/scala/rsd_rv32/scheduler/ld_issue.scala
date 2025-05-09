@@ -22,17 +22,17 @@ class ld_issue_IO(implicit p: Parameters) extends CustomBundle {
     //监听PRF的valid信号用于更新ready状态
     val prf_valid = Input(Vec(p.PRF_DEPTH, Bool())) //PRF的valid信号
     //监听FU后级间寄存器内的物理寄存器ready信号
-    val wb_uop2 = Flipped((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop()))))  //来自alu、mul、div、load pipeline的uop
+    val wb_uop2 = Input((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop()))))  //来自alu、mul、div、load pipeline的uop
     //val ldu_wb_uop2 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
     //监听FU处物理寄存器的ready信号
-    val wb_uop1 = Flipped((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop())))) //来自alu、mul、div、load pipeline的uop
+    val wb_uop1 = Input((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop())))) //来自alu、mul、div、load pipeline的uop
     //val ldu_wb_uop1 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
 
     //输出至Dispatch Unit的信号
     val ld_issued_index = Output(Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W))) //更新IQ Freelist
 
     //with ROB
-    val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
+    val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
     //st_issue的busy信息以及该周期发射的store指令号
     val st_issue_unbusy = Input(Vec(p.STISSUE_DEPTH, Bool()))
     val st_issued_index = Input(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)))
@@ -65,12 +65,12 @@ class ld_iq_select_logic(implicit p: Parameters) extends Module{
 
 class issue2ld(implicit p: Parameters) extends Module {
     val io = IO(new Bundle {
-        val if_valid =Input(Bool()) //指令是否有效
+        val if_valid = Input(Bool()) //指令是否有效
         val ps_value = Input(UInt(p.XLEN.W)) //操作数1
         val dis_issue_uop = Input(new DISPATCH_LDISSUE_uop()) //被select的uop
-        val issue_ld_uop = Decoupled(new LDISSUE_LDPIPE_uop()) //发往STPIPE的uop
+        val issue_ld_uop = Output(Valid((new LDISSUE_LDPIPE_uop()))) //发往STPIPE的uop
     })
-    val uop = Reg(Decoupled(new LDISSUE_LDPIPE_uop()))
+    val uop = Reg(Valid(new LDISSUE_LDPIPE_uop()))
     uop.valid := io.if_valid
     uop.bits.instr := io.dis_issue_uop.instr
     uop.bits.pdst := io.dis_issue_uop.pdst
@@ -90,7 +90,7 @@ class ld_issue_content(implicit p: Parameters) extends Bundle {
 
 class ld_issue_queue(implicit p: Parameters) extends Module {
     val io = IO(new ld_issue_IO())
-    val st_queue_state = Vec(p.STISSUE_DEPTH, Bool())
+    val st_queue_state = Wire(Vec(p.STISSUE_DEPTH, Bool()))
     //用于生成ready矩阵
     for (i <- 0 until p.STISSUE_DEPTH){
         st_queue_state(i) := io.st_issue_unbusy(i) || io.st_issued_index.valid && io.st_issued_index.bits === i.U
@@ -218,6 +218,7 @@ class ld_issue_queue(implicit p: Parameters) extends Module {
         }
         issue_to_ld.io.dis_issue_uop := payload(select_index.bits)
         issue_to_ld.io.ps_value := io.prf_value
-        io.issue_ld_uop := issue_to_ld.io.issue_ld_uop
+        io.issue_ld_uop.bits := issue_to_ld.io.issue_ld_uop.bits
+        io.issue_ld_uop.valid := issue_to_ld.io.issue_ld_uop.valid
     }
 }

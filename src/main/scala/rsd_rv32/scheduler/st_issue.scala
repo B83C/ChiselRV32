@@ -23,20 +23,23 @@ class st_issue_IO(implicit p: Parameters) extends CustomBundle {
     //监听PRF的valid信号用于更新ready状态
     val prf_valid = Input(Vec(p.PRF_DEPTH, Bool())) //PRF的valid信号
     //监听FU后级间寄存器内的物理寄存器ready信号
-    val wb_uop2 = Flipped(Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop())))  //来自alu、mul、div、load pipeline的uop
+    val wb_uop2 = Input(Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop())))  //来自alu、mul、div、load pipeline的uop
     //val LDU_complete_uop2 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
     //监听FU处物理寄存器的ready信号
-    val wb_uop1 = Flipped(Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop())))  //来自alu、mul、div、load pipeline的uop
+    val wb_uop1 = Input(Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop())))  //来自alu、mul、div、load pipeline的uop
     //val LDU_complete_uop1 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
 
     //输出至Dispatch Unit以及ld_issue的信号
     val st_issued_index = Output(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W))) //更新IQ Freelist
 
     //with ROB
-    val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
+    val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
 
     //To ld_issue_queue
     val st_queue_state = Output(Vec(p.STISSUE_DEPTH, Bool()))//在ld_issue中要进一步处理
+
+    //测试用
+    val queue = Output(Vec(p.STISSUE_DEPTH, new st_issue_content()))
 }
 
 class st_iq_select_logic(implicit p: Parameters) extends Module{
@@ -67,13 +70,13 @@ class st_iq_select_logic(implicit p: Parameters) extends Module{
 //exu_issue->st的级间寄存器
 class issue2st(implicit p: Parameters) extends Module {
     val io = IO(new Bundle {
-        val if_valid =Input(Bool()) //指令是否有效
+        val if_valid = Input(Bool()) //指令是否有效
         val ps1_value = Input(UInt(p.XLEN.W)) //操作数1
         val ps2_value = Input(UInt(p.XLEN.W)) //操作数2
         val dis_issue_uop = Input(new DISPATCH_STISSUE_uop()) //被select的uop
-        val issue_st_uop = Decoupled(new STISSUE_STPIPE_uop()) //发往STPIPE的uop
+        val issue_st_uop = Output(Valid(new STISSUE_STPIPE_uop())) //发往STPIPE的uop
     })
-    val uop = Reg(Decoupled(new STISSUE_STPIPE_uop()))
+    val uop = Reg(Valid(new STISSUE_STPIPE_uop()))
     uop.valid := io.if_valid
     uop.bits.instr := io.dis_issue_uop.instr
     uop.bits.ps1_value := io.ps1_value
@@ -101,6 +104,19 @@ class st_issue_queue(implicit p: Parameters) extends Module {
             0.U.asTypeOf(new st_issue_content())
         })
     )
+
+    //调试用代码
+    io.queue := issue_queue
+    printf(p"------ Issue Queue Contents ------\n\n")
+    for (i <- 0 until p.EXUISSUE_DEPTH) {
+        val entry = issue_queue(i)
+        printf(p"Entry ${"%02d".format(i)}: " +
+          p"Busy=${entry.busy} " +
+          p"PS1=0x${Hexadecimal(entry.ps1)}[${entry.ready1}] " +
+          p"PS2=0x${Hexadecimal(entry.ps2)}[${entry.ready2}]\n")
+    }
+    printf(p"-----------------------------------\n\n")
+
     val payload = RegInit(
         VecInit(Seq.fill(p.STISSUE_DEPTH) {
             0.U.asTypeOf(new DISPATCH_STISSUE_uop())
@@ -243,8 +259,8 @@ class st_issue_queue(implicit p: Parameters) extends Module {
         issue_to_st.io.dis_issue_uop := payload(select_index.bits)
         issue_to_st.io.ps1_value := io.ps1_value
         issue_to_st.io.ps2_value := io.ps2_value
-        io.issue_st_uop := issue_to_st.io.issue_st_uop
-
+        io.issue_st_uop.bits := issue_to_st.io.issue_st_uop.bits
+        io.issue_st_uop.valid := issue_to_st.io.issue_st_uop.valid
 
         //发射st_queue状态至ld_queue
         for (i <- 0 until p.STISSUE_DEPTH){

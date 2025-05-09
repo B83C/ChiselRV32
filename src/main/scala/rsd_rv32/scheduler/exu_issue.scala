@@ -28,16 +28,16 @@ class exu_issue_IO(implicit p: Parameters) extends CustomBundle {
     //监听PRF的valid信号用于更新ready状态
     val prf_valid = Input(Vec(p.PRF_DEPTH, Bool())) //PRF的valid信号
     //监听FU后级间寄存器内的物理寄存器ready信号
-    val wb_uop2 = Flipped((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop()))))  //来自alu、mul、div、load pipeline的uop
+    val wb_uop2 = Input((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop()))))  //来自alu、mul、div、load pipeline的uop
     //监听FU处物理寄存器的ready信号
-    val wb_uop1 = Flipped((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop())))) //来自alu、mul、div、load pipeline的uop
+    val wb_uop1 = Input((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop())))) //来自alu、mul、div、load pipeline的uop
     //val ldu_wb_uop1 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
 
     //输出至Dispatch Unit的信号
     val exu_issued_index = Output(Vec(p.CORE_WIDTH, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W)))) //更新IQ Freelist
 
     //with ROB
-    val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
+    val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
 
     //以下是测试时需要的输出
     val queue = Output(Vec(p.EXUISSUE_DEPTH, new exu_issue_content())) //发射队列的内容
@@ -151,7 +151,7 @@ class exu_iq_select_logic(implicit p: Parameters) extends Module {
 //exu_issue->exu的级间寄存器
 class issue2exu(implicit p: Parameters) extends Module {
     val io = IO(new Bundle {
-        val if_valid =Input(Vec(p.CORE_WIDTH, Bool())) //指令是否有效
+        val if_valid = Input(Vec(p.CORE_WIDTH, Bool())) //指令是否有效
         val ps1_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数1
         val ps2_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数2
         val dis_issue_uop = Input(Vec(p.CORE_WIDTH, new DISPATCH_EXUISSUE_uop())) //来自Dispatch的uop
@@ -181,6 +181,7 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
             0.U.asTypeOf(new exu_issue_content())
         })
     )
+
     //调试用代码
     io.queue := issue_queue
     printf(p"------ Issue Queue Contents ------\n\n")
