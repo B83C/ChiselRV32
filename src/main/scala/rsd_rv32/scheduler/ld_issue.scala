@@ -29,7 +29,7 @@ class ld_issue_IO(implicit p: Parameters) extends CustomBundle {
     //val ldu_wb_uop1 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
 
     //输出至Dispatch Unit的信号
-    val ld_issued_index = Output(UInt(log2Ceil(p.LDISSUE_DEPTH).W)) //更新IQ Freelist
+    val ld_issued_index = Output(Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W))) //更新IQ Freelist
 
     //with ROB
     val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
@@ -198,11 +198,11 @@ class ld_issue_queue(implicit p: Parameters) extends Module {
 
         //更新IQ Freelist的信号
         when (select_index.valid){
-            io.st_issued_index.valid := true.B
-            io.st_issued_index.bits := select_index.bits
+            io.ld_issued_index.valid := true.B
+            io.ld_issued_index.bits := select_index.bits
         }.otherwise{
-            io.st_issued_index.valid := false.B
-            io.st_issued_index.bits := 0.U
+            io.ld_issued_index.valid := false.B
+            io.ld_issued_index.bits := 0.U
         }
 
         //发射命令到级间寄存器
