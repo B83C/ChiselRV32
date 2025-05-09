@@ -144,4 +144,34 @@ class exu_issue_test extends AnyFlatSpec with ChiselScalatestTester {
       println("test pass")
     }
   }
+  //检查发生误预测时是否能够flush
+  "exu_issue" should "flush correctly when mispred" in {
+    test(new exu_issue_queue()) { dut =>
+      dut.io.mul_ready.poke(0.U)
+      dut.io.div_ready.poke(0.U)
+      dut.io.dis_uop(0).valid.poke(1.U)
+      dut.io.dis_uop(0).bits.iq_index.poke(3.U)
+      dut.io.dis_uop(0).bits.instr_type.poke(InstrType.MUL)
+      dut.io.dis_uop(1).valid.poke(1.U)
+      dut.io.dis_uop(1).bits.iq_index.poke(4.U)
+      dut.io.dis_uop(1).bits.fu_signals.opr1_sel.poke(OprSel.REG)
+      dut.clock.step()
+      dut.io.dis_uop(0).bits.iq_index.poke(2.U)
+      dut.io.dis_uop(0).bits.instr_type.poke(InstrType.Branch)
+      dut.io.dis_uop(0).bits.fu_signals.opr1_sel.poke(OprSel.REG)
+      dut.io.dis_uop(1).bits.iq_index.poke(1.U)
+      dut.io.dis_uop(1).bits.instr_type.poke(InstrType.DIV_REM)
+      dut.clock.step()
+      dut.io.dis_uop(0).valid.poke(0.U)
+      dut.io.dis_uop(1).valid.poke(0.U)
+      dut.io.rob_commitsignal(0).valid.poke(1.U)
+      dut.io.rob_commitsignal(0).bits.mispred.poke(1.U)
+      dut.clock.step(2)
+      for (i <- 0 until 5){
+        dut.io.queue(i).busy.expect(0.U)
+      }
+      println("test pass")
+    }
+  }
 }
+

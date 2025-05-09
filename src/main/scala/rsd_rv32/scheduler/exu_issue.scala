@@ -70,7 +70,7 @@ class exu_iq_select_logic(implicit p: Parameters) extends Module {
     })
     val readyAlu = VecInit((0 until p.EXUISSUE_DEPTH).map { i =>
         val q = io.issue_queue(i)
-        q.busy && q.ready1 && q.ready2 && q.instr_type === InstrType.ALU
+        q.busy && q.ready1 && q.ready2 && !(q.instr_type === InstrType.MUL || q.instr_type === InstrType.DIV_REM)
     })
     //选择乘除法就绪命令
     val mulOH = PriorityEncoderOH(readyMul)
@@ -238,9 +238,13 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
             }
             when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps1) || (io.dis_uop(0).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
                 issue_queue(io.dis_uop(0).bits.iq_index).ready1 := true.B
+            } .otherwise{
+                issue_queue(io.dis_uop(0).bits.iq_index).ready1 := false.B
             }
             when (conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps2) || (io.dis_uop(0).bits.fu_signals.opr2_sel =/= OprSel.REG)) {
                 issue_queue(io.dis_uop(0).bits.iq_index).ready2 := true.B
+            } .otherwise{
+                issue_queue(io.dis_uop(0).bits.iq_index).ready2 := false.B
             }
             //结束ready信号赋值
         } .elsewhen(io.dis_uop(0).valid && io.dis_uop(1).valid){
@@ -262,9 +266,13 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
                 }
                 when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps1) || (io.dis_uop(k).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
                     issue_queue(io.dis_uop(k).bits.iq_index).ready1 := true.B
+                } .otherwise{
+                    issue_queue(io.dis_uop(k).bits.iq_index).ready1 := false.B
                 }
                 when (conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps2) || (io.dis_uop(k).bits.fu_signals.opr2_sel =/= OprSel.REG)) {
                     issue_queue(io.dis_uop(k).bits.iq_index).ready2 := true.B
+                } .otherwise{
+                    issue_queue(io.dis_uop(k).bits.iq_index).ready2 := false.B
                 }
                 //结束ready信号赋值
             }
