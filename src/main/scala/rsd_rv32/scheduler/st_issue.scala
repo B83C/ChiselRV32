@@ -29,20 +29,21 @@ class st_issue_IO(implicit p: Parameters) extends CustomBundle {
     val wb_uop1 = Flipped(Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop())))  //来自alu、mul、div、load pipeline的uop
     //val LDU_complete_uop1 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
 
-    //输出至Dispatch Unit的信号
+    //输出至Dispatch Unit以及ld_issue的信号
     val st_issued_index = Output(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W))) //更新IQ Freelist
 
     //with ROB
     val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
 
     //To ld_issue_queue
-    val st_queue_state = Output(Vec(p.STISSUE_DEPTH, Bool()))
+    val st_queue_state = Output(Vec(p.STISSUE_DEPTH, Bool()))//在ld_issue中要进一步处理
 }
 
 class st_iq_select_logic(implicit p: Parameters) extends Module{
     val io = IO(new Bundle {
         val issue_queue = Input(Vec(p.STISSUE_DEPTH, new st_issue_content()))
         val sel_index = Output(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W))) //选择的索引
+        val stpipe_ready = Input(Bool())
     })
     val readySt = VecInit((0 until p.STISSUE_DEPTH).map { i =>
         val q = io.issue_queue(i)
@@ -53,7 +54,7 @@ class st_iq_select_logic(implicit p: Parameters) extends Module{
     val stV1 = readySt.asUInt.orR
 
 
-    when(stV1) {
+    when(stV1 && io.stpipe_ready) {
         io.sel_index.valid := true.B
         io.sel_index.bits := stIdx1
     }.otherwise {
@@ -66,22 +67,21 @@ class st_iq_select_logic(implicit p: Parameters) extends Module{
 //exu_issue->st的级间寄存器
 class issue2st(implicit p: Parameters) extends Module {
     val io = IO(new Bundle {
-        val if_valid =Input(Vec(p.CORE_WIDTH, Bool())) //指令是否有效
-        val ps1_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数1
-        val ps2_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数2
-        val dis_issue_uop = Input(Vec(p.CORE_WIDTH, new DISPATCH_STISSUE_uop())) //来自Dispatch的uop
-        val issue_st_uop = Output(Vec(p.CORE_WIDTH, Valid(new STISSUE_STPIPE_uop()))) //发往EXU的uop
+        val if_valid =Input(Bool()) //指令是否有效
+        val ps1_value = Input(UInt(p.XLEN.W)) //操作数1
+        val ps2_value = Input(UInt(p.XLEN.W)) //操作数2
+        val dis_issue_uop = Input(new DISPATCH_STISSUE_uop()) //被select的uop
+        val issue_st_uop = Decoupled(new STISSUE_STPIPE_uop()) //发往STPIPE的uop
     })
-    val uop = Reg(Vec(p.CORE_WIDTH, Valid(new STISSUE_STPIPE_uop())))
-    for (i <-0 until p.CORE_WIDTH){
-        uop(i).valid := io.if_valid(i)
-        uop(i).bits.instr := io.dis_issue_uop(i).instr
-        uop(i).bits.ps1_value := io.ps1_value(i)
-        uop(i).bits.ps2_value := io.ps2_value(i)
-        uop(i).bits.stq_index := io.dis_issue_uop(i).stq_index
-        uop(i).bits.rob_index := io.dis_issue_uop(i).rob_index
-    }
-    io.issue_st_uop := uop
+    val uop = Reg(Decoupled(new STISSUE_STPIPE_uop()))
+    uop.valid := io.if_valid
+    uop.bits.instr := io.dis_issue_uop.instr
+    uop.bits.ps1_value := io.ps1_value
+    uop.bits.ps2_value := io.ps2_value
+    uop.bits.stq_index := io.dis_issue_uop.stq_index
+    uop.bits.rob_index := io.dis_issue_uop.rob_index
+    io.issue_st_uop.valid := uop.valid
+    io.issue_st_uop.bits := uop.bits
 }
 
 
@@ -109,10 +109,12 @@ class st_issue_queue(implicit p: Parameters) extends Module {
     //存储结构定义结束
 
     //初始化
-    io.issue_st_uop := 0.U.asTypeOf(Vec(p.CORE_WIDTH, Valid(new STISSUE_STPIPE_uop())))
-    io.st_issued_index := 0.U.asTypeOf(Vec(p.CORE_WIDTH, Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W))))
-    io.prf_raddr1 := 0.U.asTypeOf(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W)))
-    io.prf_raddr2 := 0.U.asTypeOf(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W)))
+    io.issue_st_uop.bits := 0.U.asTypeOf(new STISSUE_STPIPE_uop())
+    io.issue_st_uop.valid := 0.B
+    io.st_issued_index := 0.U.asTypeOf(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)))
+    io.prf_raddr1 := 0.U.asTypeOf(UInt(log2Ceil(p.PRF_DEPTH).W))
+    io.prf_raddr2 := 0.U.asTypeOf(UInt(log2Ceil(p.PRF_DEPTH).W))
+    io.st_queue_state := 0.U.asTypeOf(Vec(p.STISSUE_DEPTH, Bool()))
     //判断是否flush
     when(io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred){
         for (i <- 0 until p.STISSUE_DEPTH){
@@ -140,9 +142,13 @@ class st_issue_queue(implicit p: Parameters) extends Module {
             }
             when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps1)) {
                 issue_queue(io.dis_uop(0).bits.iq_index).ready1 := true.B
+            } .otherwise{
+                issue_queue(io.dis_uop(0).bits.iq_index).ready1 := false.B
             }
             when (conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps2)) {
                 issue_queue(io.dis_uop(0).bits.iq_index).ready2 := true.B
+            } .otherwise{
+                issue_queue(io.dis_uop(0).bits.iq_index).ready2 := false.B
             }
             //结束ready信号赋值
         } .elsewhen(io.dis_uop(0).valid && io.dis_uop(1).valid){
@@ -163,9 +169,13 @@ class st_issue_queue(implicit p: Parameters) extends Module {
                 }
                 when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps1)) {
                     issue_queue(io.dis_uop(k).bits.iq_index).ready1 := true.B
+                } .otherwise{
+                    issue_queue(io.dis_uop(k).bits.iq_index).ready1 := false.B
                 }
                 when (conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps2)) {
                     issue_queue(io.dis_uop(k).bits.iq_index).ready2 := true.B
+                } .otherwise{
+                    issue_queue(io.dis_uop(0).bits.iq_index).ready2 := false.B
                 }
                 //结束ready信号赋值
             }
@@ -174,7 +184,7 @@ class st_issue_queue(implicit p: Parameters) extends Module {
         }
 
         //每周期监听后续寄存器的ready信号，更新ready状态
-        for (i <- 0 until p.LDISSUE_DEPTH){
+        for (i <- 0 until p.STISSUE_DEPTH){
             when (issue_queue(i).busy){
                 val update_conditions1 = for (j <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
                     (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === issue_queue(i).ps1) ||
@@ -197,6 +207,7 @@ class st_issue_queue(implicit p: Parameters) extends Module {
         val select_logic = Module(new st_iq_select_logic())
         val select_index = Wire(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)))
         select_logic.io.issue_queue := issue_queue
+        select_logic.io.stpipe_ready := io.issue_st_uop.ready
         select_index := select_logic.io.sel_index
 
         //读PRF
@@ -210,14 +221,12 @@ class st_issue_queue(implicit p: Parameters) extends Module {
 
 
         //更新IQ Freelist的信号
-        for (i <- 0 until 2){
-            when (select_index.valid){
-                io.st_issued_index.valid := true.B
-                io.st_issued_index.bits := select_index.bits
-            }.otherwise{
-                io.st_issued_index.valid := false.B
-                io.st_issued_index.bits := 0.U
-            }
+        when (select_index.valid){
+            io.st_issued_index.valid := true.B
+            io.st_issued_index.bits := select_index.bits
+        }.otherwise{
+            io.st_issued_index.valid := false.B
+            io.st_issued_index.bits := 0.U
         }
 
         //发射命令到级间寄存器
@@ -234,13 +243,12 @@ class st_issue_queue(implicit p: Parameters) extends Module {
         issue_to_st.io.dis_issue_uop := payload(select_index.bits)
         issue_to_st.io.ps1_value := io.ps1_value
         issue_to_st.io.ps2_value := io.ps2_value
-        io.issue_st_uop.bits := issue_to_st.io.issue_st_uop
+        io.issue_st_uop := issue_to_st.io.issue_st_uop
 
 
         //发射st_queue状态至ld_queue
         for (i <- 0 until p.STISSUE_DEPTH){
-            io.st_queue_state(i) := !issue_queue(i).busy || 
-                select_index.valid && select_index.bits === i.U
+            io.st_queue_state(i) := !issue_queue(i).busy
         }
     }
 }
