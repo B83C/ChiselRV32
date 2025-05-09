@@ -70,7 +70,7 @@ class exu_iq_select_logic(implicit p: Parameters) extends Module {
     })
     val readyAlu = VecInit((0 until p.EXUISSUE_DEPTH).map { i =>
         val q = io.issue_queue(i)
-        q.busy && q.ready1 && q.ready2 && q.instr_type === InstrType.ALU
+        q.busy && q.ready1 && q.ready2 && !(q.instr_type === InstrType.MUL || q.instr_type === InstrType.DIV_REM)
     })
     //选择乘除法就绪命令
     val mulOH = PriorityEncoderOH(readyMul)
