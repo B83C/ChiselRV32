@@ -32,8 +32,8 @@ class LSUIO(implicit p: Parameters) extends CustomBundle {
   val ld_issue_uop  = Flipped(Decoupled(new LDISSUE_LDPIPE_uop()))//加载指令的uop
 
   //with dispatcher
-  val stq_tail  = Output(UInt(log2Ceil(p.STQ_Depth).W))//stq的尾部索引 
-  val stq_head  = Output(UInt(log2Ceil(p.STQ_Depth).W))//stq的头部索引
+  val stq_tail  = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引 
+  val stq_head  = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的头部索引
   val stq_full  = Output(Bool())//stq是否为满,1表示满
   val st_dis = Input(Vec(p.CORE_WIDTH, Bool()))//存储指令被派遣的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）
   
@@ -90,7 +90,7 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   val io = IO(new Bundle {
     val ld_issue_uop = Flipped(Decoupled(new LDISSUE_LDPIPE_uop()))//加载指令的uop
     val ldu_wb_uop  = Valid((new ALU_WB_uop()))//加载完成的信号,wb to ROB and PRF
-    val addr_search_stq = Output(UInt(XLEN.W))//地址搜索信号,进入stq的搜索地址
+    val addr_search_stq = Output(UInt(p.XLEN.W))//地址搜索信号,进入stq的搜索地址
     val ldReq = Decoupled(new Req_Abter())//加载请求信号
     val data_out_mem = Input(UInt(64.W))//从储存器中读取的数据
   })
@@ -102,10 +102,46 @@ class StorePipeline(implicit p: Parameters) extends Module {
   val io = IO(new Bundle {
     val st_issue_uop = Flipped(Valid(new STISSUE_STPIPE_uop()))//存储指令的uop
     val stu_wb_uop = Valid((new STPIPE_WB_uop()))//存储完成的信号,wb to ROB
-    val data_into_stq = Output(UInt(XLEN.W))//需要写入stq的数据
-    val dataAddr_into_stq = Output(UInt(XLEN.W))//需要写入stq的地址
-    val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))//ROB的CommitSignal信号
-  })
+    val data_into_stq = Output(UInt(p.XLEN.W))//需要写入stq的数据
+    val dataAddr_into_stq = Output(UInt(p.XLEN.W))//需要写入stq的地址
+    val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
+  })  
+  
+  val instr = UInt((p.XLEN - 7).W)
+  val ps1_value = UInt(p.XLEN.W)
+  val ps2_value = UInt(p.XLEN.W)
+  val stq_index = UInt(log2Ceil(p.STQ_DEPTH).W)
+  val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+
+  instr := io.st_issue_uop.bits.instr
+  ps1_value := io.st_issue_uop.bits.ps1_value
+  ps2_value := io.st_issue_uop.bits.ps2_value
+  stq_index := io.st_issue_uop.bits.stq_index
+  rob_index := io.st_issue_uop.bits.rob_index
+  
+  val imm_high = instr(31, 25)
+  val imm_low = instr(11, 7)
+
+  val stage1_imm = Cat(Fill(20,immhigj(6)),imm_high, imm_low)
+
+  val stage1_dataAddr = ps1_value + stage1_imm
+
+  val Stage1ToStage2_data_reg = Module(new PipelineReg(p.XLEN))
+  val Stage1ToStage2_addr_reg = Module(new PipelineReg(p.XLEN))
+  
+  Stage1ToStage2_data_reg.io.data_in := ps2_value
+  Stage1ToStage2_addr_reg.io.data_in := stage1_dataAddr
+  
+  Stage1ToStage2_data_reg.io.stall_in := false.B
+  Stage1ToStage2_addr_reg.io.stall_in := false.B
+
+  val stage2_data = Stage1ToStage2_data_reg.io.data_out
+  val stage2_addr = Stage1ToStage2_addr_reg.io.data_out
+
+  
+  
+  
+
 }
 //stq模块
 
@@ -114,13 +150,20 @@ class StorePipeline(implicit p: Parameters) extends Module {
 class StoreQueue(implicit p: Parameters) extends Module {
   val io = IO(new Bundle {
     val stq_full = Output(Bool())//stq是否为满,1表示满
-    val stq_tail = Output(UInt(log2Ceil(p.STQ_Depth).W))//stq的尾部索引 
-    val stq_head = Output(UInt(log2Ceil(p.STQ_Depth).W))//stq的头部索引
-    val addr_search_stq = Input(UInt(XLEN.W))//地址搜索信号,进入stq的搜索地址
+    val stq_tail = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引 
+    val stq_head = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的头部索引
+
+    val addr_search_stq = Input(UInt(p.XLEN.W))//地址搜索信号,进入stq的搜索地址
+
     val stqReq = Decoupled(new Req_Abter())//存储请求信号
+
     val stq_dis = Input(Vec(p.CORE_WIDTH, Bool()))//用于更新store queue（在lsu中）的tail（full标志位）
     val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
-  })
+
+    val dataAddr_into_stq = Input(UInt(p.XLEN.W))//需要写入stq的地址
+    val data_into_stq = Input(UInt(p.XLEN.W))//需要写入stq的数据
+    val stq_index = Input(UInt(log2Ceil(p.STQ_DEPTH).W))//需要写入stq的索引
+    
 
 
 }
