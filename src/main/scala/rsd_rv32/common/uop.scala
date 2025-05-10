@@ -214,13 +214,13 @@ class ALU_WB_uop(implicit p: Parameters) extends CustomBundle {
 //乘除法器、Load pipeline的WB uop和ALU的WB uop相同
 
 class BU_WB_uop(implicit p: Parameters) extends CustomBundle {
-    val is_conditional = Bool() //needed to distinguish between conditional branches and unconditional branches
+    val is_conditional = Bool() //needed to distinguish between conditional branches and unconditional branches, 1 represents conditional branch
 
     //writeback to ROB
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
     val mispred = Bool() //1 if mispred, 0 otherwise
     val target_PC = UInt(p.XLEN.W)
-    val branch_direction = BranchPred()
+    val branch_direction = Bool()
 
     //jal and jalr need to writeback to PRF
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
