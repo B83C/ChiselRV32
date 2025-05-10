@@ -21,8 +21,8 @@ class ld_issue_IO(implicit p: Parameters) extends CustomBundle {
 
     //监听PRF的valid信号用于更新ready状态
     val prf_valid = Input(Vec(p.PRF_DEPTH, Bool())) //PRF的valid信号
-    //监听FU后级间寄存器内的物理寄存器ready信号
-    val wb_uop2 = Input((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop()))))  //来自alu、mul、div、load pipeline的uop
+//    //监听FU后级间寄存器内的物理寄存器ready信号
+//    val wb_uop2 = Input((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop()))))  //来自alu、mul、div、load pipeline的uop
     //val ldu_wb_uop2 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
     //监听FU处物理寄存器的ready信号
     val wb_uop1 = Input((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop())))) //来自alu、mul、div、load pipeline的uop
@@ -126,8 +126,7 @@ class ld_issue_queue(implicit p: Parameters) extends Module {
 
             //入队时判断ps1和ps2的ready信号
             val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps1) ||
-                  (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).bits.ps1)
+                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps1)
             }
             when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps1)) {
                 issue_queue(io.dis_uop(0).bits.iq_index).ps_ready := true.B
@@ -146,8 +145,7 @@ class ld_issue_queue(implicit p: Parameters) extends Module {
 
                 //入队时判断ps1和ps2的ready信号
                 val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps1) ||
-                      (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).bits.ps1)
+                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps1)
                 }
                 when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps1)) {
                     issue_queue(io.dis_uop(k).bits.iq_index).ps_ready := true.B

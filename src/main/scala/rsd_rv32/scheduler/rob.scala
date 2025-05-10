@@ -28,15 +28,15 @@ class ROB_broadcast(implicit p: Parameters) extends CustomBundle {
 */
 
 class ROBIO(implicit p: Parameters) extends CustomBundle {
-    val dis_uop = Vec(p.CORE_WIDTH, (new DISPATCH_ROB_uop()))  //Dispatch Unit的uop,存入条目中
+    val dis_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new DISPATCH_ROB_uop())))  //Dispatch Unit的uop,存入条目中
 
-    val empty_full = Output(Bool())  //ROB空标志(0表示非满，1表示满)
-    val rob_head = Output(UInt(log2Ceil(p.ROB_DEPTH))) //ROB头指针
+    val rob_full = Output(Bool())  //ROB满标志(1表示满，无法分配新条目)
+    val rob_head = Output(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB头指针
     val rob_tail = Output(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
 
-    val alu_wb_uop = Flipped(Valid(Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, new ALU_WB_uop())))  //来自alu、mul、div、load pipeline的uop
-    val bu_wb_uop = Flipped(Valid(Vec(p.BU_NUM, new BU_WB_uop())))  //来自bu的uop,更新就绪状态
-    val stu_wb_uop = Flipped(Valid(new STPIPE_WB_uop()))  //来自stu的uop,更新就绪状态
+    val alu_wb_uop = Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Flipped(Valid(new ALU_WB_uop())))  //来自alu0、alu1、mul、div、load pipeline的uop
+    val bu_wb_uop = Vec(p.BU_NUM, Flipped(Valid(new BU_WB_uop()))) //来自bu的uop,更新就绪状态
+    val stu_wb_uop = Vec(p.STU_NUM, Flipped(Valid(new STPIPE_WB_uop())))  //来自stu的uop,更新就绪状态
     //val LDU_complete_uop = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop,更新就绪状态
     // val mispred = Input(Bool()) //分支误预测信号
     // val if_jump = Input(Bool()) //分支指令跳转信号
@@ -46,12 +46,174 @@ class ROBIO(implicit p: Parameters) extends CustomBundle {
 
 class ROB(implicit p: Parameters) extends Module {
     val io = IO(new ROBIO())
-    val rob = RegInit(Seq.fill(p.ROB_DEPTH)(0.U.asTypeOf(new ROBContent()))) //ROB条目
+    val rob = RegInit(VecInit(Seq.fill(p.ROB_DEPTH)(0.U.asTypeOf(new ROBContent())))) //ROB条目
     val rob_head = RegInit(0.U(log2Ceil(p.ROB_DEPTH).W)) //ROB头指针
     val rob_tail = RegInit(0.U(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
     val rob_full = RegInit(false.B) //ROB满标志
 
-    when(io.dis_uop(0).valid ## io.dis_uop(1).valid === "b10".U){
+    val head_next = WireDefault(rob_head)
+    val tail_next = WireDefault(rob_tail)
+    val full_next = WireDefault(rob_full)
+
+    rob_head := head_next
+    rob_tail := tail_next
+
+    io.rob_full := rob_full //ROB满标志输出
+    io.rob_head := rob_head //ROB头指针输出
+    io.rob_tail := rob_tail //ROB尾指针输出
+
+    io.rob_commitsignal(0).bits := rob(rob_head)
+    val commit0_valid = WireDefault(false.B)
+    io.rob_commitsignal(0).valid := commit0_valid
+    
+    io.rob_commitsignal(1).bits := rob(Mux(rob_head === (p.ROB_DEPTH - 1).U, 0.U, rob_head + 1.U))
+    val commit1_valid = WireDefault(false.B)
+    io.rob_commitsignal(1).valid := commit1_valid
+
+    val flush = Wire(Bool()) //Flush信号
+    flush := commit0_valid && rob(rob_head).mispred
+
+    val dis_valid_bits = WireDefault(io.dis_uop(0).valid ## io.dis_uop(1).valid)
+
+    //commit的逻辑
+    /*val commit0 = WireDefault(false.B)
+    val commit0_and_1 = WireDefault(false.B)*/
+    commit0_valid := rob(rob_head).completed
+
+    val rob_head_plus1 = rob(Mux(rob_head === (p.PRF_DEPTH - 1).U, 0.U, rob_head + 1.U))
+    when(commit0_valid){
+        when(!rob(rob_head).mispred){
+            commit1_valid := rob_head_plus1.completed
+        }
+    }
+
+    //flush逻辑
+    when(flush){
+        rob_tail := rob_head
+        rob_full := false.B
+        for(i <- 0 until p.ROB_DEPTH){
+            rob(i) := 0.U.asTypeOf(new ROBContent())
+        }
+    }
+
+    //非flush时为dispatch单元发来的指令分配条目
+    val rob_allocate0 = WireDefault(rob(rob_tail))
+    val rob_allocate1 = WireDefault(rob(Mux(rob_tail === (p.ROB_DEPTH - 1).U, 0.U, rob_tail + 1.U)))
+
+    rob(rob_tail) := rob_allocate0
+    rob(Mux(rob_tail === (p.ROB_DEPTH - 1).U, 0.U, rob_tail + 1.U)) := rob_allocate1
+
+    //分配条目的逻辑
+    
+    def allocate_rob_entry(uop: DISPATCH_ROB_uop, rob_allocate: ROBContent): Unit = {
+        //common部分
+        rob_allocate.instr_addr := uop.instr_addr
+        rob_allocate.rob_type := MuxLookup(uop.instr_type, ROBType.Arithmetic)(Seq(
+            InstrType.ALU -> ROBType.Arithmetic,
+            InstrType.MUL -> ROBType.Arithmetic,
+            InstrType.DIV_REM -> ROBType.Arithmetic,
+            InstrType.LD -> ROBType.Arithmetic,
+            InstrType.ST -> ROBType.Store,
+            InstrType.Branch -> ROBType.Branch,
+            InstrType.Jump -> ROBType.Jump,
+            InstrType.CSR -> ROBType.CSR
+        ))
+        rob_allocate.mispred := false.B
+        rob_allocate.completed := false.B
+
+        //payload部分
+        switch(uop.instr_type){
+            is(InstrType.ALU, InstrType.MUL, InstrType.DIV_REM, InstrType.LD){
+                val arithmetic_payload = Wire(new ROB_Arithmetic())
+                arithmetic_payload.pdst := uop.pdst
+                arithmetic_payload.rd := uop.rd
+                rob_allocate.payload := arithmetic_payload.asUInt
+            }
+            is(InstrType.Branch){
+                val branch_payload = Wire(new ROB_Branch())
+                branch_payload.btb_hit := uop.btb_hit
+                branch_payload.target_PC := 0.U
+                branch_payload.branch_direction := BranchPred.NT
+                branch_payload.GHR := uop.GHR
+                rob_allocate.payload := branch_payload.asUInt
+            }
+            is(InstrType.Jump){
+                val jump_payload = Wire(new ROB_Jump())
+                jump_payload.btb_hit := uop.btb_hit
+                jump_payload.target_PC := 0.U
+                jump_payload.pdst := uop.pdst
+                jump_payload.rd := uop.rd
+                rob_allocate.payload := jump_payload.asUInt
+            }
+            is(InstrType.CSR){
+                val csr_payload = Wire(new ROB_CSR)
+                csr_payload.pdst := uop.pdst
+                csr_payload.rd := uop.rd
+                rob_allocate.payload := csr_payload.asUInt
+            }
+        }
+    }
+
+    when(!flush){
+        switch(dis_valid_bits){
+            is("b11".U){
+                allocate_rob_entry(io.dis_uop(0).bits, rob_allocate0)
+                allocate_rob_entry(io.dis_uop(1).bits, rob_allocate1)
+
+                tail_next := MuxLookup(rob_tail, rob_tail + 2.U)(Seq(
+                    (p.ROB_DEPTH - 1).U -> 1.U,
+                    (p.ROB_DEPTH - 2).U -> 0.U
+                ))
+
+                full_next := tail_next === rob_head
+            }
+            is("b10".U){
+                allocate_rob_entry(io.dis_uop(0).bits, rob_allocate0)
+                
+                tail_next := Mux(rob_tail === (p.ROB_DEPTH - 1).U, 0.U, rob_tail + 1.U)
+
+                full_next := tail_next === rob_head
+            }
+        }
+    }
+
+    //非flush时rob_full的逻辑
+    when(!flush){
+        rob_full := Mux(tail_next === head_next, full_next, false.B)
+    }
+
+    //wb逻辑
+    for(i <- 0 until p.STU_NUM){
+        when(io.stu_wb_uop(i).valid){
+            rob(io.stu_wb_uop(i).bits.rob_index).completed := true.B
+        }
+    }
+
+    for(i <- 0 until p.BU_NUM){
+        when(io.bu_wb_uop(i).valid){
+            when(io.bu_wb_uop(i).bits.is_conditional){
+                rob(io.bu_wb_uop(i).bits.rob_index).mispred := io.bu_wb_uop(i).bits.mispred
+                rob(io.bu_wb_uop(i).bits.rob_index).completed := true.B
+                val branch_payload = WireDefault(rob(io.bu_wb_uop(i).bits.rob_index).as_Branch)
+                branch_payload.target_PC := io.bu_wb_uop(i).bits.target_PC
+                branch_payload.branch_direction := io.bu_wb_uop(i).bits.branch_direction
+                rob(io.bu_wb_uop(i).bits.rob_index).payload := branch_payload.asUInt
+            }.otherwise{
+                rob(io.bu_wb_uop(i).bits.rob_index).completed := true.B
+                val jump_payload = WireDefault(rob(io.bu_wb_uop(i).bits.rob_index).as_Jump)
+                jump_payload.target_PC := io.bu_wb_uop(i).bits.target_PC
+                rob(io.bu_wb_uop(i).bits.rob_index).payload := jump_payload.asUInt
+            }
+        }
+    }
+
+    for(i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)){
+        when(io.alu_wb_uop(i).valid){
+            rob(io.alu_wb_uop(i).bits.rob_index).completed := true.B
+        }
+    }
+
+    /*when(io.dis_uop(0).valid ## io.dis_uop(1).valid === "b10".U){
         switch(io.dis_uop(0).instr_type){
             is(InstrType.ALU, InstrType.MUL, InstrType.DIV, InstrType.LD){
                 val temp = WireDefault(0.U(ROBContent.width.W))
@@ -64,7 +226,7 @@ class ROB(implicit p: Parameters) extends Module {
             
             //更新rob_tail and rob_full
         }
-    }.elsewhen(io.dis_uop(0).valid ## io.dis_uop(1).valid === "b11".U){
+        }.elsewhen(io.dis_uop(0).valid ## io.dis_uop(1).valid === "b11".U){
         //处理 “11”
-    }
+    }*/
 }

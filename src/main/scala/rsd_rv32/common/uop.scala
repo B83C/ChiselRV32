@@ -214,7 +214,7 @@ class ALU_WB_uop(implicit p: Parameters) extends CustomBundle {
 //乘除法器、Load pipeline的WB uop和ALU的WB uop相同
 
 class BU_WB_uop(implicit p: Parameters) extends CustomBundle {
-    val is_conditional = Bool() //needed to distinguish between conditional branches and unconditional branches
+    val is_conditional = Bool() //needed to distinguish between conditional branches and unconditional branches, 1 represents conditional branch
 
     //writeback to ROB
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)

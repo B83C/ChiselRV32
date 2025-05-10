@@ -27,9 +27,9 @@ class exu_issue_IO(implicit p: Parameters) extends CustomBundle {
 
     //监听PRF的valid信号用于更新ready状态
     val prf_valid = Input(Vec(p.PRF_DEPTH, Bool())) //PRF的valid信号
-    //监听FU后级间寄存器内的物理寄存器ready信号
-    val wb_uop2 = Input((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop()))))  //来自alu、mul、div、load pipeline的uop
-    //监听FU处物理寄存器的ready信号
+//    //监听FU后级间寄存器内的物理寄存器ready信号
+//    val wb_uop2 = Input((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop()))))  //来自alu、mul、div、load pipeline的uop
+    //PRF前的ready信号
     val wb_uop1 = Input((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop())))) //来自alu、mul、div、load pipeline的uop
     //val ldu_wb_uop1 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
 
@@ -229,13 +229,11 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
 
             //入队时判断ps1和ps2的ready信号
             val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps1) ||
-                (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).bits.ps1)
+                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps1)
             }
             val conditions2 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
                 io.prf_valid(io.dis_uop(0).bits.ps2) ||
-                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps2) ||
-                (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(0).bits.ps2)
+                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps2)
             }
             when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps1) || (io.dis_uop(0).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
                 issue_queue(io.dis_uop(0).bits.iq_index).ready1 := true.B
@@ -258,12 +256,10 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
 
                 //入队时判断ps1和ps2的ready信号
                 val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps1) ||
-                    (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).bits.ps1)
+                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps1)
                 }
                 val conditions2 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps2) ||
-                    (io.wb_uop2(i).valid && io.wb_uop2(i).bits.pdst === io.dis_uop(k).bits.ps2)
+                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps2)
                 }
                 when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps1) || (io.dis_uop(k).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
                     issue_queue(io.dis_uop(k).bits.iq_index).ready1 := true.B
@@ -285,12 +281,10 @@ class exu_issue_queue(implicit p: Parameters) extends Module {
         for (i <- 0 until p.EXUISSUE_DEPTH){
             when (issue_queue(i).busy){
                 val update_conditions1 = for (j <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                    (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === issue_queue(i).ps1) ||
-                    (io.wb_uop2(j).valid && io.wb_uop2(j).bits.pdst === issue_queue(i).ps1)
+                    (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === issue_queue(i).ps1)
                 }
                 val update_conditions2 = for (j <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                    (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === issue_queue(i).ps2) ||
-                    (io.wb_uop2(j).valid && io.wb_uop2(j).bits.pdst === issue_queue(i).ps2)
+                    (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === issue_queue(i).ps2)
                 }
                 when (update_conditions1.reduce(_ || _) || io.prf_valid(issue_queue(i).ps1)) {
                     issue_queue(i).ready1 := true.B
