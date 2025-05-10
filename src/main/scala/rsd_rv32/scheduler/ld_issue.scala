@@ -36,6 +36,9 @@ class ld_issue_IO(implicit p: Parameters) extends CustomBundle {
     //st_issue的busy信息以及该周期发射的store指令号
     val st_issue_unbusy = Input(Vec(p.STISSUE_DEPTH, Bool()))
     val st_issued_index = Input(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)))
+
+    //测试接口
+    val queue = Output(Vec(p.LDISSUE_DEPTH, new ld_issue_content()))
 }
 
 class ld_iq_select_logic(implicit p: Parameters) extends Module{
@@ -101,6 +104,18 @@ class ld_issue_queue(implicit p: Parameters) extends Module {
             0.U.asTypeOf(new ld_issue_content())
         })
     )
+    //调试用代码
+    io.queue := issue_queue
+    printf(p"------ Issue Queue Contents ------\n\n")
+    for (i <- 0 until p.EXUISSUE_DEPTH) {
+        val entry = issue_queue(i)
+        printf(p"Entry ${"%02d".format(i)}: " +
+          p"Busy=${entry.busy} " +
+          p"PS1=0x${Hexadecimal(entry.ps)}[${entry.ps_ready}] " +
+          p"st_ready=[${entry.st_ready}]\n")
+    }
+    printf(p"-----------------------------------\n\n")
+
     val payload = RegInit(
         VecInit(Seq.fill(p.LDISSUE_DEPTH) {
             0.U.asTypeOf(new DISPATCH_LDISSUE_uop())
@@ -109,7 +124,7 @@ class ld_issue_queue(implicit p: Parameters) extends Module {
     //初始化
     io.issue_ld_uop.bits := 0.U.asTypeOf(new LDISSUE_LDPIPE_uop())
     io.issue_ld_uop.valid := 0.B
-    io.st_issued_index := 0.U.asTypeOf(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)))
+    io.ld_issued_index := 0.U.asTypeOf(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)))
     io.prf_raddr := 0.U.asTypeOf(UInt(log2Ceil(p.PRF_DEPTH).W))
     //判断flush
     when(io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred){
