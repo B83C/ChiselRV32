@@ -130,7 +130,7 @@ class LoadPipeline(implicit p: Parameters) extends Module {
 
   Stage1ToStage2_ldAddr_reg.io.data_in := stage1_ldAddr
   Stage1ToStage2_func3_reg.io.data_in := stage1_func3
-  Stage1ToStage2_pipevalid_reg.io.data_in := stage1_pipevalid
+  Stage1ToStage2_pipevalid_reg.io.data_in := stage1_pipevalid.asUInt
   Stage1ToStage2_stqtail_reg.io.data_in := io.ld_issue_uop.bits.stq_tail
   Stage1ToStage2_robidx_reg.io.data_in := io.ld_issue_uop.bits.rob_index
 
@@ -144,7 +144,7 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   val stage2_ldAddr = Stage1ToStage2_ldAddr_reg.io.data_out
   val stage2_func3 = Stage1ToStage2_func3_reg.io.data_out
   val stage2_stqtail = Stage1ToStage2_stqtail_reg.io.data_out
-  val stage2_pipevalid = Stage1ToStage2_pipevalid_reg.io.data_out
+  val stage2_pipevalid = Stage1ToStage2_pipevalid_reg.io.data_out.asBool
   val stage2_robidx = Stage1ToStage2_robidx_reg.io.data_out
   
   val need_flush = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
@@ -182,6 +182,7 @@ class StorePipeline(implicit p: Parameters) extends Module {
     val data_into_stq = Output(UInt(p.XLEN.W))//需要写入stq的数据
     val dataAddr_into_stq = Output(UInt(p.XLEN.W))//需要写入stq的地址
     val func3 = Output(UInt(3.W))//fun3信号
+    val stq_index = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//需要写入stq的索引
 
     val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
   })  
@@ -271,6 +272,7 @@ class StoreQueue(implicit p: Parameters) extends Module {
     val dataAddr_into_stq = Input(UInt(p.XLEN.W))//需要写入stq的地址
     val data_into_stq = Input(UInt(p.XLEN.W))//需要写入stq的数据
     val stq_index = Input(UInt(log2Ceil(p.STQ_DEPTH).W))//需要写入stq的索引
+    val st_func3 = Input(UInt(3.W))//fun3信号
   })   
 
   //flush信号，作为stq的reset信号
@@ -358,41 +360,86 @@ class StoreQueue(implicit p: Parameters) extends Module {
   val bit_width = Mux(io.ld_func3 === 0.U, 8.U, 
                       Mux(io.ld_func3 === 1.U, 16.U,
                          Mux(io.ld_func3 === 2.U, 32.U, 8.U)))
-  
-  val total_mask = ((1.U << bit_width) - 1.U) << ((io.addr_search_stq & 3.U) << 3)
+  val bytewidth = bit_width >> 3
 
-  val found_data = Wire(UInt(p.XLEN.W))
+  val found_data = Wire(Vec(p.STQ_DEPTH, UInt(p.XLEN.W)))
   val found_valid = Wire(Bool())
-  val found_mask = Wire(UInt(p.XLEN.W))
-  val found_bit_valid = Wire(UInt(p.XLEN.W))
-  found_data := 0.U
-  found_valid := false
-  found_mask := 0.U
-  found_bit_valid := 0.U
+  val found_mask = Wire(Vec(p.STQ_DEPTH, UInt(p.XLEN.W)))
+  val found_bit_valid = Wire(Vec(p.STQ_DEPTH,UInt(p.XLEN.W)))
+
+  val bytes_remaining = Wire(Vec(p.STQ_DEPTH, UInt(3.W)))
+  val curr_addr = Wire(Vec(p.STQ_DEPTH, UInt(p.XLEN.W)))
+
+  //进行初始化
+  found_valid := false.B
+
+  for(i <- 0 until p.STQ_DEPTH) {
+    found_data(i) := 0.U
+    found_mask(i) := 0.U
+    found_bit_valid(i) := 0.U
+    when(i.U === 0.U){
+      bytes_remaining(i) := bytewidth
+      curr_addr(i) := io.addr_search_stq
+    }.otherwise{
+      bytes_remaining(i) := 0.U
+      curr_addr(i) := 0.U
+    }
+  }
+  
 
   for (i <- 0 until p.STQ_DEPTH) {
     val idx = (io.stq_tail + (p.STQ_DEPTH.U - i.U)) % p.STQ_DEPTH.U
     val entry = stq_entries(idx)
 
-    when(inRange(idx, head, input_tail)) {
+    when(inRange(idx, head, io.input_tail)) {
       val entry_base = entry.data_Addr
-      val addr_march = (io.addr_search_stq >= entry_base) && (io.addr_search_stq < entry_base + 4.U)
 
-      when(addr_march && ~found_valid){
-        val bit_offset = (io.addr_search_stq - entry_base) << 3
+      val overlap = (curr_addr(i) >= entry_base) && (curr_addr(i) < entry_base + 4.U)
 
-        val curr_mask = ((1.U << bit_width) - 1.U) << bit_offset
-        val curr_data = (entry.data >> bit_offset) & ((1.UInt << bit_width) - 1.U)
-        val curr_bit_valid =(entry.bit_valid >> bit_offset) & ((1.U << bit_width) - 1.U)
-        found_data := curr_data << bit_offset
-        found_valid := true.B
-        found_mask := curr_mask
-        found_bit_valid := curr_bit_valid << bit_offset
-      }.elsewhen(found_valid){
-        val last_end = io.addr_search_stq + (bit_width)
+      when(overlap){
+        //取出需要的位数
+        val bit_offset = (curr_addr(i) - entry_base) << 3
+        val bits_needed = bytes_remaining(i) << 3
+        val bits_avilable = 32.U - bit_offset
+        val bits_to_take = Mux(bits_avilable >= bits_needed, bits_needed, bits_avilable)
+
+
+        val take_mask = ((1.U << bits_to_take) - 1.U) << bit_offset
+        val data_slice = (entry.data & take_mask) >> bit_offset
+        val bit_valid_slice = (entry.bit_valid & take_mask) >> bit_offset
+
+        val align_shift = (curr_addr - io.addr_search_stq) << 3
+        val data_shift = data_slice << align_shift
+        val mask_shift = take_mask << align_shift
+        val bit_valid_shift = bit_valid_slice << align_shift
+        
+        when(!found_valid){
+          found_data(i) := data_shift
+          found_valid   := true.B
+          found_mask(i) := mask_shift
+          found_bit_valid(i) := bit_valid_shift
+          curr_addr(i) := curr_addr(i-1) + (bits_to_take >> 3)
+          bytes_remaining(i) := bytes_remaining(i-1) - (bits_to_take >> 3)
+        }.otherwise{
+          
+          found_data(i) := found_data(i-1) | (data_shift & ~found_mask(i-1))
+          found_mask(i) := found_mask(i-1) | take_mask
+          found_bit_valid(i) := found_bit_valid(i-1) | (bit_valid_shift & (~found_mask(i-1)))
+          curr_addr(i) := curr_addr(i-1) + (bits_to_take >> 3)
+          bytes_remaining(i) := bytes_remaining(i-1) - (bits_to_take >> 3)
+        }
+      }.otherwise{
+          found_data(i) := found_data(i-1)
+          found_mask(i) := found_mask(i-1)
+          found_bit_valid(i) := found_bit_valid(i-1)
+          curr_addr(i) := curr_addr(i-1)
+          bytes_remaining(i) := bytes_remaining(i-1)
+
       }
     }
   }
+  //将找到的数据传递给ldpipeline
+}
 //LSU的模块定义，目前只完成了IO接口的定义，内部逻辑还未完成
 class LSU(implicit p: Parameters) extends Module {
 
