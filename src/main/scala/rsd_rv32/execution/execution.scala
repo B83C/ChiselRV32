@@ -39,6 +39,10 @@ class ALU(implicit p: Parameters) extends Module with ALUConsts {
   ))
 }
 
+class BypassInfo(implicit p: Parameters) extends CustomBundle {
+  val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
+  val data = UInt(p.XLEN.W))
+}
 
 class BypassNetworkIO(
 )(implicit p: Parameters) extends CustomBundle with HasUOP {
@@ -78,9 +82,39 @@ class ExuDataOut(
 }
 
 class FUBranchInfo(implicit p: Parameters) extends CustomBundle {
+  val taken = Bool()
+  val target = UInt(p.XLEN.W)
 }
 
 class ROBSignal(implicit p: Parameters) extends CustomBundle {
+  // 添加必要的ROB信号字段
+}
+
+class CSRSignals(implicit p: Parameters) extends Bundle {
+  val csr_op = UInt(2.W)
+  val csr_addr = UInt(12.W)
+}
+
+class ALUSignals extends Bundle {
+  val opr1_sel = UInt(3.W)
+  val opr2_sel = UInt(3.W)
+  val alu_fn = UInt(4.W)
+}
+
+class BranchSignals extends Bundle {
+  val opr1_sel = UInt(3.W)
+  val opr2_sel = UInt(3.W)
+  val br_fn = UInt(4.W)
+  val is_jalr = Bool()
+}
+
+class MULSignals extends Bundle {
+  val use_imm = Bool()
+}
+
+class DIVSignals extends Bundle {
+  val is_signed = Bool()
+  val use_imm = Bool()
 }
 
 //功能单元的抽象类，定义了底层模块端口
@@ -89,84 +123,93 @@ abstract class FunctionalUnit(
   needROBSignals: Boolean = false, //需要从ROB获得信息
 )(implicit p: Parameters) extends Module {
   val io = IO(new Bundle {
-    val req = new FUReq() 
-    val out = new DecoupledIO(new ExuDataOut())
-    val rob_signal = if (needROBSignals) Input(new ROBSignal()) else null //仅有FU为CSR时才有用
-    val branch_info = if (needInformBranch) Output(new FUBranchInfo()) else null //仅有FU为BU时才有用
+    val req = Flipped(Valid(new FUReq())) 
+    val out = Decoupled(new ExuDataOut())
+    val rob_signal = if (needROBSignals) Some(Input(new ROBSignal())) else None
+    val branch_info = if (needInformBranch) Some(Output(new FUBranchInfo())) else None
+    val busy = Output(Bool())
+    
+    // CSR专用信号
+    val csr_rdata = if (this.isInstanceOf[CSRFU]) Some(Input(UInt(p.XLEN.W))) else None
+    val csr_wen = if (this.isInstanceOf[CSRFU]) Some(Output(Bool())) else None
+    val csr_waddr = if (this.isInstanceOf[CSRFU]) Some(Output(UInt(12.W))) else None
+    val csr_wdata = if (this.isInstanceOf[CSRFU]) Some(Output(UInt(p.XLEN.W))) else None
   })
 }
 
-class ALUFU() extends FunctionalUnit {
-  val internal_alu = new ALU()
-  val alu_signals = io.req.uop.fu_signals.as_ALU
+class ALUFU(implicit p: Parameters) extends FunctionalUnit() {
+  val internal_alu = Module(new ALU())
+  val alu_signals = io.req.bits.uop.fu_signals.asTypeOf(new ALUSignals)
   
   // 操作数1选择逻辑
   internal_alu.io.in1 := MuxLookup(alu_signals.opr1_sel, 0.U)(Seq(
-    OPR_REG    -> io.req.rs1,
-    OPR_IMM    -> io.req.uop.imm,
-    OPR_PC     -> io.req.uop.pc,
-    OPR_ZERO   -> 0.U,
-    OPR_RS1    -> io.req.rs1
+    0.U -> io.req.bits.rs1,
+    1.U -> io.req.bits.uop.imm,
+    2.U -> io.req.bits.uop.pc,
+    3.U -> 0.U,
+    4.U -> io.req.bits.rs1
   ))
   
   // 操作数2选择逻辑
   internal_alu.io.in2 := MuxLookup(alu_signals.opr2_sel, 0.U)(Seq(
-    OPR_REG    -> io.req.rs2,
-    OPR_IMM    -> io.req.uop.imm,
-    OPR_PC     -> io.req.uop.pc,
-    OPR_ZERO   -> 0.U,
-    OPR_RS2    -> io.req.rs2
+    0.U -> io.req.bits.rs2,
+    1.U -> io.req.bits.uop.imm,
+    2.U -> io.req.bits.uop.pc,
+    3.U -> 0.U,
+    4.U -> io.req.bits.rs2
   ))
   
   // ALU功能选择
   internal_alu.io.fn := alu_signals.alu_fn
 
   val data_out = Wire(new ExuDataOut())
-  data_out.uop := io.req.uop
+  data_out.uop := io.req.bits.uop
   data_out.data := internal_alu.io.out
   
-  io.out.valid := true.B
+  io.out.valid := io.req.valid
   io.out.bits := data_out
+  io.busy := false.B
 }
 
-class BranchFU() extends FunctionalUnit(true) {
-  val internal_alu = new ALU()
-  val br_signals = io.req.uop.fu_signals.as_BR
+class BranchFU(implicit p: Parameters) extends FunctionalUnit(true) {
+  val internal_alu = Module(new ALU())
+  val br_signals = io.req.bits.uop.fu_signals.asTypeOf(new BranchSignals)
   
   // 操作数选择
   internal_alu.io.in1 := MuxLookup(br_signals.opr1_sel, 0.U)(Seq(
-    OPR_REG    -> io.req.rs1,
-    OPR_IMM    -> io.req.uop.imm,
-    OPR_PC     -> io.req.uop.pc,
-    OPR_ZERO   -> 0.U
+    0.U -> io.req.bits.rs1,
+    1.U -> io.req.bits.uop.imm,
+    2.U -> io.req.bits.uop.pc,
+    3.U -> 0.U
   ))
   
   internal_alu.io.in2 := MuxLookup(br_signals.opr2_sel, 0.U)(Seq(
-    OPR_REG    -> io.req.rs2,
-    OPR_IMM    -> io.req.uop.imm,
-    OPR_PC     -> io.req.uop.pc,
-    OPR_ZERO   -> 0.U
+    0.U -> io.req.bits.rs2,
+    1.U -> io.req.bits.uop.imm,
+    2.U -> io.req.bits.uop.pc,
+    3.U -> 0.U
   ))
   
   internal_alu.io.fn := br_signals.br_fn
 
   val data_out = Wire(new ExuDataOut())
-  data_out.uop := io.req.uop
-  data_out.data := io.req.uop.pc + Mux(br_signals.is_jalr, io.req.rs1, io.req.uop.imm)
+  data_out.uop := io.req.bits.uop
+  data_out.data := io.req.bits.uop.pc + Mux(br_signals.is_jalr, io.req.bits.rs1, io.req.bits.uop.imm)
   
   // 分支判断
   val taken = internal_alu.io.cmp_out && io.req.valid
   
   io.out.valid := io.req.valid
   io.out.bits := data_out
-  io.br_taken := taken
-  io.br_target := Mux(br_signals.is_jalr, 
-                     (io.req.rs1 + io.req.uop.imm) & ~1.U, 
-                     io.req.uop.pc + io.req.uop.imm)
+  io.branch_info.get.taken := taken
+  io.branch_info.get.target := Mux(br_signals.is_jalr, 
+                     (io.req.bits.rs1 + io.req.bits.uop.imm) & ~1.U, 
+                     io.req.bits.uop.pc + io.req.bits.uop.imm)
+  io.busy := false.B
 }
 
-class MULFU() extends FunctionalUnit {
-  val mul_signals = io.req.uop.fu_signals.as_MUL
+class MULFU(implicit p: Parameters) extends FunctionalUnit() {
+  val mul_signals = io.req.bits.uop.fu_signals.asTypeOf(new MULSignals)
   
   // 多周期乘法状态机
   val s_idle :: s_mul :: s_done :: Nil = Enum(3)
@@ -175,8 +218,8 @@ class MULFU() extends FunctionalUnit {
   val result = Reg(UInt(64.W)) // 64位结果寄存器
   
   // 操作数选择
-  val op1 = io.req.rs1
-  val op2 = Mux(mul_signals.use_imm, io.req.uop.imm, io.req.rs2)
+  val op1 = io.req.bits.rs1
+  val op2 = Mux(mul_signals.use_imm, io.req.bits.uop.imm, io.req.bits.rs2)
   
   // 状态机逻辑
   switch(state) {
@@ -200,7 +243,7 @@ class MULFU() extends FunctionalUnit {
   }
   
   val data_out = Wire(new ExuDataOut())
-  data_out.uop := io.req.uop
+  data_out.uop := io.req.bits.uop
   data_out.data := result(31, 0) // 取低32位
   
   io.out.valid := state === s_done
@@ -208,8 +251,8 @@ class MULFU() extends FunctionalUnit {
   io.busy := state =/= s_idle
 }
 
-class DIVFU() extends FunctionalUnit {
-  val div_signals = io.req.uop.fu_signals.as_DIV
+class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
+  val div_signals = io.req.bits.uop.fu_signals.asTypeOf(new DIVSignals)
   
   // 多周期除法状态机
   val s_idle :: s_div :: s_done :: Nil = Enum(3)
@@ -218,12 +261,12 @@ class DIVFU() extends FunctionalUnit {
   val result = Reg(UInt(32.W))
   
   // 操作数选择
-  val dividend = Mux(div_signals.is_signed, io.req.rs1.asSInt, io.req.rs1.zext)
+  val dividend = Mux(div_signals.is_signed, io.req.bits.rs1.asSInt, io.req.bits.rs1.zext)
   val divisor = Mux(div_signals.is_signed && div_signals.use_imm, 
-                   io.req.uop.imm.asSInt, 
+                   io.req.bits.uop.imm.asSInt, 
                    Mux(div_signals.is_signed, 
-                      io.req.rs2.asSInt, 
-                      io.req.rs2.zext))
+                      io.req.bits.rs2.asSInt, 
+                      io.req.bits.rs2.zext))
   
   // 状态机逻辑
   switch(state) {
@@ -247,7 +290,7 @@ class DIVFU() extends FunctionalUnit {
   }
   
   val data_out = Wire(new ExuDataOut())
-  data_out.uop := io.req.uop
+  data_out.uop := io.req.bits.uop
   data_out.data := result
   
   io.out.valid := state === s_done
@@ -255,25 +298,26 @@ class DIVFU() extends FunctionalUnit {
   io.busy := state =/= s_idle
 }
 
-class CSRFU() extends FunctionalUnit(false, true) {
-  val csr_signals = io.req.uop.fu_signals.as_CSR
+class CSRFU(implicit p: Parameters) extends FunctionalUnit(false, true) {
+  val csr_signals = io.req.bits.uop.fu_signals.asTypeOf(new CSRSignals)
   
   // CSR读写逻辑
-  val csr_addr = io.req.uop.imm(11, 0)
+  val csr_addr = io.req.bits.uop.imm(11, 0)
   val csr_wdata = MuxLookup(csr_signals.csr_op, 0.U)(Seq(
-    CSR_W -> io.req.rs1,
-    CSR_S -> (io.csr_rdata | io.req.rs1),
-    CSR_C -> (io.csr_rdata & ~io.req.rs1),
-    CSR_I -> io.req.uop.imm
+    0.U -> io.req.bits.rs1,
+    1.U -> (io.csr_rdata.get | io.req.bits.rs1),
+    2.U -> (io.csr_rdata.get & ~io.req.bits.rs1),
+    3.U -> io.req.bits.uop.imm
   ))
   
   val data_out = Wire(new ExuDataOut())
-  data_out.uop := io.req.uop
-  data_out.data := io.csr_rdata
+  data_out.uop := io.req.bits.uop
+  data_out.data := io.csr_rdata.get
   
   io.out.valid := io.req.valid
   io.out.bits := data_out
-  io.csr_wen := io.req.valid && csr_signals.csr_op =/= CSR_N
-  io.csr_waddr := csr_addr
-  io.csr_wdata := csr_wdata
+  io.csr_wen.get := io.req.valid && csr_signals.csr_op =/= 0.U
+  io.csr_waddr.get := csr_addr
+  io.csr_wdata.get := csr_wdata
+  io.busy := false.B
 }
