@@ -82,7 +82,7 @@ class ROB(implicit p: Parameters) extends Module {
 
     val rob_head_plus1 = rob(Mux(rob_head === (p.PRF_DEPTH - 1).U, 0.U, rob_head + 1.U))
     when(commit0_valid){
-        when(!rob(rob_head).mispred){
+        when(!rob(rob_head).mispred && !rob_head_plus1.mispred){
             commit1_valid := rob_head_plus1.completed
         }
     }
@@ -98,10 +98,12 @@ class ROB(implicit p: Parameters) extends Module {
             head_next := Mux(rob_head === (p.PRF_DEPTH - 1).U, 0.U, rob_head + 1.U)
         }
     }
+    
+    
 
     //flush逻辑
     when(flush){
-        tail_next := rob_head
+        tail_next := head_next
         rob_full := false.B
         for(i <- 0 until p.ROB_DEPTH){
             rob(i) := 0.U.asTypeOf(new ROBContent())
