@@ -66,7 +66,6 @@ class BypassNetwork(
   }
 }
 
-//每个FunctionalUnit都能通过uop的原指令生成立即数，并且判定操作数的类型
 class FUReq()(implicit p: Parameters) extends CustomBundle with HasUOP {
     val kill = Input(Bool())   //Killed upon misprediction/exception
     val rs1 = Input(UInt(p.XLEN.W))  //通过RRDWB获得的rs1数据
@@ -97,7 +96,6 @@ abstract class FunctionalUnit(
   })
 }
 
-//未完成的ALU FU 实例
 class ALUFU() extends FunctionalUnit {
   val internal_alu = new ALU()
   val alu_signals = io.req.uop.fu_signals.as_ALU
@@ -191,7 +189,6 @@ class MULFU() extends FunctionalUnit {
     }
     is(s_mul) {
       counter := counter + 1.U
-      // 简化的乘法步骤，实际应实现Booth算法等
       when(counter === 0.U) {
         result := op1 * op2
       }
@@ -239,7 +236,6 @@ class DIVFU() extends FunctionalUnit {
     }
     is(s_div) {
       counter := counter + 1.U
-      // 简化的除法步骤，实际应实现恢复算法等
       when(divisor =/= 0.S) {
         result := (dividend / divisor).asUInt
       }
