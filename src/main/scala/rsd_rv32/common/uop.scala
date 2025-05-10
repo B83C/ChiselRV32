@@ -220,7 +220,7 @@ class BU_WB_uop(implicit p: Parameters) extends CustomBundle {
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
     val mispred = Bool() //1 if mispred, 0 otherwise
     val target_PC = UInt(p.XLEN.W)
-    val branch_direction = Bool()
+    val branch_direction = BranchPred()
 
     //jal and jalr need to writeback to PRF
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)

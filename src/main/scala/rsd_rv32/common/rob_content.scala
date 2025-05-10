@@ -19,7 +19,7 @@ object ROB_Arithmetic {
 class ROB_Branch(implicit p: Parameters) extends CustomBundle {
     val btb_hit = BTBHit() // BTB hit flag, 1 represents hit
     val target_PC = UInt(p.XLEN.W) // Target address
-    val branch_direction = Bool() // Branch direction(1 represents taken)
+    val branch_direction = BranchPred() // Branch direction
     val GHR = UInt(p.GHR_WIDTH.W) // Global history register
 }
 
