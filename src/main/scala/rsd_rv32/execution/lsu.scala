@@ -96,7 +96,7 @@ class LoadPipeline(implicit p: Parameters) extends Module {
     val addr_search_stq = Output(UInt(p.XLEN.W))//地址搜索信号,进入stq的搜索地址
     val func3 = Output(UInt(3.W))//fun3信号
     val stq_tail = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引
-    val rob_index = Output(UInt(log2Ceil(p.ROB_DEPTH).W))//rob的索引
+    
 
     val ldReq = Decoupled(new Req_Abter())//加载请求信号
 
@@ -522,5 +522,49 @@ class LSU(implicit p: Parameters) extends Module {
 
     val io = IO(new LSUIO())//定义LSU的IO接口
 
-    //内部信号定义还未完成，待定
+    val arbiter = Module(new LSUArbiter())//创建一个arbiter模块
+    val load_pipeline = Module(new LoadPipeline())//创建一个加载管线模块
+    val store_pipeline = Module(new StorePipeline())//创建一个存储管线模块
+    val store_queue = Module(new StoreQueue())//创建一个存储队列模块
+
+    //连接arbiter有关的信号
+    val temp_DataToMem = UInt(64.W)
+    val temp_AddrToMem = UInt(64.W)
+    temp_AddrToMem := Cat(0.U(32.W), arbiter.io.memOut.bits.data_Addr(31, 0))
+    temp_DataToMem := Cat(0.U(32.W), arbiter.io.memOut.bits.data(31, 0))
+    io.data_addr := temp_AddrToMem//将地址信号连接到arbiter的输出端口
+    io.data_into_mem := temp_DataToMem//将数据信号连接到arbiter的输出端口
+    io.write_en := arbiter.io.memOut.bits.isStore//将写使能信号连接到arbiter的输出端口
+    io.func3 := arbiter.io.memOut.bits.func3//将fun3信号连接到arbiter的输出端口
+    arbiter.io.ldReq <> load_pipeline.io.ldReq//将加载请求信号连接到arbiter的输入端口
+    arbiter.io.stqReq <> store_queue.io.stqReq//将存储请求信号连接到arbiter的输入端口
+
+
+  //连接加载管线模块的信号
+    load_pipeline.io.ld_issue_uop := io.ld_issue_uop//将加载指令的uop连接到加载管线模块的输入端口
+    load_pipeline.io.data_out_mem := io.data_out_mem(31,0)//将从存储器中读取的数据连接到加载管线模块的输入端口
+    load_pipeline.io.addr_search_stq := store_queue.io.addr_search_stq//将地址搜索信号连接到加载管线模块的输入端口
+    load_pipeline.io.func3 := store_queue.io.ld_func3
+    load_pipeline.io.stq_tail := store_queue.io.input_tail
+    load_pipeline.io.data_out_stq := store_queue.io.searched_data
+    load_pipeline.io.rob_commitsignal := io.rob_commitsignal
+    load_pipeline.io.ldu_wb_uop := io.ldu_wb_uop
+
+  //连接storepipeline的信号
+    store_pipeline.io.st_issue_uop := io.st_issue_uop
+    store_pipeline.io.stu_wb_uop := io.stu_wb_uop
+    store_pipeline.io.data_into_stq := store_queue.io.data_into_stq
+    store_pipeline.io.dataAddr_into_stq := store_queue.io.dataAddr_into_stq
+    store_pipeline.io.func3 := store_queue.io.st_func3
+    store_pipeline.io.stq_index := store_queue.io.stq_index
+    store_pipeline.io.rob_commitsignal := io.rob_commitsignal
+
+  //连接STQ的信号
+    store_queue.io.st_dis := io.st_dis
+    store_queue.io.stq_head := io.stq_head
+    store_queue.io.stq_tail := io.stq_tail
+    store_queue.io.stq_full := io.stq_full
+
+
+
 }
