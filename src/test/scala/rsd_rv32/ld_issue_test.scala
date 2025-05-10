@@ -24,11 +24,14 @@ import chiseltest.testableClock
  * }}}
  */
 
-class st_issue_test extends AnyFlatSpec with ChiselScalatestTester {
+class ld_issue_test extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = Parameters()
-  "st_issue" should "accept the instrs from dispatch unit and issue correctly" in {
-    test(new st_issue_queue()) { dut =>
-      dut.io.issue_st_uop.ready.poke(1.U)
+  "ld_issue" should "accept the instrs from dispatch unit and issue correctly" in {
+    test(new ld_issue_queue()) { dut =>
+      for(i <- 0 until p.STISSUE_DEPTH){
+        dut.io.st_issue_unbusy(i).poke(1.U)
+      }
+      dut.io.issue_ld_uop.ready.poke(1.U)
       dut.io.dis_uop(0).valid.poke(1.U)
       dut.io.dis_uop(0).bits.iq_index.poke(0.U)
       dut.io.dis_uop(1).valid.poke(0.U)
@@ -38,22 +41,22 @@ class st_issue_test extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.dis_uop(1).valid.poke(1.U)
       dut.io.dis_uop(1).bits.iq_index.poke(1.U)
       dut.io.dis_uop(1).bits.ps1.poke(2.U)
-      dut.io.dis_uop(1).bits.ps2.poke(3.U)
       dut.clock.step(2)
       dut.io.wb_uop1(1).valid.poke(1.U)
       dut.io.wb_uop1(1).bits.pdst.poke(3.U)
       dut.io.wb_uop1(3).valid.poke(1.U)
       dut.io.wb_uop1(3).bits.pdst.poke(2.U)
       dut.clock.step(2)
-      dut.io.issue_st_uop.valid.expect(1.U)
+      dut.io.issue_ld_uop.valid.expect(1.U)
+      dut.clock.step()
       println("test pass")
     }
   }
-  "st_issue" should "accept 2 instrs from dispatch unit and issue correctly" in {
-    test(new st_issue_queue()) { dut =>
+  "ld_issue" should "accept 2 instrs from dispatch unit and issue correctly" in {
+    test(new ld_issue_queue()) { dut =>
       //一次性接收两条条目
       println("the case that receive 2 content")
-      dut.io.issue_st_uop.ready.poke(1.U)
+      dut.io.issue_ld_uop.ready.poke(1.U)
       dut.io.dis_uop(0).valid.poke(1.U)
       dut.io.dis_uop(1).valid.poke(1.U)
       dut.io.dis_uop(0).bits.iq_index.poke(5.U)
@@ -72,8 +75,8 @@ class st_issue_test extends AnyFlatSpec with ChiselScalatestTester {
     }
   }
   //检查发生误预测时是否能够flush
-  "st_issue" should "flush correctly when mispred" in {
-    test(new st_issue_queue()) { dut =>
+  "ld_issue" should "flush correctly when mispred" in {
+    test(new ld_issue_queue()) { dut =>
       dut.io.dis_uop(0).valid.poke(1.U)
       dut.io.dis_uop(0).bits.iq_index.poke(3.U)
       dut.io.dis_uop(1).valid.poke(1.U)
@@ -91,6 +94,41 @@ class st_issue_test extends AnyFlatSpec with ChiselScalatestTester {
         dut.io.queue(i).busy.expect(0.U)
       }
       println("test pass")
+    }
+  }
+  //是否可正常维护就绪矩阵
+  "ld_issue" should "communicate with st_issue correctly" in {
+    test(new ld_issue_queue()) { dut =>
+
+      for(i <- 0 until p.STISSUE_DEPTH){
+        dut.io.st_issue_unbusy(i).poke(1.U)
+      }
+      dut.clock.step()
+      println("初始状态，st_issue全空")
+      dut.io.dis_uop(0).valid.poke(1.U)
+      dut.io.dis_uop(0).bits.iq_index.poke(1.U)
+      dut.clock.step()
+      println("ld_issue入队")
+      dut.io.dis_uop(0).valid.poke(0.U)
+      dut.io.st_issue_unbusy(2).poke(0.U)
+      dut.clock.step()
+      println("st_issue入队，busy条件改变")
+      dut.io.dis_uop(0).valid.poke(1.U)
+      dut.io.dis_uop(0).bits.iq_index.poke(2.U)
+      dut.clock.step()
+      println("ld_issue入队")
+      dut.io.dis_uop(0).valid.poke(1.U)
+      dut.io.dis_uop(0).bits.iq_index.poke(3.U)
+      dut.io.st_issued_index.valid.poke(1.U)
+      dut.io.st_issued_index.bits.poke(2.U)
+      dut.clock.step()
+      println("st_issue出队，更新st_ready，同时ld_issue入队，此时所有命令都应就绪")
+      dut.clock.step()
+    }
+  }
+  "ld_issue" should "correctly" in {
+    test(new ld_issue_queue()) { dut =>
+      dut.io.dis_uop(0).valid.poke(1.U)
     }
   }
 }
