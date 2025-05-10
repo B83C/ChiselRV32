@@ -136,29 +136,37 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
   for (i <- 0 until p.CORE_WIDTH) {
     when (io.rob_commitsignal(i).valid) {
       val rc    = io.rob_commitsignal(i).bits
-      val pc    = rc.pc
-      val taken = rc.taken
-      
-      // BTB 写入或更新：条件分支或跳转都写入
+      val pc    = rc.instr_addr
+      //val taken = rc.taken
+      when (rc.rob_type === ROBType.Branch) { // 如果是分支指令
+        val branch_data = rc.as_Branch         // 转换负载为 ROB_Branch 类型
+        val taken = branch_data.branch_direction // 实际跳转结果
+        val ghr_snapshot = branch_data.GHR    // 正确访问 GHR
+      }
+      val target = MuxCase(0.U, Seq(
+        (rc.rob_type === ROBType.Branch) -> rc.as_Branch.target_PC,
+        (rc.rob_type === ROBType.Jump)   -> rc.as_Jump.target_PC
+      ))
+     // BTB 写入或更新：条件分支或跳转都写入
       val idx   = btbIndex(pc)
       val newE  = Wire(new BTBEntry)
       newE.valid         := true.B  // 修复: 应始终有效，由isBranch或taken决定是否写入
-      newE.target        := rc.target
-      newE.isConditional := rc.isBranch
+      newE.target        := target
+      newE.isConditional := rc.rob_type === ROBType.Branch
       newE.tag           := btbTag(pc)
       
       // 只有当是分支或确实发生跳转时才更新BTB
-      when (rc.isBranch || taken) {
+      when (rc.rob_type === ROBType.Branch || taken) {
         btb.write(idx, newE)
       }
 
       // BHT 更新：使用提交时的 GHR 快照
-      val updHist = rc.ghrSnapshot
+      val updHist = ghr_snapshot
       val hIdx    = (pc ^ updHist)(log2Ceil(bimodeTableSize)-1, 0)
       val tIdx    = pc(log2Ceil(choiceTableSize)-1, 0)
       
       // 只更新条件分支的预测表
-      when (rc.isBranch) {
+      when (rc.rob_type === ROBType.Branch) {
         // 读取当前计数器值
         val tEntry  = bimodeT.read(hIdx)
         val ntEntry = bimodeNT.read(hIdx)
