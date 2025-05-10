@@ -264,7 +264,7 @@ class StoreQueue(implicit p: Parameters) extends Module {
     val input_tail = Input(UInt(log2Ceil(p.STQ_DEPTH).W))//输入的tail指针，用于后续的查找
     val addr_search_stq = Input(UInt(p.XLEN.W))//地址搜索信号,进入stq的搜索地址
     val ld_func3 = Input(UInt(3.W))//fun3信号
-
+    val searched_data = Output(new STQEntry)//从stq中读取的数据
     val stqReq = Decoupled(new Req_Abter())//存储请求信号
 
     val st_dis = Input(Vec(p.CORE_WIDTH, Bool()))//用于更新store queue（在lsu中）的tail（full标志位）
@@ -371,6 +371,7 @@ class StoreQueue(implicit p: Parameters) extends Module {
   val bytes_remaining = Wire(Vec(p.STQ_DEPTH, UInt(3.W)))
   val curr_addr = Wire(Vec(p.STQ_DEPTH, UInt(p.XLEN.W)))
 
+
   //进行初始化
   found_valid := false.B
 
@@ -387,12 +388,12 @@ class StoreQueue(implicit p: Parameters) extends Module {
     }
   }
   
-
+  //搜索操作的核心
   for (i <- 0 until p.STQ_DEPTH) {
-    val idx = (io.stq_tail + (p.STQ_DEPTH.U - i.U)) % p.STQ_DEPTH.U
+    val idx = (io.input_tail + (p.STQ_DEPTH.U - i.U - 1.U)) % p.STQ_DEPTH.U
     val entry = stq_entries(idx)
 
-    when(inRange(idx, head, io.input_tail)) {
+    when(isInrange(idx, head, io.input_tail)) {
       val entry_base = entry.data_Addr
 
       val overlap = (curr_addr(i) >= entry_base) && (curr_addr(i) < entry_base + 4.U)
@@ -409,7 +410,7 @@ class StoreQueue(implicit p: Parameters) extends Module {
         val data_slice = (entry.data & take_mask) >> bit_offset
         val bit_valid_slice = (entry.bit_valid & take_mask) >> bit_offset
 
-        val align_shift = (curr_addr - io.addr_search_stq) << 3
+        val align_shift = (curr_addr(i) - io.addr_search_stq) << 3
         val data_shift = data_slice << align_shift
         val mask_shift = take_mask << align_shift
         val bit_valid_shift = bit_valid_slice << align_shift
@@ -419,27 +420,42 @@ class StoreQueue(implicit p: Parameters) extends Module {
           found_valid   := true.B
           found_mask(i) := mask_shift
           found_bit_valid(i) := bit_valid_shift
-          curr_addr(i) := curr_addr(i-1) + (bits_to_take >> 3)
-          bytes_remaining(i) := bytes_remaining(i-1) - (bits_to_take >> 3)
+          when(i.U =/= p.STQ_DEPTH.U - 1.U){
+            curr_addr(i+1) := curr_addr(i) + (bits_to_take >> 3)
+            bytes_remaining(i+1) := bytes_remaining(i) - (bits_to_take >> 3)
+          }
+          
         }.otherwise{
           
           found_data(i) := found_data(i-1) | (data_shift & ~found_mask(i-1))
-          found_mask(i) := found_mask(i-1) | take_mask
+          found_mask(i) := found_mask(i-1) | mask_shift
           found_bit_valid(i) := found_bit_valid(i-1) | (bit_valid_shift & (~found_mask(i-1)))
-          curr_addr(i) := curr_addr(i-1) + (bits_to_take >> 3)
-          bytes_remaining(i) := bytes_remaining(i-1) - (bits_to_take >> 3)
+          when(i.U =/= p.STQ_DEPTH.U - 1.U){
+            curr_addr(i+1) := curr_addr(i) + (bits_to_take >> 3)
+            bytes_remaining(i+1) := bytes_remaining(i) - (bits_to_take >> 3)
+          }
         }
-      }.otherwise{
+      }
+    }.otherwise{
+      when(i.U > 0.U){
           found_data(i) := found_data(i-1)
           found_mask(i) := found_mask(i-1)
           found_bit_valid(i) := found_bit_valid(i-1)
-          curr_addr(i) := curr_addr(i-1)
-          bytes_remaining(i) := bytes_remaining(i-1)
-
+          
+      }
+      when(i.U =/= p.STQ_DEPTH.U - 1.U){
+          curr_addr(i+1) := curr_addr(i) 
+          bytes_remaining(i+1) := bytes_remaining(i) 
       }
     }
   }
   //将找到的数据传递给ldpipeline
+
+  io.searched_data.data := found_data(p.STQ_DEPTH - 1)
+  io.searched_data.data_Addr := io.addr_search_stq
+  io.searched_data.bit_valid := found_bit_valid(p.STQ_DEPTH - 1)
+  io.searched_data.func3 := io.ld_func3
+
 }
 //LSU的模块定义，目前只完成了IO接口的定义，内部逻辑还未完成
 class LSU(implicit p: Parameters) extends Module {
