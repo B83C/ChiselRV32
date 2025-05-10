@@ -160,7 +160,7 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   io.ldReq.bits.write_en := false.B
   io.ldReq.valid := stage2_pipevalid && (~need_flush)
 
-  val 
+  // val 
 
   //stage2-stage3之间的PipelineReg
   val Stage2ToStage3_ldAddr_reg = Module(new PipelineReg(p.XLEN))
