@@ -133,7 +133,7 @@ class ROB(implicit p: Parameters) extends Module {
                 val branch_payload = Wire(new ROB_Branch())
                 branch_payload.btb_hit := uop.btb_hit
                 branch_payload.target_PC := 0.U
-                branch_payload.branch_direction := false.B
+                branch_payload.branch_direction := BranchPred.NT
                 branch_payload.GHR := uop.GHR
                 rob_allocate.payload := branch_payload.asUInt
             }
