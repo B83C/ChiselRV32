@@ -151,7 +151,8 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   val stage2_robidx = Stage1ToStage2_robidx_reg.io.data_out
   val stage2_pdst = Stage1ToStage2_pdst_reg.io.data_out
   
-  val need_flush = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
+  val need_flush = Bool()
+  need_flush := io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
   //为1的时候表示需要进行flush，即将传入stq的全部数取0
   val expected_bitvalid = MuxCase(false.B, Seq(
       (head_entry.func3 === 0.U) -> (head_entry.bit_valid(7,0) === "hFF".U),    // LB
@@ -161,7 +162,9 @@ class LoadPipeline(implicit p: Parameters) extends Module {
     //我们期望的bitvalid值，与stq传出的bitvalid值进行比较，决定后续是否需要向Abter发起访存请求
   val stall = Bool()
   stall := false.B
-  stall := ~ldReq.ready && ldReq.valid
+  when(!ldReq.ready && ldReq.valid){
+    stall := true.B
+  }
 
   io.addr_search_stq := Mux(need_flush, 0.U(p.XLEN.W), stage2_ldAddr)
   io.func3    := Mux(need_flush, 0.U(3.W), stage2_func3)
@@ -171,7 +174,7 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   io.ldReq.bits.data_Addr := stage2_ldAddr
   io.ldReq.bits.func3 := stage2_func3
   io.ldReq.bits.write_en := false.B
-  io.ldReq.valid := stage2_pipevalid && (~need_flush) && (data_bitvalid =/= expected_bitvalid)
+  io.ldReq.valid := stage2_pipevalid && (!need_flush) && (data_bitvalid =/= expected_bitvalid)
 
   val stage2_data_out_stq = io.data_out_stq.data
   val stage2_data_bitvalid = io.data_out_stq.bit_valid
@@ -220,7 +223,7 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   Stage3ToStage4_robidx_reg.io.stall_in := stall
 //stage4进行wb操作
 
-  io.ldu_wb_uop.valid := Stage3ToStage4_pipevalid_reg.io.data_out.asBool && (~need_flush) && (~stall)
+  io.ldu_wb_uop.valid := Stage3ToStage4_pipevalid_reg.io.data_out.asBool && (!need_flush) && (!stall)
   //仅当ld_issue_uop传入有效且不需要flush时wb rob的uop才有效
   io.ldu_wb_uop.bits.rob_index := Stage3ToStage4_robidx_reg.io.data_out
   io.ldu_wb_uop.bits.pdst := Stage3ToStage4_pdst_reg.io.data_out
@@ -297,7 +300,7 @@ class StorePipeline(implicit p: Parameters) extends Module {
   io.stq_index         := Mux(need_flush, 0.U(log2Ceil(p.STQ_DEPTH).W), stage2_stqidx)
   io.func3             := Mux(need_flush, 0.U(3.W), stage2_func3)
 
-  io.stu_wb_uop.valid  := Stage1ToStage2_valid_reg.io.data.out.asBool && (~need_flush)
+  io.stu_wb_uop.valid  := Stage1ToStage2_valid_reg.io.data_out.asBool && (!need_flush)
   //仅当st_issue_uop传入有效且不需要flush时wb rob的uop才有效
   io.stu_wb_uop.bits.rob_index := Stage1ToStage2_robidx_reg.io.data_out
 
@@ -335,7 +338,8 @@ class StoreQueue(implicit p: Parameters) extends Module {
 
   //flush信号，作为stq的reset信号
   //当rob的commit信号为valid且mispred为1时，表示需要flush
-  val need_flush = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
+  val need_flush = Bool()
+  need_flush := io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
   //初始化stq的entries
   val stq_entries = withReset(need_flush){
       RegInit(VecInit(Seq.fill(p.STQ_DEPTH){
@@ -365,7 +369,7 @@ class StoreQueue(implicit p: Parameters) extends Module {
   val tail_inc = Mux(io.st_dis(1), 2.U, Mux(io.st_dis(0), 1.U, 0.U))
   val tail_next = nextPtr(tail, tail_inc)
   
-  when(~need_flush) {
+  when(!need_flush) {
     //发送向Arbiter的信号
     val head_entry = stq_entries(head)
     val head_valid = MuxCase(false.B, Seq(
@@ -446,7 +450,7 @@ class StoreQueue(implicit p: Parameters) extends Module {
   }
   
   //搜索操作的核心
-  when(~need_flush){
+  when(!need_flush){
     for (i <- 0 until p.STQ_DEPTH) {
       val idx = (io.input_tail + (p.STQ_DEPTH.U - i.U - 1.U)) % p.STQ_DEPTH.U
       val entry = stq_entries(idx)
@@ -534,7 +538,7 @@ class LSU(implicit p: Parameters) extends Module {
     temp_DataToMem := Cat(0.U(32.W), arbiter.io.memOut.bits.data(31, 0))
     io.data_addr := temp_AddrToMem//将地址信号连接到arbiter的输出端口
     io.data_into_mem := temp_DataToMem//将数据信号连接到arbiter的输出端口
-    io.write_en := arbiter.io.memOut.bits.isStore//将写使能信号连接到arbiter的输出端口
+    io.write_en := arbiter.io.isStore//将写使能信号连接到arbiter的输出端口
     io.func3 := arbiter.io.memOut.bits.func3//将fun3信号连接到arbiter的输出端口
     arbiter.io.ldReq <> load_pipeline.io.ldReq//将加载请求信号连接到arbiter的输入端口
     arbiter.io.stqReq <> store_queue.io.stqReq//将存储请求信号连接到arbiter的输入端口
