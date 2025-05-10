@@ -7,6 +7,28 @@ import rsd_rv32.common._
 
 import rsd_rv32.frontend._
 
+class EXUIO(implicit p: Parameters) extends Bundle{
+  //来自exu_issue queue的输入
+  val exu_issue_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new EXUISSUE_EXU_uop)))
+  //反馈给exu_issue queue的信号
+  val mul_ready = Output(Bool())
+  val div_ready = Output(Bool())
+
+  //写回信号
+  val alu_wb_uop = Vec(p.ALU_NUM, Valid(new ALU_WB_uop()))
+  val bu_wb_uop = Vec(p.BU_NUM, Valid(new BU_WB_uop()))
+  val mul_wb_uop = Vec(p.MUL_NUM, Valid(new ALU_WB_uop()))
+  val divrem_wb_uop = Vec(p.DIV_NUM, Valid(new ALU_WB_uop()))
+}
+
+//把exu的各个fu封装起来的顶层模块
+class EXU(implicit p: Parameters) extends Module{
+  val io = IO(new EXUIO())
+
+  //your code here
+
+}
+
 // ALU 的 interface
 class ALUIO(implicit p: Parameters) extends CustomBundle {
   //输入操作数
