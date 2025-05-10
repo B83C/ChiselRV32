@@ -82,14 +82,28 @@ class ROB(implicit p: Parameters) extends Module {
 
     val rob_head_plus1 = rob(Mux(rob_head === (p.PRF_DEPTH - 1).U, 0.U, rob_head + 1.U))
     when(commit0_valid){
-        when(!rob(rob_head).mispred){
+        when(!rob(rob_head).mispred && !rob_head_plus1.mispred){
             commit1_valid := rob_head_plus1.completed
         }
     }
 
+    switch(commit0_valid ## commit1_valid){
+        is("b11".U){
+            head_next := MuxLookup(rob_head, rob_head + 2.U)(Seq(
+                (p.PRF_DEPTH - 2).U -> 0.U,
+                (p.PRF_DEPTH - 1).U -> 1.U
+            ))
+        }
+        is("b10".U){
+            head_next := Mux(rob_head === (p.PRF_DEPTH - 1).U, 0.U, rob_head + 1.U)
+        }
+    }
+    
+    
+
     //flush逻辑
     when(flush){
-        rob_tail := rob_head
+        tail_next := head_next
         rob_full := false.B
         for(i <- 0 until p.ROB_DEPTH){
             rob(i) := 0.U.asTypeOf(new ROBContent())
@@ -229,4 +243,43 @@ class ROB(implicit p: Parameters) extends Module {
         }.elsewhen(io.dis_uop(0).valid ## io.dis_uop(1).valid === "b11".U){
         //处理 “11”
     }*/
+
+    //调试
+    when (true.B) {
+        printf(p"rob_head=${rob_head} rob_tail=${rob_tail} full=${rob_full}\n")
+        for (i <- 0 until p.ROB_DEPTH) {
+            // 通用字段
+            printf(p"ROB[${"%02d".format(i)}]: addr=0x${Hexadecimal(rob(i).instr_addr)} ")
+            printf(p"type=${rob(i).rob_type} ") // 打印枚举标签
+            printf(p"mispred=${rob(i).mispred} done=${rob(i).completed} ")
+
+            // 针对不同类型，打印特定字段
+            switch (rob(i).rob_type) {
+                is (ROBType.Arithmetic) {
+                    val a = rob(i).as_Arithmetic
+                    printf(p"[ARITH] rd=${a.rd} pdst=${a.pdst}\n")
+                }
+                is (ROBType.Branch) {
+                    val b = rob(i).as_Branch
+                    printf(p"[BRANCH] hit=${b.btb_hit} dir=${b.branch_direction} " +
+                      p"tgt=0x${Hexadecimal(b.target_PC)} GHR=0x${Hexadecimal(b.GHR)}\n")
+                }
+                is (ROBType.Jump) {
+                    val j = rob(i).as_Jump
+                    printf(p"[JUMP] rd=${j.rd} pdst=${j.pdst} " +
+                      p"hit=${j.btb_hit} tgt=0x${Hexadecimal(j.target_PC)}\n")
+                }
+                is (ROBType.Store) {
+                    // 如果 Store 有字段，可解包打印；否则只标记
+                    printf(p"[STORE]\n")
+                }
+                is (ROBType.CSR) {
+                    val c = rob(i).as_CSR
+                    printf(p"[CSR] rd=${c.rd} pdst=${c.pdst}\n")
+                }
+            }
+        }
+        printf(p"\n\n")
+    }
 }
+

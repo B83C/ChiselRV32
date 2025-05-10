@@ -16,6 +16,8 @@ class RenameUnit_IO(implicit p: Parameters) extends Bundle {
   //with Dispatch
   val dis_uop = Vec(p.CORE_WIDTH, Valid(new RENAME_DISPATCH_uop())) //发往Dispatch单元的uop
   val dis_ready = Input(Bool()) // 来自Dispatch单元的反馈，显示dispatch单元是否准备好接收指令
+  //for prf valid bits
+  val amt = Output(Vec(32,UInt(log2Ceil(p.PRF_DEPTH).W)))
 }
 
 /*
@@ -31,6 +33,8 @@ class RenameUnit(implicit p: Parameters) extends Module {
   val rmt = RegInit(VecInit(Seq.fill(32)(0.U(log2Ceil(p.PRF_DEPTH).W)))) //重命名表，存储逻辑寄存器到物理寄存器的映射关系
   val rmt_valid = RegInit(VecInit(Seq.fill(32)(false.B))) //重命名表有效位
   val amt = RegInit(VecInit((0 to 31).map(i => i.U(log2Ceil(p.PRF_DEPTH).W)))) //架构寄存器表，存储逻辑寄存器到物理寄存器的映射关系
+
+  io.amt := amt
 
   val freelist = RegInit(VecInit((32 to p.PRF_DEPTH - 1).map(i => i.U(log2Ceil(p.PRF_DEPTH).W)))) //空闲寄存器列表，存储空闲物理寄存器的地址
   val freelist_head = RegInit(0.U(log2Ceil(p.PRF_DEPTH - 32).W)) //空闲寄存器列表头指针

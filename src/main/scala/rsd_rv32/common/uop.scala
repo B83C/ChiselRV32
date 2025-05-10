@@ -116,7 +116,7 @@ class DISPATCH_ROB_uop(implicit p: Parameters) extends CustomBundle {
     val rd = UInt(5.W)
 
     val GHR = UInt(p.GHR_WIDTH.W)
-    val branch_pred = BranchPred()
+    //val branch_pred = BranchPred()
     val btb_hit = BTBHit()
     
     //val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
