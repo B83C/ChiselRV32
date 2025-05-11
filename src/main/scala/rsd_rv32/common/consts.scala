@@ -124,12 +124,14 @@ trait ScalarOpConstants
 }
 
 trait ALUConsts {
-  val ALU_ADD_SUB = 0.U(3.W)  // add/sub 
+  val ALU_ADD     = 0.U(3.W)  // add
+  val ALU_SUB     = 0.U(3.W)  // sub
   val ALU_SLL     = 1.U(3.W)  // shift left logical
   val ALU_SLT     = 2.U(3.W)  // set less than (signed)
   val ALU_SLTU    = 3.U(3.W)  // set less than unsigned
   val ALU_XOR     = 4.U(3.W)  // xor
-  val ALU_SRL_SRA = 5.U(3.W)  // shift right logical/arithmetic 
+  val ALU_SRL     = 5.U(3.W)  // left logical/arithmetic
+  val ALU_SRA     = 5.U(3.W)  // right logical/arithmetic
   val ALU_OR      = 6.U(3.W)  // or
   val ALU_AND     = 7.U(3.W)  // and
   
@@ -138,10 +140,10 @@ trait ALUConsts {
   val ALU_OP_SRL  = 0.U(1.W)  // 逻辑右移
   val ALU_OP_SRA  = 1.U(1.W)  // 算术右移
   
-  val BR_EQ       = 0.U(3.W)  // equal
-  val BR_NE       = 1.U(3.W)  // not equal
-  val BR_LT       = 4.U(3.W)  // less than (signed)
-  val BR_GE       = 5.U(3.W)  // greater or equal (signed)
-  val BR_LTU      = 6.U(3.W)  // less than unsigned
-  val BR_GEU      = 7.U(3.W)  // greater or equal unsigned
+  val ALU_EQ       = 0.U(3.W)  // equal
+  val ALU_NE       = 1.U(3.W)  // not equal
+  val ALU_LT       = 4.U(3.W)  // less than (signed)
+  val ALU_GE       = 5.U(3.W)  // greater or equal (signed)
+  val ALU_LTU      = 6.U(3.W)  // less than unsigned
+  val ALU_GEU      = 7.U(3.W)  // greater or equal unsigned
 }

@@ -48,7 +48,7 @@ class ALUIO(implicit p: Parameters) extends Bundle {
 class ALU(implicit p: Parameters) extends Module with ALUConsts {
   val io = IO(new ALUIO)
 
-  import ALUOp._
+
 
   // 主ALU逻辑
   val shamt = io.in2(4,0)  // 移位量
@@ -82,7 +82,7 @@ class ALU(implicit p: Parameters) extends Module with ALUConsts {
 }
 class BypassInfo(implicit p: Parameters) extends CustomBundle {
   val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
-  val data = UInt(p.XLEN.W))
+  val data = UInt(p.XLEN.W)
 }
 
 class BypassNetworkIO(
@@ -170,11 +170,12 @@ abstract class FunctionalUnit(
     val branch_info = if (needInformBranch) Some(Output(new FUBranchInfo())) else None
     val busy = Output(Bool())
     
-    // CSR专用信号
+    /*CSR专用信号
     val csr_rdata = if (this.isInstanceOf[CSRFU]) Some(Input(UInt(p.XLEN.W))) else None
     val csr_wen = if (this.isInstanceOf[CSRFU]) Some(Output(Bool())) else None
     val csr_waddr = if (this.isInstanceOf[CSRFU]) Some(Output(UInt(12.W))) else None
     val csr_wdata = if (this.isInstanceOf[CSRFU]) Some(Output(UInt(p.XLEN.W))) else None
+    */
   })
 }
 
@@ -339,9 +340,10 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   io.busy := state =/= s_idle
 }
 
+/*
 class CSRFU(implicit p: Parameters) extends FunctionalUnit(false, true) {
   val csr_signals = io.req.bits.uop.fu_signals.asTypeOf(new CSRSignals)
-  
+
   // CSR读写逻辑
   val csr_addr = io.req.bits.uop.imm(11, 0)
   val csr_wdata = MuxLookup(csr_signals.csr_op, 0.U)(Seq(
@@ -350,11 +352,11 @@ class CSRFU(implicit p: Parameters) extends FunctionalUnit(false, true) {
     2.U -> (io.csr_rdata.get & ~io.req.bits.rs1),
     3.U -> io.req.bits.uop.imm
   ))
-  
+
   val data_out = Wire(new ExuDataOut())
   data_out.uop := io.req.bits.uop
   data_out.data := io.csr_rdata.get
-  
+
   io.out.valid := io.req.valid
   io.out.bits := data_out
   io.csr_wen.get := io.req.valid && csr_signals.csr_op =/= 0.U
@@ -362,3 +364,4 @@ class CSRFU(implicit p: Parameters) extends FunctionalUnit(false, true) {
   io.csr_wdata.get := csr_wdata
   io.busy := false.B
 }
+ */
