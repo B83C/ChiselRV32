@@ -123,6 +123,7 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   val stage1_ldAddr = ps1_value + stage1_imm
   val stall = Wire(Bool())
 
+
   //stage1-stage2之间的PipelineReg
   val Stage1ToStage2_ldAddr_reg = Module(new PipelineReg(p.XLEN))
   val Stage1ToStage2_func3_reg = Module(new PipelineReg(3))
@@ -179,6 +180,8 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   io.ldReq.bits.func3 := stage2_func3
   io.ldReq.bits.write_en := false.B
   io.ldReq.valid := stage2_pipevalid && (!need_flush) && (expected)
+
+  io.ld_issue_uop.ready := (!need_flush) && (!stall)
 
   val stage2_data_out_stq = io.data_out_stq.data
 
@@ -441,6 +444,9 @@ class StoreQueue(implicit p: Parameters) extends Module {
   }
 
   val byteSearched = WireDefault(Vec(4, Vec(p.STQ_DEPTH,Bool())), 0.U.asTypeOf(Vec(4, Vec(p.STQ_DEPTH,Bool()))))
+  val found_data = WireDefault(Vec(4,UInt(8.W)), 0.U.asTypeOf(Vec(4,UInt(8.W))))
+  val found_data_bytevalid = WireDefault(Vec(4,Bool()), 0.U.asTypeOf(Vec(4,Bool())))
+
 
   data_res := 0.U
   data_bit_valid := 0.U
@@ -456,22 +462,22 @@ class StoreQueue(implicit p: Parameters) extends Module {
       mask := "b1111".U
     }
   }
-  for(delta_byte <- 0 until 4){
+
+  when(!need_flush){
+    for(delta_byte <- 0 until 4){
       val curr_addr = SearchAddr + delta_byte.U
       for(i <- 0 until p.STQ_DEPTH){
         val entry = stq_entries(i)
         val store_byte = Mux(entry.func3 === 0.U, 1.U,
-            Mux(entry.func3 === 1.U, 2.U,
+          Mux(entry.func3 === 1.U, 2.U,
             Mux(entry.func3 === 2.U, 4.U, 0.U)))
         byteSearched(delta_byte)(i) := (isInrange(i.U,head, io.input_tail)) &&
           (curr_addr >= entry.data_Addr) && (curr_addr < (entry.data_Addr + store_byte)) && mask(delta_byte)
       }
-  }
+    }
 
-  val found_data = WireDefault(Vec(4,UInt(8.W)), 0.U.asTypeOf(Vec(4,UInt(8.W))))
-  val found_data_bytevalid = WireDefault(Vec(4,Bool()), 0.U.asTypeOf(Vec(4,Bool())))
 
-  for (delta_byte <- 0 until 4){
+    for (delta_byte <- 0 until 4){
       val rev_byteSearch =  VecInit((0 until p.STQ_DEPTH).map { i =>
         val idx = (head + p.STQ_DEPTH.U - 1.U - i.U) % p.STQ_DEPTH.U
         byteSearched(delta_byte)(idx)
@@ -484,7 +490,9 @@ class StoreQueue(implicit p: Parameters) extends Module {
       val entry = stq_entries(realIdx)
       val offset = SearchAddr + delta_byte.asUInt - entry.data_Addr
       found_data(delta_byte) := (entry.data >> offset)(7, 0)
+    }
   }
+
 
   val found_data_bitvalid = Wire(UInt(p.XLEN.W))
   found_data_bitvalid := Cat(
