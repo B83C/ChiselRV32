@@ -18,7 +18,7 @@ class Fetch_IO(implicit p: Parameters) extends CustomBundle {
     
     // with BranchPredictor
     // instr_addr上面已写
-    val target_PC = Input(UInt(p.XLEN.W)) //预测的下个cycle取指的目标地址
+    val target_PC = Input(UInt(p.XLEN.W)) //从btb读出的目标地址，是否要采用由branch_pred决定
     val btb_hit = Input(Vec(p.CORE_WIDTH, Bool())) //1代表hit，0相反；将最年长的命中BTB的置为1，其余为0
     val branch_pred = Input(Bool()) //branch指令的BHT的预测结果；1代表跳转，0相反
     val GHR = Input(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照
