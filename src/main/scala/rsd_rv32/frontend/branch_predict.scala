@@ -25,7 +25,7 @@ class BP_IO (implicit p: Parameters) extends CustomBundle {
     //with IF
     val instr_addr = Input(UInt(p.XLEN.W)) //当前PC值，用于访问BTB获得跳转目标地址，以及访问BHT获得跳转预测结果
     val target_PC = Output(UInt(p.XLEN.W)) //预测的下个cycle取指的目标地址
-    val btb_hit = Output(Vec(p.CORE_WIDTH, Bool())) //1代表hit，0相反；将指令包中命中BTB的最年轻的置为1，其余为0
+    val btb_hit = Output(Vec(p.CORE_WIDTH, Bool())) //1代表hit，0相反；将指令包中命中BTB的最年长的置为1，其余为0
     val branch_pred = Output(Bool()) //条件分支指令的BHT的预测结果；1代表跳转，0相反；非条件分支置1
     val GHR = Output(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照，随流水级传递，在ROB退休分支指令时更新BHT
 
