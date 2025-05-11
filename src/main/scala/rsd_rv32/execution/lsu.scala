@@ -358,7 +358,12 @@ class StoreQueue(implicit p: Parameters) extends Module {
       )
       }))
   }
-
+//调试用
+  for (i <- 0 until p.STQ_DEPTH) {
+    val entry = stq_entries(i)
+    printf(p"STQ[${"%02d".format(i)}]: data=0x${Hexadecimal(entry.data)} addr=0x${Hexadecimal(entry.data_Addr)} bits_valid=0x${Hexadecimal(entry.bit_valid)} func3=0x${Hexadecimal(entry.func3)}\n")
+  }
+  printf(p"\n\n")
 
 //stq的head和tail指针
   val head = withReset(need_flush){
