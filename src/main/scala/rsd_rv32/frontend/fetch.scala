@@ -33,14 +33,13 @@ class FetchUnit(implicit p: Parameters) extends Module {
     val pc_reg = RegInit(0.UInt(p.XLEN.W))        //存储当前PC
     val pc_next = Wire(UInt(p.XLEN.W))            //下一个PC
     val pc_aligned = Wire(UInt(p.XLEN.W))         //对齐后的当前PC
-    val whether_flush = Wire(Bool())              //是否需要冲刷一下
 
     pc_aligned := pc_reg & ~((p.CORE_WIDTH.U << 2) - 1.U)
     val pc_next_default = pc_aligned + (p.CORE_WIDTH.U <<2)
     
     //需不需要flush
-    whether_flush := io.rob_commitsignal
-    val rob_flush_pc = Mux1H(io.rob_commitsignal.map(s => s.valid -> s.bits.pc))
+    val rob_flush_valid = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
+    val rob_flush_pc = io.rob_commitsignal(0).bits.instr_addr
 
     //分支预测
     val whether_take_bp = io.branch_pred
