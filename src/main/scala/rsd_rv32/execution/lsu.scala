@@ -50,8 +50,11 @@ class PipelineReg(val width: Int) extends Module {
     val stall_in = Input(Bool())
     val data_in  = Input(UInt(width.W))
     val data_out = Output(UInt(width.W))
+    val reset = Input(Bool())
   })
-  val reg = RegInit(1.U(width.W))
+  val reg = withReset(reset){
+    RegInit(0.U(width.W))
+  }
 
   when(io.stall_in) {
     reg := reg
@@ -93,9 +96,9 @@ class LoadPipeline(implicit p: Parameters) extends Module {
     val ld_issue_uop = Flipped(Decoupled(new LDISSUE_LDPIPE_uop()))//加载指令的uop
     val ldu_wb_uop  = Valid((new ALU_WB_uop()))//加载完成的信号,wb to ROB and PRF
 
-    val addr_search_stq = Output(UInt(p.XLEN.W))//地址搜索信号,进入stq的搜索地址
-    val func3 = Output(UInt(3.W))//fun3信号
-    val stq_tail = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引
+    val addr_search_stq = Valid(UInt(p.XLEN.W))//地址搜索信号,进入stq的搜索地址
+    val func3 = Valid(UInt(3.W))//fun3信号
+    val stq_tail = Valid(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引
     
 
     val ldReq = Decoupled(new Req_Abter())//加载请求信号
@@ -146,6 +149,14 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   Stage1ToStage2_robidx_reg.io.stall_in := stall
   Stage1ToStage2_pdst_reg.io.stall_in := stall
 
+  Stage1ToStage2_addr_reg.io.reset := need_flush
+  Stage1ToStage2_func3_reg.io.reset := need_flush
+  Stage1ToStage2_pipevalid_reg.io.reset := need_flush
+  Stage1ToStage2_stqtail_reg.io.reset := need_flush
+  Stage1ToStage2_robidx_reg.io.reset := need_flush
+  Stage1ToStage2_pdst_reg.io.reset := need_flush
+
+
 //stage2
   val stage2_ldAddr = Stage1ToStage2_ldAddr_reg.io.data_out
   val stage2_func3 = Stage1ToStage2_func3_reg.io.data_out
@@ -170,9 +181,13 @@ class LoadPipeline(implicit p: Parameters) extends Module {
     stall := true.B
   }
 
-  io.addr_search_stq := Mux(need_flush, 0.U(p.XLEN.W), stage2_ldAddr)
-  io.func3    := Mux(need_flush, 0.U(3.W), stage2_func3)
-  io.stq_tail := Mux(need_flush, 0.U(log2Ceil(p.STQ_DEPTH).W), stage2_stqtail)
+  io.addr_search_stq := stage2_ldAddr
+  io.func3    :=  stage2_func3
+  io.stq_tail := stage2_stqtail
+
+  io.addr_search_stq.valid := stage2_pipevalid && (!need_flush) 
+  io.func3.valid := stage2_pipevalid && (!need_flush)
+  io.stq_tail.valid := stage2_pipevalid && (!need_flush)
 
 
   io.ldReq.bits.data := 0.U
@@ -205,6 +220,13 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   Stage2ToStage3_pipevalid_reg.io.stall_in := stall
   Stage2ToStage3_robidx_reg.io.stall_in := stall
 
+  Stage2ToStage3_data_reg.io.reset := need_flush
+  Stage2ToStage3_bitvalid_reg.io.reset := need_flush
+  Stage2ToStage3_pdst_reg.io.reset := need_flush
+  Stage2ToStage3_pipevalid_reg.io.reset := need_flush
+  Stage2ToStage3_robidx_reg.io.reset := need_flush
+  
+
 //stage3进行mem和stq的数据合并
   val stage3_data = Stage2ToStage3_data_reg.io.data_out
   val stage3_bitvalid = Stage2ToStage3_bitvalid_reg.io.data_out
@@ -228,6 +250,12 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   Stage3ToStage4_pdst_reg.io.stall_in := stall
   Stage3ToStage4_pipevalid_reg.io.stall_in := stall
   Stage3ToStage4_robidx_reg.io.stall_in := stall
+
+  Stage3ToStage4_data_reg.io.reset := need_flush
+  Stage3ToStage4_pdst_reg.io.reset := need_flush
+  Stage3ToStage4_pipevalid_reg.io.reset := need_flush
+  Stage3ToStage4_robidx_reg.io.reset := need_flush
+  
 //stage4进行wb操作
 
   io.ldu_wb_uop.valid := Stage3ToStage4_pipevalid_reg.io.data_out.asBool && (!need_flush) && (!stall)
@@ -245,10 +273,10 @@ class StorePipeline(implicit p: Parameters) extends Module {
     val st_issue_uop = Flipped(Valid(new STISSUE_STPIPE_uop()))//存储指令的uop
     val stu_wb_uop = Valid((new STPIPE_WB_uop()))//存储完成的信号,wb to ROB
 
-    val data_into_stq = Output(UInt(p.XLEN.W))//需要写入stq的数据
-    val dataAddr_into_stq = Output(UInt(p.XLEN.W))//需要写入stq的地址
-    val func3 = Output(UInt(3.W))//fun3信号
-    val stq_index = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//需要写入stq的索引
+    val data_into_stq = UInt(p.XLEN.W)//需要写入stq的数据
+    val dataAddr_into_stq = Valid(UInt(p.XLEN.W))//需要写入stq的地址
+    val func3 = UInt(3.W)//fun3信号
+    val stq_index = UInt(log2Ceil(p.STQ_DEPTH).W)//需要写入stq的索引
 
     val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
   })  
@@ -268,6 +296,8 @@ class StorePipeline(implicit p: Parameters) extends Module {
 
   val stage1_dataAddr = ps1_value + stage1_imm
 
+  val pipeline_valid = Wire(Bool())
+  pipeline_valid := io.st_issue_uop.valid
   
 
 
@@ -293,6 +323,13 @@ class StorePipeline(implicit p: Parameters) extends Module {
   Stage1ToStage2_valid_reg.io.stall_in  := false.B
   Stage1ToStage2_func3_reg.io.stall_in  := false.B
 
+  Stage1ToStage2_data_reg.io.reset := need_flush
+  Stage1ToStage2_addr_reg.io.reset := need_flush
+  Stage1ToStage2_stqidx_reg.io.reset := need_flush
+  Stage1ToStage2_robidx_reg.io.reset := need_flush
+  Stage1ToStage2_valid_reg.io.reset := need_flush
+  Stage1ToStage2_func3_reg.io.reset := need_flush
+
 //stage2 wb to ROB and STQ
   val stage2_data = Stage1ToStage2_data_reg.io.data_out
   val stage2_addr = Stage1ToStage2_addr_reg.io.data_out
@@ -302,10 +339,14 @@ class StorePipeline(implicit p: Parameters) extends Module {
   val need_flush = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
   //为1的时候表示需要进行flush，即将传入stq的全部数取0
 
-  io.data_into_stq     := Mux(need_flush, 0.U(p.XLEN.W), stage2_data) 
-  io.dataAddr_into_stq := Mux(need_flush, 0.U(p.XLEN.W), stage2_addr)
-  io.stq_index         := Mux(need_flush, 0.U(log2Ceil(p.STQ_DEPTH).W), stage2_stqidx)
-  io.func3             := Mux(need_flush, 0.U(3.W), stage2_func3)
+  io.data_into_stq     := stage2_data 
+  io.dataAddr_into_stq := stage2_addr
+  io.stq_index         := stage2_stqidx
+  io.func3             := stage2_func3
+
+  
+  io.dataAddr_into_stq.valid := !need_flush && Stage1ToStage2_valid_reg.io.data_out.asBool
+
 
   io.stu_wb_uop.valid  := Stage1ToStage2_valid_reg.io.data_out.asBool && (!need_flush)
   //仅当st_issue_uop传入有效且不需要flush时wb rob的uop才有效
@@ -337,7 +378,7 @@ class StoreQueue(implicit p: Parameters) extends Module {
     val st_dis = Input(Vec(p.CORE_WIDTH, Bool()))//用于更新store queue（在lsu中）的tail（full标志位）
     val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
 
-    val dataAddr_into_stq = Input(UInt(p.XLEN.W))//需要写入stq的地址
+    val dataAddr_into_stq = Flipped(Valid(UInt(p.XLEN.W)))//需要写入stq的地址
     val data_into_stq = Input(UInt(p.XLEN.W))//需要写入stq的数据
     val stq_index = Input(UInt(log2Ceil(p.STQ_DEPTH).W))//需要写入stq的索引
     val st_func3 = Input(UInt(3.W))//fun3信号
@@ -402,16 +443,19 @@ class StoreQueue(implicit p: Parameters) extends Module {
     }
 
   //写入stq的操作
-    val stq_wb_idx = Wire(UInt(log2Ceil(p.STQ_DEPTH).W))
-    stq_wb_idx := io.stq_index
-    stq_entries(stq_wb_idx).data := io.data_into_stq
-    stq_entries(stq_wb_idx).data_Addr := io.dataAddr_into_stq
-    stq_entries(stq_wb_idx).func3 := io.st_func3
-    stq_entries(stq_wb_idx).bit_valid := MuxCase(0.U, Seq(
-      (io.st_func3 === 0.U) -> ("hFF".U),    // SB
-      (io.st_func3 === 1.U) -> ("hFFFF".U),  // SH
-      (io.st_func3 === 2.U) -> ("hFFFFFFFF".U) // SW
+    when(io.dataAddr_into_stq.valid){
+      val stq_wb_idx = Wire(UInt(log2Ceil(p.STQ_DEPTH).W))
+      stq_wb_idx := io.stq_index
+      stq_entries(stq_wb_idx).data := io.data_into_stq
+      stq_entries(stq_wb_idx).data_Addr := io.dataAddr_into_stq
+      stq_entries(stq_wb_idx).func3 := io.st_func3
+      stq_entries(stq_wb_idx).bit_valid := MuxCase(0.U, Seq(
+        (io.st_func3 === 0.U) -> ("hFF".U),    // SB
+        (io.st_func3 === 1.U) -> ("hFFFF".U),  // SH
+        (io.st_func3 === 2.U) -> ("hFFFFFFFF".U) // SW
     ))
+    }
+    
   }
 
   val stq_full = tail_next === head
