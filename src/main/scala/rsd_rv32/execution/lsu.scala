@@ -107,9 +107,9 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   })
 
   //stage1地址计算
-  val instr = UInt((p.XLEN - 7).W)
-  val ps1_value = UInt(p.XLEN.W)
-  val stage1_pipevalid = Bool()
+  val instr = Wire(UInt((p.XLEN - 7).W))
+  val ps1_value = Wire(UInt(p.XLEN.W))
+  val stage1_pipevalid = Wire(Bool())
 
   instr := io.ld_issue_uop.bits.instr
   ps1_value := io.ld_issue_uop.bits.ps1_value
@@ -121,6 +121,7 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   val stage1_func3 = instr(7, 5)
 
   val stage1_ldAddr = ps1_value + stage1_imm
+  val stall = Wire(Bool())
 
   //stage1-stage2之间的PipelineReg
   val Stage1ToStage2_ldAddr_reg = Module(new PipelineReg(p.XLEN))
@@ -152,8 +153,9 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   val stage2_robidx = Stage1ToStage2_robidx_reg.io.data_out
   val stage2_pdst = Stage1ToStage2_pdst_reg.io.data_out
   
-  val need_flush = Bool()
+  val need_flush = Wire(Bool())
   need_flush := io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
+  val stage2_data_bitvalid = io.data_out_stq.bit_valid
   //为1的时候表示需要进行flush，即将传入stq的全部数取0
   val expected = MuxCase(false.B, Seq(
       (stage2_func3 === 0.U) -> (stage2_data_bitvalid(7,0) === "hFF".U),    // LB
@@ -161,7 +163,7 @@ class LoadPipeline(implicit p: Parameters) extends Module {
       (stage2_func3 === 2.U) -> (stage2_data_bitvalid(31,0) === "hFFFFFFFF".U) // LW
     ))
     //我们期望的bitvalid值，与stq传出的bitvalid值进行比较，决定后续是否需要向Abter发起访存请求
-  val stall = Bool()
+
   stall := false.B
   when(!io.ldReq.ready && io.ldReq.valid){
     stall := true.B
@@ -179,7 +181,7 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   io.ldReq.valid := stage2_pipevalid && (!need_flush) && (expected)
 
   val stage2_data_out_stq = io.data_out_stq.data
-  val stage2_data_bitvalid = io.data_out_stq.bit_valid
+
   //stage2-stage3之间的PipelineReg
   
   val Stage2ToStage3_data_reg = Module(new PipelineReg(p.XLEN))
@@ -204,7 +206,7 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   val stage3_data = Stage2ToStage3_data_reg.io.data_out
   val stage3_bitvalid = Stage2ToStage3_bitvalid_reg.io.data_out
   
-  val data_out_mem = UInt(p.XLEN.W)
+  val data_out_mem = Wire(UInt(p.XLEN.W))
   data_out_mem := io.data_out_mem
   val final_data = (stage3_data & stage3_bitvalid) | (data_out_mem & (~stage3_bitvalid).asUInt)
 
@@ -249,8 +251,8 @@ class StorePipeline(implicit p: Parameters) extends Module {
   })  
 
 //stage1地址计算
-  val instr = UInt((p.XLEN - 7).W)
-  val ps1_value = UInt(p.XLEN.W)
+  val instr = Wire(UInt((p.XLEN - 7).W))
+  val ps1_value = Wire(UInt(p.XLEN.W))
 
   instr := io.st_issue_uop.bits.instr
   ps1_value := io.st_issue_uop.bits.ps1_value
@@ -340,7 +342,7 @@ class StoreQueue(implicit p: Parameters) extends Module {
 
   //flush信号，作为stq的reset信号
   //当rob的commit信号为valid且mispred为1时，表示需要flush
-  val need_flush = Bool()
+  val need_flush = Wire(Bool())
   need_flush := io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
   //初始化stq的entries
   val stq_entries = withReset(need_flush){
@@ -397,7 +399,7 @@ class StoreQueue(implicit p: Parameters) extends Module {
     }
 
   //写入stq的操作
-    val stq_wb_idx = UInt(log2Ceil(p.STQ_DEPTH).W)
+    val stq_wb_idx = Wire(UInt(log2Ceil(p.STQ_DEPTH).W))
     stq_wb_idx := io.stq_index
     stq_entries(stq_wb_idx).data := io.data_into_stq
     stq_entries(stq_wb_idx).data_Addr := io.dataAddr_into_stq
@@ -426,37 +428,48 @@ class StoreQueue(implicit p: Parameters) extends Module {
                          Mux(io.ld_func3 === 2.U, 32.U, 0.U)))
   val bytewidth = (bit_width >> 3).asUInt
 
-  val SearchAddr = UInt(p.XLEN.W)
-  val data_res = UInt(p.XLEN.W)
-  val data_bit_valid = UInt(p.XLEN.W)
-  val entry_bytevalid = Vec(p.STQ_DEPTH,UInt(4.W))
+  val SearchAddr = Wire(UInt(p.XLEN.W))
+  val data_res = Wire(UInt(p.XLEN.W))
+  val data_bit_valid = Wire(UInt(p.XLEN.W))
+  val entry_bytevalid = Wire(Vec(p.STQ_DEPTH, Vec(4, Bool())))
 
   for(i <- 0 until p.STQ_DEPTH){
     for(j <- 0 until 4) {
-      val byte_bits = stq_entries(i).bit_valid(8 * i + 7, 8 * i)
+      val byte_bits = stq_entries(i).bit_valid(8 * j + 7, 8 * j)
       entry_bytevalid(i)(j) := (byte_bits.andR).asUInt
     }
   }
 
-  val byteSearched = WireDefault(0.U.asTypeOf(Vec(4, Vec(p.STQ_DEPTH,Bool()))), Vec(4, Vec(p.STQ_DEPTH,Bool())))
+  val byteSearched = WireDefault(Vec(4, Vec(p.STQ_DEPTH,Bool())), 0.U.asTypeOf(Vec(4, Vec(p.STQ_DEPTH,Bool()))))
 
   data_res := 0.U
   data_bit_valid := 0.U
-
-  for(delta_byte <- 0 until bytewidth){
-      val curr_addr = SearchAddr + delta_byte
+  val mask = Wire(UInt(4.W))
+  switch(io.ld_func3){
+    is(0.U){
+      mask := "b1000".U
+    }
+    is(1.U){
+      mask := "b1100".U
+    }
+    is(2.U){
+      mask := "b1111".U
+    }
+  }
+  for(delta_byte <- 0 until 4){
+      val curr_addr = SearchAddr + delta_byte.U
       for(i <- 0 until p.STQ_DEPTH){
         val entry = stq_entries(i)
         val store_byte = Mux(entry.func3 === 0.U, 1.U,
             Mux(entry.func3 === 1.U, 2.U,
             Mux(entry.func3 === 2.U, 4.U, 0.U)))
         byteSearched(delta_byte)(i) := (isInrange(i.U,head, io.input_tail)) &&
-          (curr_addr >= entry.data_Addr) && (curr_addr < (entry.data_Addr + store_byte))
+          (curr_addr >= entry.data_Addr) && (curr_addr < (entry.data_Addr + store_byte)) && mask(delta_byte)
       }
   }
 
-  val found_data = WireDefault(0.U.asTypeOf(Vec(4,UInt(8.W))),Vec(4,UInt(8.W)))
-  val found_data_bytevalid = WireDefault(0.U.asTypeOf(Vec(4,Bool())),Vec(4,Bool()))
+  val found_data = WireDefault(Vec(4,UInt(8.W)), 0.U.asTypeOf(Vec(4,UInt(8.W))))
+  val found_data_bytevalid = WireDefault(Vec(4,Bool()), 0.U.asTypeOf(Vec(4,Bool())))
 
   for (delta_byte <- 0 until 4){
       val rev_byteSearch =  VecInit((0 until p.STQ_DEPTH).map { i =>
@@ -470,10 +483,10 @@ class StoreQueue(implicit p: Parameters) extends Module {
       val realIdx = (head + p.STQ_DEPTH.U -1.U - sel) % p.STQ_DEPTH.U
       val entry = stq_entries(realIdx)
       val offset = SearchAddr + delta_byte.asUInt - entry.data_Addr
-      found_data(delta_byte) := entry.data(8.U*offset + 7, 8*offset)
+      found_data(delta_byte) := (entry.data >> offset)(7, 0)
   }
 
-  val found_data_bitvalid = UInt(p.XLEN.W)
+  val found_data_bitvalid = Wire(UInt(p.XLEN.W))
   found_data_bitvalid := Cat(
     Fill(8,found_data_bytevalid(3).asUInt),
     Fill(8,found_data_bytevalid(2).asUInt),
@@ -498,8 +511,8 @@ class LSU(implicit p: Parameters) extends Module {
     val store_queue = Module(new StoreQueue())//创建一个存储队列模块
 
     //连接arbiter有关的信号
-    val temp_DataToMem = UInt(64.W)
-    val temp_AddrToMem = UInt(64.W)
+    val temp_DataToMem = Wire(UInt(64.W))
+    val temp_AddrToMem = Wire(UInt(64.W))
     temp_AddrToMem := Cat(0.U(32.W), arbiter.io.memOut.bits.data_Addr(31, 0))
     temp_DataToMem := Cat(0.U(32.W), arbiter.io.memOut.bits.data(31, 0))
     io.data_addr := temp_AddrToMem//将地址信号连接到arbiter的输出端口
@@ -511,29 +524,29 @@ class LSU(implicit p: Parameters) extends Module {
 
 
   //连接加载管线模块的信号
-    load_pipeline.io.ld_issue_uop := io.ld_issue_uop//将加载指令的uop连接到加载管线模块的输入端口
+    load_pipeline.io.ld_issue_uop <> io.ld_issue_uop//将加载指令的uop连接到加载管线模块的输入端口
     load_pipeline.io.data_out_mem := io.data_out_mem(31,0)//将从存储器中读取的数据连接到加载管线模块的输入端口
-    load_pipeline.io.addr_search_stq := store_queue.io.addr_search_stq//将地址搜索信号连接到加载管线模块的输入端口
-    load_pipeline.io.func3 := store_queue.io.ld_func3
-    load_pipeline.io.stq_tail := store_queue.io.input_tail
-    load_pipeline.io.data_out_stq := store_queue.io.searched_data
+    load_pipeline.io.addr_search_stq <> store_queue.io.addr_search_stq//将地址搜索信号连接到加载管线模块的输入端口
+    load_pipeline.io.func3 <> store_queue.io.ld_func3
+    load_pipeline.io.stq_tail <> store_queue.io.input_tail
+    load_pipeline.io.data_out_stq <> store_queue.io.searched_data
     load_pipeline.io.rob_commitsignal := io.rob_commitsignal
-    load_pipeline.io.ldu_wb_uop := io.ldu_wb_uop
+    load_pipeline.io.ldu_wb_uop <> io.ldu_wb_uop
 
   //连接storepipeline的信号
     store_pipeline.io.st_issue_uop := io.st_issue_uop
-    store_pipeline.io.stu_wb_uop := io.stu_wb_uop
-    store_pipeline.io.data_into_stq := store_queue.io.data_into_stq
-    store_pipeline.io.dataAddr_into_stq := store_queue.io.dataAddr_into_stq
-    store_pipeline.io.func3 := store_queue.io.st_func3
-    store_pipeline.io.stq_index := store_queue.io.stq_index
+    io.stu_wb_uop := store_pipeline.io.stu_wb_uop
+    store_pipeline.io.data_into_stq <> store_queue.io.data_into_stq
+    store_pipeline.io.dataAddr_into_stq <> store_queue.io.dataAddr_into_stq
+    store_pipeline.io.func3 <> store_queue.io.st_func3
+    store_pipeline.io.stq_index <> store_queue.io.stq_index
     store_pipeline.io.rob_commitsignal := io.rob_commitsignal
 
   //连接STQ的信号
     store_queue.io.st_dis := io.st_dis
-    store_queue.io.stq_head := io.stq_head
-    store_queue.io.stq_tail := io.stq_tail
-    store_queue.io.stq_full := io.stq_full
+    io.stq_head := store_queue.io.stq_head
+    io.stq_tail := store_queue.io.stq_tail
+    io.stq_full :=store_queue.io.stq_tail
 
 
 
