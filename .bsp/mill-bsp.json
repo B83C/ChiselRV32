@@ -1,1 +1,0 @@
-{"name":"mill-bsp","argv":["C:\\Users\\hyh91\\scoop\\apps\\mill\\current\\mill.bat","--bsp","--disable-ticker","--color","false","--jobs","1"],"millVersion":"0.12.5","bspVersion":"2.2.0-M2","languages":["java","scala","kotlin"]}
