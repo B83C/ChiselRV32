@@ -149,7 +149,7 @@ class LoadPipeline(implicit p: Parameters) extends Module {
   Stage1ToStage2_robidx_reg.io.stall_in := stall
   Stage1ToStage2_pdst_reg.io.stall_in := stall
 
-  Stage1ToStage2_addr_reg.io.reset := need_flush
+  Stage1ToStage2_ldAddr_reg.io.reset := need_flush
   Stage1ToStage2_func3_reg.io.reset := need_flush
   Stage1ToStage2_pipevalid_reg.io.reset := need_flush
   Stage1ToStage2_stqtail_reg.io.reset := need_flush
