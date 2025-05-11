@@ -348,31 +348,32 @@ class StoreQueue(implicit p: Parameters) extends Module {
   val need_flush = Wire(Bool())
   need_flush := io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
   //初始化stq的entries
-  val stq_entries = withReset(need_flush){
-      RegInit(VecInit(Seq.fill(p.STQ_DEPTH){
-      (new STQEntry).Lit(
-        _.data -> 0.U,
-        _.data_Addr -> 0.U,
-        _.bit_valid -> 0.U,
-        _.func3 -> 0.U
-      )
-      }))
+  val stq_entries = RegInit(VecInit(Seq.fill(p.STQ_DEPTH){
+                    (new STQEntry).Lit(
+                      _.data -> 0.U,
+                      _.data_Addr -> 0.U,
+                      _.bit_valid -> 0.U,
+                      _.func3 -> 0.U
+                    )
+                    }))
+
+
+
+//stq的head和tail指针
+  val head = RegInit(0.U(log2Ceil(p.STQ_DEPTH).W))
+  val write_valid = RegInit(0.U(log2Ceil(p.STQ_DEPTH).W))
+  val tail = RegInit(0.U(log2Ceil(p.STQ_DEPTH).W))
+  when (need_flush){
+    tail := write_valid
   }
-//调试用
+
+  //调试用
+  printf(p"head=${head} tail=${tail}\n")
   for (i <- 0 until p.STQ_DEPTH) {
     val entry = stq_entries(i)
     printf(p"STQ[${"%02d".format(i)}]: data=0x${Hexadecimal(entry.data)} addr=0x${Hexadecimal(entry.data_Addr)} bits_valid=0x${Hexadecimal(entry.bit_valid)} func3=0x${Hexadecimal(entry.func3)}\n")
   }
   printf(p"\n\n")
-
-//stq的head和tail指针
-  val head = withReset(need_flush){
-    RegInit(0.U(log2Ceil(p.STQ_DEPTH).W))
-  }
-  val tail = withReset(need_flush){
-    RegInit(0.U(log2Ceil(p.STQ_DEPTH).W))
-  }
-
   //更新指针位置
   def nextPtr(ptr: UInt, inc: UInt): UInt = {
     val next = ptr + inc
