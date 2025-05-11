@@ -30,6 +30,7 @@ class lsu_test extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = Parameters()
   "lsu" should "correct" in {
     test(new LSU()) { c =>
+      c.clock.step(5)
       println("pass!")
     }
   }
