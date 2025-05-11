@@ -33,21 +33,20 @@ class FetchUnit(implicit p: Parameters) extends Module {
     val pc_reg = RegInit(0.UInt(p.XLEN.W))        //存储当前PC
     val pc_next = Wire(UInt(p.XLEN.W))            //下一个PC
     val pc_aligned = Wire(UInt(p.XLEN.W))         //对齐后的当前PC
-    val whether_flush = Wire(Bool())              //是否需要冲刷一下
 
     pc_aligned := pc_reg & ~((p.CORE_WIDTH.U << 2) - 1.U)
     val pc_next_default = pc_aligned + (p.CORE_WIDTH.U <<2)
     
     //需不需要flush
-    whether_flush := io.rob_commitsignal
-    val rob_flush_pc = Mux1H(io.rob_commitsignal.map(s => s.valid -> s.bits.pc))
+    val rob_flush_valid = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
+    val rob_flush_pc = io.rob_commitsignal(0).bits.instr_addr
 
     //分支预测
     val whether_take_bp = io.branch_pred
     val bp_target = io.target_PC
 
     //决定下个pc(ROB>BP>default)
-    pc_next := Mux(whether_flush,rob_flush_pc,
+    pc_next := Mux(rob_flush_valid,rob_flush_pc,
                   Mux(whether_take_bp,bp_target,pc_next_default))
 
     //更新PC寄存器
@@ -58,23 +57,43 @@ class FetchUnit(implicit p: Parameters) extends Module {
     
 
     
-    //生成给ID的uop
-    for(i <- 0 until p.CORE_WIDTH){
-        val uop = Wire(new IF_ID_uop())
-
-        val current_pc = pc_aligned +(i.U << 2)
-        uop.instr_addr := current_pc
+    //生成两条给ID的uop
+    val uop_vec = Wire(Vec(2, new IF_ID_uop()))
+    val btb_hit_vec = io.btb_hit
+    val hit_11 = (btb_hit_vec === "b11".U)        //如果出现11
+    
+    //for内
+    for (i <-0 until 2 ){
+        val uop = Wire(new IF_ID_uop)
+        val current_pc = pc_aligned + (i.U << 2)
         uop.instr := io.instr(i)
-        uop.valid := false.B
+        uop.instr_addr := current_pc
+        uop.target_PC := io.target_pc
         uop.GHR := io.GHR
+        uop.branch_pred := Mux(io.branch_pred, BranchPred.T, BranchPred.NT)
+        uop.btb_hit := Mux(io.btb_hit(i), BTBHit.H, BTBHit.NH)
 
-        uop.valid := (current_pc >=pc_reg)&&(!whether_flush)&&(io.id_ready)&&(!(io.btb_hit(i)&&whether_take_bp))
-        io.id_uop(i).valid := uop.valid
-        io.id_uop(i).bits := uop
-
+        val is_valid = (current_pc >= pc_reg) &&
+                    (!rob_flush_valid) &&
+                    io.id_ready &&
+                    (!(io.btb_hit(i) && io.branch_pred)) &&
+                    !(hit_11 && i == 1)
         
+        uop.valid := is_valid
+        uop_vec(i) := uop
     }
 
+
+    //存入寄存器给ID
+    val IF_ID_uop_reg = Reg(Vec(2, Valid(new IF_ID_uop())))
+    
+    for (i <- 0 until 2) {
+        IF_ID_uop_reg(i).valid := uop_vec(i).valid
+        IF_ID_uop_reg(i).bits := uop_vec(i)
+        io.id_uop(i) := IF_ID_uop_reg(i)
+  }
+
+    
     
     
     

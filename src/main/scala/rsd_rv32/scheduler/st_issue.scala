@@ -10,7 +10,7 @@ class st_issue_IO(implicit p: Parameters) extends CustomBundle {
     val dis_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new DISPATCH_STISSUE_uop())))  //来自Dispatch Unit的输入
 
     //发射到st的输出
-    val issue_st_uop = Decoupled(new STISSUE_STPIPE_uop())  //发射的指令
+    val issue_st_uop = Valid(new STISSUE_STPIPE_uop())  //发射的指令
     // val value_o1 = Output(UInt(p.XLEN.W)) //发射的指令的操作数1
     // val value_o2 = Output(UInt(p.XLEN.W)) //发射的指令的操作数2
 
@@ -46,7 +46,6 @@ class st_iq_select_logic(implicit p: Parameters) extends Module{
     val io = IO(new Bundle {
         val issue_queue = Input(Vec(p.STISSUE_DEPTH, new st_issue_content()))
         val sel_index = Output(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W))) //选择的索引
-        val stpipe_ready = Input(Bool())
     })
     val readySt = VecInit((0 until p.STISSUE_DEPTH).map { i =>
         val q = io.issue_queue(i)
@@ -57,7 +56,7 @@ class st_iq_select_logic(implicit p: Parameters) extends Module{
     val stV1 = readySt.asUInt.orR
 
 
-    when(stV1 && io.stpipe_ready) {
+    when(stV1) {
         io.sel_index.valid := true.B
         io.sel_index.bits := stIdx1
     }.otherwise {
@@ -217,7 +216,6 @@ class st_issue_queue(implicit p: Parameters) extends Module {
         val select_logic = Module(new st_iq_select_logic())
         val select_index = Wire(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)))
         select_logic.io.issue_queue := issue_queue
-        select_logic.io.stpipe_ready := io.issue_st_uop.ready
         select_index := select_logic.io.sel_index
 
         //读PRF
