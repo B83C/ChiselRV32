@@ -85,12 +85,12 @@ class FetchUnit(implicit p: Parameters) extends Module {
 
 
     //存入寄存器给ID
-    val id_uop_reg = Reg(Vec(2, Valid(new IF_ID_uop())))
+    val IF_ID_uop_reg = Reg(Vec(2, Valid(new IF_ID_uop())))
     
     for (i <- 0 until 2) {
-        id_uop_reg(i).valid := uop_vec(i).valid
-        id_uop_reg(i).bits := uop_vec(i)
-        io.id_uop(i) := id_uop_reg(i)
+        IF_ID_uop_reg(i).valid := uop_vec(i).valid
+        IF_ID_uop_reg(i).bits := uop_vec(i)
+        io.id_uop(i) := IF_ID_uop_reg(i)
   }
 
     
