@@ -379,11 +379,14 @@ class StoreQueue(implicit p: Parameters) extends Module {
   when(!need_flush) {
     //发送向Arbiter的信号
     val head_entry = stq_entries(head)
-    val head_valid = MuxCase(false.B, Seq(
-      (head_entry.func3 === 0.U) -> (head_entry.bit_valid(7,0) === "hFF".U),    // SB
-      (head_entry.func3 === 1.U) -> (head_entry.bit_valid(15,0) === "hFFFF".U),  // SH
-      (head_entry.func3 === 2.U) -> (head_entry.bit_valid(31,0) === "hFFFFFFFF".U) // SW
-    ))
+    val head_valid = (head_entry.func3 === 0.U) && (head_entry.bit_valid(31,0) === "h000000FF".U) ||    // SB
+                      (head_entry.func3 === 1.U) && (head_entry.bit_valid(31,0) === "h0000FFFF".U) ||  // SH
+                      (head_entry.func3 === 2.U) && (head_entry.bit_valid(31,0) === "hFFFFFFFF".U) // SW
+//    val head_valid = MuxCase(false.B, Seq(
+//      (head_entry.func3 === 0.U) -> (head_entry.bit_valid(31,0) === "h000000FF".U),    // SB
+//      (head_entry.func3 === 1.U) -> (head_entry.bit_valid(31,0) === "h0000FFFF".U),  // SH
+//      (head_entry.func3 === 2.U) -> (head_entry.bit_valid(31,0) === "hFFFFFFFF".U) // SW
+//    ))
 
     io.stqReq.valid := head_valid
     io.stqReq.bits.data  := head_entry.data
@@ -412,6 +415,9 @@ class StoreQueue(implicit p: Parameters) extends Module {
       (io.st_func3 === 1.U) -> ("hFFFF".U),  // SH
       (io.st_func3 === 2.U) -> ("hFFFFFFFF".U) // SW
     ))
+  }.otherwise{
+    io.stqReq.bits := 0.U.asTypeOf(new Req_Abter())
+    io.stqReq.valid := false.B
   }
 
   val stq_full = tail_next === head
@@ -431,7 +437,7 @@ class StoreQueue(implicit p: Parameters) extends Module {
                          Mux(io.ld_func3 === 2.U, 32.U, 0.U)))
   val bytewidth = (bit_width >> 3).asUInt
 
-  val SearchAddr = Wire(UInt(p.XLEN.W))
+  val SearchAddr = WireDefault(UInt(p.XLEN.W), 0.U)
   val data_res = Wire(UInt(p.XLEN.W))
   val data_bit_valid = Wire(UInt(p.XLEN.W))
   val entry_bytevalid = Wire(Vec(p.STQ_DEPTH, Vec(4, Bool())))
@@ -450,7 +456,7 @@ class StoreQueue(implicit p: Parameters) extends Module {
 
   data_res := 0.U
   data_bit_valid := 0.U
-  val mask = Wire(UInt(4.W))
+  val mask = WireDefault(UInt(4.W), "b0000".U)
   switch(io.ld_func3){
     is(0.U){
       mask := "b1000".U
@@ -529,6 +535,7 @@ class LSU(implicit p: Parameters) extends Module {
     io.func3 := arbiter.io.memOut.bits.func3//将fun3信号连接到arbiter的输出端口
     arbiter.io.ldReq <> load_pipeline.io.ldReq//将加载请求信号连接到arbiter的输入端口
     arbiter.io.stqReq <> store_queue.io.stqReq//将存储请求信号连接到arbiter的输入端口
+    arbiter.io.memOut.ready := true.B
 
 
   //连接加载管线模块的信号
@@ -552,6 +559,7 @@ class LSU(implicit p: Parameters) extends Module {
 
   //连接STQ的信号
     store_queue.io.st_dis := io.st_dis
+    store_queue.io.rob_commitsignal := io.rob_commitsignal
     io.stq_head := store_queue.io.stq_head
     io.stq_tail := store_queue.io.stq_tail
     io.stq_full :=store_queue.io.stq_tail
