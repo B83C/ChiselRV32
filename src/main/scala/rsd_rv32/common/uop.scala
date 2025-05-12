@@ -167,6 +167,7 @@ class DISPATCH_STISSUE_uop(implicit p: Parameters) extends CustomBundle {
 
 class EXUISSUE_EXU_uop(implicit p: Parameters) extends CustomBundle {
     val instr = UInt((p.XLEN-7).W)
+    val instr_addr = UInt((p.XLEN).W)
 
     val instr_type = InstrType()
     val fu_signals = new FUSignals() //opcode is compiled into fu specific control signals

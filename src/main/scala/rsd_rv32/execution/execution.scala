@@ -82,7 +82,7 @@ class ALU(implicit p: Parameters) extends Module with ALUConsts {
 }
 class BypassInfo(implicit p: Parameters) extends CustomBundle {
   val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
-  val data = UInt(p.XLEN.W))
+  val data = UInt(p.XLEN.W)
 }
 
 class BypassNetworkIO(

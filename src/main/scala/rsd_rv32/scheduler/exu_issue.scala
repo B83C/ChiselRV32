@@ -161,6 +161,7 @@ class issue2exu(implicit p: Parameters) extends Module {
     for (i <-0 until p.CORE_WIDTH){
         uop(i).valid := io.if_valid(i)
         uop(i).bits.instr := io.dis_issue_uop(i).instr
+        uop(i).bits.instr_addr := io.dis_issue_uop(i).instr_addr
         uop(i).bits.instr_type := io.dis_issue_uop(i).instr_type
         uop(i).bits.fu_signals := io.dis_issue_uop(i).fu_signals
         uop(i).bits.ps1_value := io.ps1_value(i)
