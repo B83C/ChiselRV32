@@ -32,6 +32,38 @@ class EXU(implicit p: Parameters) extends Module{
   val rob_signal = Input(new ROBSignal())
 
 }
+class ALUTop(implicit p: Parameters) extends Module {
+  val io = IO(new Bundle {
+    // 来自前端的请求
+    val req = Flipped(Valid(new Bundle {
+      val rs1 = UInt(p.XLEN.W)
+      val rs2 = UInt(p.XLEN.W)
+      val uop = new EXUISSUE_EXU_uop()
+    }))
+
+    // 写回端口
+    val wb = Valid(new ALU_WB_uop())
+
+    // 其他控制信号
+    val busy = Output(Bool())
+  })
+
+  // 实例化ALU功能单元
+  val alu_fu = Module(new ALUFU())
+
+  // 连接输入
+  alu_fu.io.req.valid := io.req.valid
+  alu_fu.io.req.bits.rs1 := io.req.bits.rs1
+  alu_fu.io.req.bits.rs2 := io.req.bits.rs2
+  alu_fu.io.req.bits.uop := io.req.bits.uop
+
+  // 连接输出到写回端口
+  io.wb.valid := alu_fu.io.out.valid
+  io.wb.bits := alu_fu.io.out.bits
+
+  // 忙信号
+  io.busy := alu_fu.io.busy
+}
 
 // ALU 的 interface
 class ALUIO(implicit p: Parameters) extends Bundle {
@@ -64,7 +96,15 @@ class ALU(implicit p: Parameters) extends Module with ALUConsts {
       ALU_SLTU -> (io.in1 < io.in2),
       ALU_SLL  -> (io.in1 << shamt),
       ALU_SRL  -> (io.in1 >> shamt),
-      ALU_SRA  -> (io.in1.asSInt >> shamt).asUInt
+      ALU_SRA  -> (io.in1.asSInt >> shamt).asUInt,
+
+      ALU_ADDI -> (io.in1 + io.in2),
+      ALU_ANDI -> (io.in1 & io.in2),
+      ALU_ORI  -> (io.in1 | io.in2),
+      ALU_XORI -> (io.in1 ^ io.in2),
+      ALU_SLLI -> (io.in1 << shamt),
+      ALU_SRLI -> (io.in1 >> shamt),
+      ALU_SRAI -> (io.in1.asSInt >> shamt).asUInt
     )
   )
 
@@ -131,10 +171,12 @@ class ROBSignal(implicit p: Parameters) extends CustomBundle {
   // 添加必要的ROB信号字段
 }
 
+/*
 class CSRSignals(implicit p: Parameters) extends Bundle {
   val csr_op = UInt(2.W)
   val csr_addr = UInt(12.W)
 }
+*/
 
 class ALUSignals extends Bundle {
   val opr1_sel = UInt(3.W)
@@ -187,7 +229,7 @@ class ALUFU(implicit p: Parameters) extends FunctionalUnit() {
   internal_alu.io.in1 := MuxLookup(alu_signals.opr1_sel, 0.U)(Seq(
     0.U -> io.req.bits.rs1,
     1.U -> io.req.bits.uop.imm,
-    2.U -> io.req.bits.uop.pc,
+    2.U -> io.req.bits.uop.instr_addr,
     3.U -> 0.U,
     4.U -> io.req.bits.rs1
   ))
@@ -196,7 +238,7 @@ class ALUFU(implicit p: Parameters) extends FunctionalUnit() {
   internal_alu.io.in2 := MuxLookup(alu_signals.opr2_sel, 0.U)(Seq(
     0.U -> io.req.bits.rs2,
     1.U -> io.req.bits.uop.imm,
-    2.U -> io.req.bits.uop.pc,
+    2.U -> io.req.bits.uop.instr_addr,
     3.U -> 0.U,
     4.U -> io.req.bits.rs2
   ))
@@ -204,10 +246,11 @@ class ALUFU(implicit p: Parameters) extends FunctionalUnit() {
   // ALU功能选择
   internal_alu.io.fn := alu_signals.alu_fn
 
-  val data_out = Wire(new ExuDataOut())
-  data_out.uop := io.req.bits.uop
-  data_out.data := internal_alu.io.out
-  
+  val data_out = Wire(new ALU_WB_uop())  // 改为使用新的ALU_WB_uop
+  data_out.pdst := io.req.bits.uop.pdst
+  data_out.pdst_value := internal_alu.io.out
+  data_out.rob_index := io.req.bits.uop.rob_index
+
   io.out.valid := io.req.valid
   io.out.bits := data_out
   io.busy := false.B
@@ -221,14 +264,14 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit(true) {
   internal_alu.io.in1 := MuxLookup(br_signals.opr1_sel, 0.U)(Seq(
     0.U -> io.req.bits.rs1,
     1.U -> io.req.bits.uop.imm,
-    2.U -> io.req.bits.uop.pc,
+    2.U -> io.req.bits.uop.instr_addr,
     3.U -> 0.U
   ))
   
   internal_alu.io.in2 := MuxLookup(br_signals.opr2_sel, 0.U)(Seq(
     0.U -> io.req.bits.rs2,
     1.U -> io.req.bits.uop.imm,
-    2.U -> io.req.bits.uop.pc,
+    2.U -> io.req.bits.uop.instr_addr,
     3.U -> 0.U
   ))
   
@@ -236,7 +279,7 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit(true) {
 
   val data_out = Wire(new ExuDataOut())
   data_out.uop := io.req.bits.uop
-  data_out.data := io.req.bits.uop.pc + Mux(br_signals.is_jalr, io.req.bits.rs1, io.req.bits.uop.imm)
+  data_out.data := io.req.bits.uop.instr_addr + Mux(br_signals.is_jalr, io.req.bits.rs1, io.req.bits.uop.imm)
   
   // 分支判断
   val taken = internal_alu.io.cmp_out && io.req.valid
@@ -245,8 +288,8 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit(true) {
   io.out.bits := data_out
   io.branch_info.get.taken := taken
   io.branch_info.get.target := Mux(br_signals.is_jalr, 
-                     (io.req.bits.rs1 + io.req.bits.uop.imm) & ~1.U, 
-                     io.req.bits.uop.pc + io.req.bits.uop.imm)
+                     (io.req.bits.rs1 + io.req.bits.uop.imm) & ~1.U,
+                     io.req.bits.uop.instr_addr + io.req.bits.uop.imm)
   io.busy := false.B
 }
 

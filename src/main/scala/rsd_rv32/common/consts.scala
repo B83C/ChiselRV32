@@ -124,21 +124,27 @@ trait ScalarOpConstants
 }
 
 trait ALUConsts {
-  val ALU_ADD     = 0.U(3.W)  // add
-  val ALU_SUB     = 0.U(3.W)  // sub
-  val ALU_SLL     = 1.U(3.W)  // shift left logical
-  val ALU_SLT     = 2.U(3.W)  // set less than (signed)
-  val ALU_SLTU    = 3.U(3.W)  // set less than unsigned
-  val ALU_XOR     = 4.U(3.W)  // xor
-  val ALU_SRL     = 5.U(3.W)  // left logical/arithmetic
-  val ALU_SRA     = 5.U(3.W)  // right logical/arithmetic
-  val ALU_OR      = 6.U(3.W)  // or
-  val ALU_AND     = 7.U(3.W)  // and
-  
-  val ALU_OP_ADD  = 0.U(1.W)  // 加法
-  val ALU_OP_SUB  = 1.U(1.W)  // 减法
-  val ALU_OP_SRL  = 0.U(1.W)  // 逻辑右移
-  val ALU_OP_SRA  = 1.U(1.W)  // 算术右移
+  val ALU_ADD    = 0.U(4.W)
+  val ALU_SUB    = 1.U(4.W)
+  val ALU_AND    = 2.U(4.W)
+  val ALU_OR     = 3.U(4.W)
+  val ALU_XOR    = 4.U(4.W)
+  val ALU_SLL    = 5.U(4.W)  // 逻辑左移
+  val ALU_SRL    = 6.U(4.W)  // 逻辑右移
+  val ALU_SRA    = 7.U(4.W)  // 算术右移
+
+  // 比较操作
+  val ALU_SLT    = 8.U(4.W)  // 有符号比较
+  val ALU_SLTU   = 9.U(4.W)  // 无符号比较
+
+  // 立即数操作
+  val ALU_ADDI   = 10.U(4.W)
+  val ALU_ANDI   = 11.U(4.W)
+  val ALU_ORI    = 12.U(4.W)
+  val ALU_XORI   = 13.U(4.W)
+  val ALU_SLLI   = 14.U(4.W)
+  val ALU_SRLI   = 15.U(4.W)
+  val ALU_SRAI   = 16.U(4.W)
   
   val ALU_EQ       = 0.U(3.W)  // equal
   val ALU_NE       = 1.U(3.W)  // not equal
