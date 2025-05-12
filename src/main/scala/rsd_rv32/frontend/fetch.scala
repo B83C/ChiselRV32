@@ -19,7 +19,7 @@ class Fetch_IO(implicit p: Parameters) extends CustomBundle {
     // with BranchPredictor
     // instr_addr上面已写
     val target_PC = Input(UInt(p.XLEN.W)) //预测的下个cycle取指的目标地址
-    val btb_hit = Input(Vec(p.CORE_WIDTH, Bool())) //1代表hit，0相反；将最年轻的命中BTB的置为1，其余为0
+    val btb_hit = Input(Vec(p.CORE_WIDTH, Bool())) //1代表hit，0相反；将最年长的命中BTB的置为1，其余为0
     val branch_pred = Input(Bool()) //branch指令的BHT的预测结果；1代表跳转，0相反
     val GHR = Input(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照
 }
@@ -33,21 +33,20 @@ class FetchUnit(implicit p: Parameters) extends Module {
     val pc_reg = RegInit(0.UInt(p.XLEN.W))        //存储当前PC
     val pc_next = Wire(UInt(p.XLEN.W))            //下一个PC
     val pc_aligned = Wire(UInt(p.XLEN.W))         //对齐后的当前PC
-    val whether_flush = Wire(Bool())              //是否需要冲刷一下
 
     pc_aligned := pc_reg & ~((p.CORE_WIDTH.U << 2) - 1.U)
     val pc_next_default = pc_aligned + (p.CORE_WIDTH.U <<2)
     
     //需不需要flush
-    whether_flush := io.rob_commitsignal
-    val rob_flush_pc = Mux1H(io.rob_commitsignal.map(s => s.valid -> s.bits.pc))
+    val rob_flush_valid = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
+    val rob_flush_pc = io.rob_commitsignal(0).bits.instr_addr
 
     //分支预测
     val whether_take_bp = io.branch_pred
     val bp_target = io.target_PC
 
     //决定下个pc(ROB>BP>default)
-    pc_next := Mux(whether_flush,rob_flush_pc,
+    pc_next := Mux(rob_flush_valid,rob_flush_pc,
                   Mux(whether_take_bp,bp_target,pc_next_default))
 
     //更新PC寄存器
@@ -55,26 +54,74 @@ class FetchUnit(implicit p: Parameters) extends Module {
         pc_reg := pc_next
     }
     io.instr_addr := pc_reg
-    
+
+    //为对齐时序而延迟一周期的内容
+    val PC_delayed = RegNext(pc_aligned)
+    val btb_hit_delayed = RegNext(io.btb_hit)
+    val GHR_delayed = RegNext(io.GHR)
+    val branch_pred_delayed = RegNext(io.branch_pred)
+    val target_pc_delayed = RegNext(io.target_PC)
+
+
 
     
-    //生成给ID的uop
-    for(i <- 0 until p.CORE_WIDTH){
+    //生成两条给ID的uop
+    val uop_vec = Wire(Vec(2, new IF_ID_uop()))
+    val btb_hit_vec = io.btb_hit
+    val hit_11 = (btb_hit_delayed === "b11".U)        //如果出现11
+
+
+    
+    
+    //构造uop向量
+    val uop_vec_raw = Wire(Vec(2, Valid(new IF_ID_uop())))
+    for (i <-0 until 2 ){
         val uop = Wire(new IF_ID_uop())
-
-        val current_pc = pc_aligned +(i.U << 2)
-        uop.instr_addr := current_pc
+        val current_pc = pc_delayed + (i.U << 2)
         uop.instr := io.instr(i)
-        uop.valid := false.B
-        uop.GHR := io.GHR
+        uop.instr_addr := current_pc
+        uop.target_PC := target_PC_delayed
+        uop.GHR := GHR_delayed
+        uop.branch_pred := Mux(branch_pred_delayed, BranchPred.T, BranchPred.NT)
+        uop.btb_hit := Mux(btb_hit_delayed(i), BTBHit.H, BTBHit.NH)
 
-        uop.valid := (current_pc >=pc_reg)&&(!whether_flush)&&(io.id_ready)&&(!(io.btb_hit(i)&&whether_take_bp))
-        io.id_uop(i).valid := uop.valid
-        io.id_uop(i).bits := uop
-
+        val is_valid =  (!rob_flush_valid) && io.id_ready &&
+                        (!(btb_hit_delayed(i) && branch_pred_delayed)) &&
+                        !(hit_11 && i == 1)
         
+        uop.valid := is_valid
+        uop_vec(i) := uop
     }
 
+    //考虑valid bits限制
+    when (uop_vec_raw(0).valid && uop_vec_raw(1).valid){
+        uop_vec(0) := uop_vec_raw(0)
+        uop_vec(1) := uop_vec_raw(1)
+    }
+    when (uop_vec_raw(0).valid && !(uop_vec_raw(1).valid)){
+        uop_vec(0) := uop_vec_raw(0)
+        uop_vec(1) := uop_vec_raw(1)
+        uop_vec(1).valid := false.B
+    }
+    when(!uop_vec_raw(0)){
+        uop_vec(0) := uop_vec_raw(0)
+        uop_vec(1) := uop_vec_raw(1)
+        uop_vec(0).valid := false.B
+        uop_vec(1).valid := false.B
+    }
+
+    
+
+    //存入寄存器给ID
+    val IF_ID_uop_reg = Reg(Vec(2, Valid(new IF_ID_uop())))
+    
+    for (i <- 0 until 2) {
+        IF_ID_uop_reg(i).valid := uop_vec(i).valid
+        IF_ID_uop_reg(i).bits := uop_vec(i).bits
+        io.id_uop(i) := IF_ID_uop_reg(i)
+  }
+
+    
     
     
     

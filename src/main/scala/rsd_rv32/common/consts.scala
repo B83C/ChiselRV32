@@ -2,7 +2,6 @@ package rsd_rv32.common
 
 import chisel3._
 import chisel3.util._
-
 //Copied from boom
 
 trait ScalarOpConstants

@@ -7,38 +7,79 @@ import rsd_rv32.common._
 
 import rsd_rv32.frontend._
 
+class EXUIO(implicit p: Parameters) extends Bundle{
+  //来自exu_issue queue的输入
+  val exu_issue_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new EXUISSUE_EXU_uop)))
+  //反馈给exu_issue queue的信号
+  val mul_ready = Output(Bool())
+  val div_ready = Output(Bool())
+
+  //写回信号
+  val alu_wb_uop = Vec(p.ALU_NUM, Valid(new ALU_WB_uop()))
+  val bu_wb_uop = Vec(p.BU_NUM, Valid(new BU_WB_uop()))
+  val mul_wb_uop = Vec(p.MUL_NUM, Valid(new ALU_WB_uop()))
+  val divrem_wb_uop = Vec(p.DIV_NUM, Valid(new ALU_WB_uop()))
+}
+
+//把exu的各个fu封装起来的顶层模块
+class EXU(implicit p: Parameters) extends Module{
+  val io = IO(new EXUIO())
+
+  val in = Flipped(Decoupled(new EXUISSUE_EXU_uop))
+  val bypass = Output(Vec(4, Valid(new BypassInfo))) // 假设最多4个旁路
+  val out = Decoupled(new ExuDataOut)
+  val branch_info = Output(new FUBranchInfo())
+  val rob_signal = Input(new ROBSignal())
+
+}
+
 // ALU 的 interface
-class ALUIO(implicit p: Parameters) extends CustomBundle {
-  //输入操作数
-  val in1 = Input(UInt(p.XLEN.W))  
-  val in2 = Input(UInt(p.XLEN.W))  
-  val fn  = Input(UInt(4.W))        
+class ALUIO(implicit p: Parameters) extends Bundle {
+  // 输入操作数
+  val in1 = Input(UInt(p.XLEN.W))
+  val in2 = Input(UInt(p.XLEN.W))
+  val fn  = Input(UInt(4.W))  // ALU操作码
 
   // 输出结果
-  val out = Output(UInt(p.XLEN.W)) 
-  val cmp_out = Output(Bool())      
+  val out = Output(UInt(p.XLEN.W))
+  val cmp_out = Output(Bool())  // 比较结果
 }
 
 class ALU(implicit p: Parameters) extends Module with ALUConsts {
   val io = IO(new ALUIO)
-  //运算逻辑
-  io.out := MuxLookup(io.fn, 0.U, Seq(
-    ALU_ADD -> (io.in1 + io.in2),
-    ALU_SUB -> (io.in1 - io.in2),
-    ALU_AND -> (io.in1 & io.in2),
-    ALU_OR  -> (io.in1 | io.in2),
-    ALU_XOR -> (io.in1 ^ io.in2)
-  ))
 
-  //比较逻辑
-  io.cmp_out := MuxLookup(io.fn, false.B, Seq(
-    ALU_EQ  -> (io.in1 === io.in2),
-    ALU_NE  -> (io.in1 =/= io.in2),
-    ALU_LT  -> (io.in1.asSInt < io.in2.asSInt),
-    ALU_GE  -> (io.in1.asSInt >= io.in2.asSInt)
-  ))
+  import ALUOp._
+
+  // 主ALU逻辑
+  val shamt = io.in2(4,0)  // 移位量
+
+  io.out := MuxLookup(io.fn, 0.U)(
+    Seq(
+      ALU_ADD  -> (io.in1 + io.in2),
+      ALU_SUB  -> (io.in1 - io.in2),
+      ALU_AND  -> (io.in1 & io.in2),
+      ALU_OR   -> (io.in1 | io.in2),
+      ALU_XOR  -> (io.in1 ^ io.in2),
+      ALU_SLT  -> (io.in1.asSInt < io.in2.asSInt).asUInt,
+      ALU_SLTU -> (io.in1 < io.in2),
+      ALU_SLL  -> (io.in1 << shamt),
+      ALU_SRL  -> (io.in1 >> shamt),
+      ALU_SRA  -> (io.in1.asSInt >> shamt).asUInt
+    )
+  )
+
+  // 比较输出
+  io.cmp_out := MuxLookup(io.fn, false.B)(
+    Seq(
+      ALU_EQ  -> (io.in1 === io.in2),
+      ALU_NE  -> (io.in1 =/= io.in2),
+      ALU_LT  -> (io.in1.asSInt < io.in2.asSInt),
+      ALU_GE  -> (io.in1.asSInt >= io.in2.asSInt),
+      ALU_LTU -> (io.in1 < io.in2),
+      ALU_GEU -> (io.in1 >= io.in2)
+    )
+  )
 }
-
 class BypassInfo(implicit p: Parameters) extends CustomBundle {
   val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
   val data = UInt(p.XLEN.W)

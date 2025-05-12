@@ -205,15 +205,16 @@ class ROB(implicit p: Parameters) extends Module {
 
     for(i <- 0 until p.BU_NUM){
         when(io.bu_wb_uop(i).valid){
+            rob(io.bu_wb_uop(i).bits.rob_index).mispred := io.bu_wb_uop(i).bits.mispred
+            rob(io.bu_wb_uop(i).bits.rob_index).completed := true.B
+
             when(io.bu_wb_uop(i).bits.is_conditional){
-                rob(io.bu_wb_uop(i).bits.rob_index).mispred := io.bu_wb_uop(i).bits.mispred
-                rob(io.bu_wb_uop(i).bits.rob_index).completed := true.B
                 val branch_payload = WireDefault(rob(io.bu_wb_uop(i).bits.rob_index).as_Branch)
                 branch_payload.target_PC := io.bu_wb_uop(i).bits.target_PC
                 branch_payload.branch_direction := io.bu_wb_uop(i).bits.branch_direction
                 rob(io.bu_wb_uop(i).bits.rob_index).payload := branch_payload.asUInt
             }.otherwise{
-                rob(io.bu_wb_uop(i).bits.rob_index).completed := true.B
+                //rob(io.bu_wb_uop(i).bits.rob_index).completed := true.B
                 val jump_payload = WireDefault(rob(io.bu_wb_uop(i).bits.rob_index).as_Jump)
                 jump_payload.target_PC := io.bu_wb_uop(i).bits.target_PC
                 rob(io.bu_wb_uop(i).bits.rob_index).payload := jump_payload.asUInt

@@ -28,7 +28,6 @@ class st_issue_test extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = Parameters()
   "st_issue" should "accept the instrs from dispatch unit and issue correctly" in {
     test(new st_issue_queue()) { dut =>
-      dut.io.issue_st_uop.ready.poke(1.U)
       dut.io.dis_uop(0).valid.poke(1.U)
       dut.io.dis_uop(0).bits.iq_index.poke(0.U)
       dut.io.dis_uop(1).valid.poke(0.U)
@@ -53,7 +52,6 @@ class st_issue_test extends AnyFlatSpec with ChiselScalatestTester {
     test(new st_issue_queue()) { dut =>
       //一次性接收两条条目
       println("the case that receive 2 content")
-      dut.io.issue_st_uop.ready.poke(1.U)
       dut.io.dis_uop(0).valid.poke(1.U)
       dut.io.dis_uop(1).valid.poke(1.U)
       dut.io.dis_uop(0).bits.iq_index.poke(5.U)
