@@ -121,7 +121,7 @@ trait ScalarOpConstants
   val FC_I2F  = 8
   val FC_F2I  = 9
 
-  def NullMicroOp(implicit p: Parameters) = 0.U.asTypeOf(new boom.v4.common.MicroOp)
+  // def NullMicroOp(implicit p: Parameters) = 0.U.asTypeOf(new boom.v4.common.MicroOp)
 }
 
 trait ALUConsts {
