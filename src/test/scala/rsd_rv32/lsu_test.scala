@@ -28,9 +28,26 @@ import rsd_rv32.execution.LSU
 
 class lsu_test extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = Parameters()
-  "lsu" should "correct" in {
+  "lsu" should "ptr move correctly" in {
     test(new LSU()) { c =>
-      c.clock.step(5)
+      c.io.st_dis(0).poke(1.U)
+      c.io.st_dis(1).poke(1.U)
+      c.clock.step()
+      c.io.st_dis(1).poke(0.U)
+      c.clock.step()
+      c.io.st_dis(0).poke(0.U)
+      c.clock.step()
+      c.io.rob_commitsignal(1).valid.poke(1.U)
+      c.io.rob_commitsignal(1).bits.rob_type.poke(ROBType.Store)
+      c.io.rob_commitsignal(0).valid.poke(1.U)
+      c.io.rob_commitsignal(0).bits.rob_type.poke(ROBType.Arithmetic)
+      c.clock.step()
+      c.io.rob_commitsignal(1).bits.rob_type.poke(ROBType.Store)
+      c.io.rob_commitsignal(0).bits.rob_type.poke(ROBType.Store)
+      c.clock.step()
+      c.io.rob_commitsignal(1).valid.poke(0.U)
+      c.io.rob_commitsignal(0).valid.poke(0.U)
+      c.clock.step(3)
       println("pass!")
     }
   }
