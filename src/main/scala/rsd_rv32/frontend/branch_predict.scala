@@ -261,7 +261,7 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
       when (rc.rob_type === ROBType.Branch || rc.rob_type === ROBType.Jump) {
         // 获取实际跳转结果
         val taken = MuxCase(false.B, Seq(
-          (rc.rob_type === ROBType.Branch) -> rc.as_Branch.branch_direction,
+          (rc.rob_type === ROBType.Branch) -> (rc.as_Branch.branch_direction === BranchPred.T),
           (rc.rob_type === ROBType.Jump) -> true.B  // Jump指令总是taken
         ))
 
@@ -316,15 +316,15 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
           val tPred = tValue(counterBits-1)
           val ntPred = ntValue(counterBits-1)
 
-          // 根据实际跳转结果更新对应的预测表(需要修改)
+/*        // 根据实际跳转结果更新对应的预测表(需要修改)
           when (usedNT) {
             // 如果选择了NT表，则更新NT表
-            bimodeNT.write(histIdx, satUpdateImproved(ntValue, taken===(0.U)))
+            bimodeNT.write(histIdx, satUpdate(ntValue, taken===(0.U)))
           }.otherwise {
             // 否则更新T表
-            bimodeT.write(histIdx, satUpdateImproved(tValue, taken===(0.U)))
+            bimodeT.write(histIdx, satUpdate(tValue, taken===(0.U)))
           }
-
+*/
           // 根据PDF中的Bi-Mode算法更新选择器
           // 选择器的更新策略是：当预测正确时，强化当前选择；当预测错误时，减弱当前选择
           val predUsedTable = Mux(usedNT, ntPred, tPred)  // 获取使用的表的预测结果
@@ -333,14 +333,21 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
           // 更新选择器
           val newChoice = Mux(predCorrect,
             // 如果预测正确，强化当前选择（如果当前选NT表，则选择器向NT方向移动；如果当前选T表，则选择器向T方向移动）
-            satUpdateImproved(chValue, usedNT),
+            satUpdate(chValue, usedNT),
             // 如果预测错误，减弱当前选择（如果当前选NT表，则选择器向T方向移动；如果当前选T表，则选择器向NT方向移动）
-            satUpdateImproved(chValue, !usedNT)
+            satUpdate(chValue, !usedNT)
           )
 
           choice.write(tagIdx, newChoice)
+          // 根据实际跳转结果更新对应的预测表
+          when (newChoice(counterBits-1)) {
+            // 如果以后选择T表，则更新T表
+            bimodeT.write(histIdx, satUpdate(tValue, taken))
+          }.otherwise {
+            // 否则更新NT表
+            bimodeNT.write(histIdx, satUpdate(ntValue, taken))
+          }
         }
-
         // 如果预测错误，恢复GHR - 对所有分支类型（包括Jump）处理
         when (rc.mispred) {
           // 根据提交的指令位置和实际结果重建GHR
@@ -369,7 +376,7 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
   // ---------------------------------------------------------------------------
   // 饱和计数器更新函数
   // ---------------------------------------------------------------------------
-  def satUpdateImproved(cur: UInt, taken: Bool): UInt = {
+  def satUpdate(cur: UInt, taken: Bool): UInt = {
     val max_val = ((1 << counterBits) - 1).U
     val min_val = 0.U
 
@@ -381,21 +388,31 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
     )
   }
 
-  // 简单的饱和计数器更新（保留原函数以便对比）
-  def satUpdate(cur: UInt, taken: Bool): UInt = {
-    Mux(taken,
-      Mux(cur === ((1 << counterBits) - 1).U, cur, cur + 1.U),  // 如果跳转且未饱和，计数器+1
-      Mux(cur === 0.U, cur, cur - 1.U))  // 如果不跳转且未为0，计数器-1
-  }
-
   // 初始化内存
   when ((System.getProperty("RANDOMIZE_MEM_INIT") != null).asBool) {
     for (i <- 0 until bimodeTableSize) {
-      bimodeT(i) := 3.U(counterBits.W) // T表默认初始化为2'b11 (强取)
+      bimodeT(i) := 2.U(counterBits.W) // T表默认初始化为2'b11 (强取)
       bimodeNT(i) := 2.U(counterBits.W) // NT表默认初始化为2'b10 (弱不取)
     }
     for (i <- 0 until choiceTableSize) {
       choice(i) := 2.U(counterBits.W) // 选择器默认为2'b10 (弱选择NT表)
     }
   }
+}
+object GenerateVerilog extends App {
+  // 导入项目自定义参数类
+  import rsd_rv32.common.Parameters
+
+  // 定义隐式参数实例（可自定义参数值）
+  implicit val p: Parameters = Parameters(
+  )
+
+  // 生成 Verilog
+  (new chisel3.stage.ChiselStage).emitVerilog(
+    new BranchPredictorUnit()(p), // 传递隐式参数
+    Array(
+      "--target-dir", "generated/verilog",
+      "--full-stacktrace"          // 可选：生成详细错误信息
+    )
+  )
 }
