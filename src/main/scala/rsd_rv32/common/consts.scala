@@ -145,11 +145,18 @@ trait ALUConsts {
   val ALU_SLLI   = 14.U(4.W)
   val ALU_SRLI   = 15.U(4.W)
   val ALU_SRAI   = 16.U(4.W)
-  
-  val ALU_EQ       = 0.U(3.W)  // equal
-  val ALU_NE       = 1.U(3.W)  // not equal
-  val ALU_LT       = 4.U(3.W)  // less than (signed)
-  val ALU_GE       = 5.U(3.W)  // greater or equal (signed)
-  val ALU_LTU      = 6.U(3.W)  // less than unsigned
-  val ALU_GEU      = 7.U(3.W)  // greater or equal unsigned
+
+}
+trait BRConsts {
+  // 分支类型编码
+  val BR_EQ  = 0.U(3.W)  // 等于
+  val BR_NE  = 1.U(3.W)  // 不等于
+  val BR_LT  = 2.U(3.W)  // 小于(有符号)
+  val BR_GE  = 3.U(3.W)  // 大于等于(有符号)
+  val BR_LTU = 4.U(3.W)  // 小于(无符号)
+  val BR_GEU = 5.U(3.W)  // 大于等于(无符号)
+
+  // 跳转类型
+  val BR_JAL    = 6.U(3.W)  // 无条件跳转
+  val BR_JALR   = 7.U(3.W)  // 寄存器跳转
 }
