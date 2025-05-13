@@ -25,7 +25,7 @@ class mem_lsu_c extends Bundle {
   val data = Output(UInt(64.W))
 }
 
-class mem(memDepth: Int, instWidth: Int) extends Module {
+class mem(memDepth: Int, instWidth: Int) extends CustomModule {
   val io = IO(new Bundle {
     val reset   = Input(Bool())           // Mem reset signal
     val if_mem  = Flipped(new if_mem()) /*

@@ -51,8 +51,6 @@ object BUSignals {
 //     val instr = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode;
 // }
 
-class CustomBundle(implicit val p: Parameters) extends Bundle
-
 // Will be removed!
 abstract trait HasUOP extends CustomBundle {
     val uop = new uop()

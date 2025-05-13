@@ -19,7 +19,7 @@ class Decode_IO(implicit p: Parameters) extends CustomBundle {
 
 
 
-class DecodeUnit(implicit p: Parameters) extends Module {
+class DecodeUnit(implicit p: Parameters) extends CustomModule {
   val io = IO(new Decode_IO())
   
   //是否接受指令
@@ -59,8 +59,14 @@ class DecodeUnit(implicit p: Parameters) extends Module {
 
       //根据操作数分类
     switch(opcode){
+      
       is("b0110011".U){
-        instr_type := InstrType.ALU
+        when (func7 ==="b0000001".U){
+          when(func3(2)===0.U){instr_type := InstrType.MUL}
+          when(func3(2)===1.U){instr_type := InstrType.DIV_REM}
+      }.otherwise{
+        instr_type := InstrType.ALU}
+        
         immExt := 0.U
         fu_signals.opr1_sel := OprSel.REG
         fu_signals.opr2_sel := OprSel.REG

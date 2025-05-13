@@ -10,7 +10,7 @@ import chisel3.util._
 //   numRegisters: Int,       // 物理寄存器数量（x0-x31对应物理寄存器号）
 //   numReadPorts: Int,       // 并行读端口数（双发射需要至少2读）
 //   numWritePorts: Int)      // 并行写端口数（双发射需要至少2写）
-//   (implicit p: Parameters) extends Module // 继承BOOM基础模块
+//   (implicit p: Parameters) extends CustomModule // 继承BOOM基础模块
 // {
 //   val io = IO(new Bundle {
 //     // 读请求端口（Decoupled接口实现流控）
@@ -288,7 +288,7 @@ class PRF[T<: Data](
   regDepth: Int,
   numReadPorts: Int,
   numWritePorts: Int,
-)(implicit p: Parameters) extends Module {
+)(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
     val read_requests = Vec(numReadPorts, Flipped(Decoupled( // 读请求端口（Decoupled接口实现流控）
       UInt(log2Ceil(regDepth).W) // 地址位宽=log2(寄存器数)

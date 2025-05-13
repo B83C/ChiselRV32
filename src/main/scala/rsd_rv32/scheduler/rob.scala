@@ -44,7 +44,7 @@ class ROBIO(implicit p: Parameters) extends CustomBundle {
     val rob_commitsignal = Vec(p.CORE_WIDTH, Valid(new ROBContent()))  //广播ROB条目
 }
 
-class ROB(implicit p: Parameters) extends Module {
+class ROB(implicit p: Parameters) extends CustomModule {
     val io = IO(new ROBIO())
     val rob = RegInit(VecInit(Seq.fill(p.ROB_DEPTH)(0.U.asTypeOf(new ROBContent())))) //ROB条目
     val rob_head = RegInit(0.U(log2Ceil(p.ROB_DEPTH).W)) //ROB头指针

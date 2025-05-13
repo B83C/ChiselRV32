@@ -41,7 +41,7 @@ class ld_issue_IO(implicit p: Parameters) extends CustomBundle {
     val queue = Output(Vec(p.LDISSUE_DEPTH, new ld_issue_content()))
 }
 
-class ld_iq_select_logic(implicit p: Parameters) extends Module{
+class ld_iq_select_logic(implicit p: Parameters) extends CustomModule{
     val io = IO(new Bundle {
         val issue_queue = Input(Vec(p.LDISSUE_DEPTH, new ld_issue_content()))
         val sel_index = Output(Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W))) //选择的索引
@@ -66,7 +66,7 @@ class ld_iq_select_logic(implicit p: Parameters) extends Module{
 
 }
 
-class issue2ld(implicit p: Parameters) extends Module {
+class issue2ld(implicit p: Parameters) extends CustomModule {
     val io = IO(new Bundle {
         val if_valid = Input(Bool()) //指令是否有效
         val ps_value = Input(UInt(p.XLEN.W)) //操作数1
@@ -91,7 +91,7 @@ class ld_issue_content(implicit p: Parameters) extends Bundle {
     val st_ready = Vec(p.STISSUE_DEPTH, Bool())
 }
 
-class ld_issue_queue(implicit p: Parameters) extends Module {
+class ld_issue_queue(implicit p: Parameters) extends CustomModule {
     val io = IO(new ld_issue_IO())
     val st_queue_state = Wire(Vec(p.STISSUE_DEPTH, Bool()))
     //用于生成ready矩阵

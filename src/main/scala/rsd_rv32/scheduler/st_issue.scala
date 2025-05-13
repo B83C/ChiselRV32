@@ -42,7 +42,7 @@ class st_issue_IO(implicit p: Parameters) extends CustomBundle {
     val queue = Output(Vec(p.STISSUE_DEPTH, new st_issue_content()))
 }
 
-class st_iq_select_logic(implicit p: Parameters) extends Module{
+class st_iq_select_logic(implicit p: Parameters) extends CustomModule{
     val io = IO(new Bundle {
         val issue_queue = Input(Vec(p.STISSUE_DEPTH, new st_issue_content()))
         val sel_index = Output(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W))) //选择的索引
@@ -67,7 +67,7 @@ class st_iq_select_logic(implicit p: Parameters) extends Module{
 }
 
 //exu_issue->st的级间寄存器
-class issue2st(implicit p: Parameters) extends Module {
+class issue2st(implicit p: Parameters) extends CustomModule {
     val io = IO(new Bundle {
         val if_valid = Input(Bool()) //指令是否有效
         val ps1_value = Input(UInt(p.XLEN.W)) //操作数1
@@ -95,7 +95,7 @@ class st_issue_content(implicit p: Parameters) extends Bundle {
     val ready2 = Bool() //物理寄存器2的ready信号
 }
 
-class st_issue_queue(implicit p: Parameters) extends Module {
+class st_issue_queue(implicit p: Parameters) extends CustomModule {
     val io = IO(new st_issue_IO())
     //存储结构定义
     val issue_queue = RegInit(
