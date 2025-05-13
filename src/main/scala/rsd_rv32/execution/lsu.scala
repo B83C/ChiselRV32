@@ -165,11 +165,19 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   val stage2_pipevalid = Stage1ToStage2_pipevalid_reg.io.data_out.asBool
   val stage2_robidx = Stage1ToStage2_robidx_reg.io.data_out
   val stage2_pdst = Stage1ToStage2_pdst_reg.io.data_out
-  
 
 
+  //向STQ发起forwarding
+  io.addr_search_stq.bits := stage2_ldAddr
+  io.func3    :=  stage2_func3
+  io.stq_tail := stage2_stqtail
+
+  io.addr_search_stq.valid := stage2_pipevalid && (!need_flush)
+
+  //STQ forwarding传回的结果
   val stage2_data_bitvalid = io.data_out_stq.bit_valid
-  //为1的时候表示需要进行flush，即将传入stq的全部数取0
+  val stage2_data_out_stq = io.data_out_stq.data
+
   val expected = MuxCase(false.B, Seq(
       (stage2_func3 === 0.U) -> (stage2_data_bitvalid(7,0) === "hFF".U),    // LB
       (stage2_func3 === 1.U) -> (stage2_data_bitvalid(15,0) === "hFFFF".U),  // LH
@@ -177,28 +185,22 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
     ))
     //我们期望的bitvalid值，与stq传出的bitvalid值进行比较，决定后续是否需要向Abter发起访存请求
 
+  //只有当发起请求，但请求尚未被RRArbiter接收的时候发生stall
   stall := false.B
   when(!io.ldReq.ready && io.ldReq.valid){
     stall := true.B
   }
 
-  io.addr_search_stq.bits := stage2_ldAddr
-  io.func3    :=  stage2_func3
-  io.stq_tail := stage2_stqtail
-
-  io.addr_search_stq.valid := stage2_pipevalid && (!need_flush) 
-
-
-
+  //向RRArbiter发起写入申请
   io.ldReq.bits.data := 0.U
   io.ldReq.bits.data_Addr := stage2_ldAddr
   io.ldReq.bits.func3 := stage2_func3
   io.ldReq.bits.write_en := false.B
-  io.ldReq.valid := stage2_pipevalid && (!need_flush) && (expected)
+  io.ldReq.valid := stage2_pipevalid && (!need_flush) && (!expected)
 
   io.ld_issue_uop.ready := (!need_flush) && (!stall)
 
-  val stage2_data_out_stq = io.data_out_stq.data
+
 
   //stage2-stage3之间的PipelineReg
   
@@ -386,7 +388,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
     val st_func3 = Input(UInt(3.W))//fun3信号
   })   
 
-  //flush信号，作为stq的reset信号
+  //flush信号，作flush的时候tail指针回到write_valid所处的地方
   //当rob的commit信号为valid且mispred为1时，表示需要flush
   val need_flush = Wire(Bool())
   need_flush := io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
@@ -407,13 +409,14 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
   val tail = RegInit(0.U(log2Ceil(p.STQ_DEPTH).W))
   val write_valid = RegInit(0.U(log2Ceil(p.STQ_DEPTH).W))
 
-  //调试用
+  //调试用，忽略
   printf(p"head=${head} write_valid=${write_valid} tail=${tail}\n")
   for (i <- 0 until p.STQ_DEPTH) {
     val entry = stq_entries(i)
     printf(p"STQ[${"%02d".format(i)}]: data=0x${Hexadecimal(entry.data)} addr=0x${Hexadecimal(entry.data_Addr)} bits_valid=0x${Hexadecimal(entry.bit_valid)} func3=0x${Hexadecimal(entry.func3)}\n")
   }
   printf(p"\n\n")
+
   //更新指针位置
   def nextPtr(ptr: UInt, inc: UInt): UInt = {
     val next = ptr + inc
@@ -457,6 +460,8 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
     tail := write_valid
   }
 
+
+  //执行storepipeline向stq写入的操作
   when(!need_flush && io.dataAddr_into_stq.valid){
 
 
@@ -474,7 +479,9 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
     ))
 
   }
-  
+
+
+  //执行向仲裁器发起写入mem内存请求的功能
   when(!need_flush) {
     //发送向Arbiter的信号
     val head_entry = stq_entries(head)
@@ -509,7 +516,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
   io.stq_head := head
 
 
-  //stq的搜索操作
+  //用于判断当前的stq_idx是否在head和tail之间的有效范围内
   def isInrange(idx: UInt,head: UInt, tail: UInt): Bool = {
     Mux(tail >= head, idx >= head && idx < tail, idx >= head || idx < tail)
   }
@@ -524,7 +531,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
   val data_bit_valid = Wire(UInt(p.XLEN.W))
 
 
-
+  //暂存在forwarding过程中的部分变量
   val byteSearched = WireDefault(Vec(4, Vec(p.STQ_DEPTH,Bool())), 0.U.asTypeOf(Vec(4, Vec(p.STQ_DEPTH,Bool()))))
   val found_data = WireDefault(Vec(4,UInt(8.W)), 0.U.asTypeOf(Vec(4,UInt(8.W))))
   val found_data_bytevalid = WireDefault(Vec(4,Bool()), 0.U.asTypeOf(Vec(4,Bool())))
@@ -533,6 +540,8 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
   data_res := 0.U
   data_bit_valid := 0.U
 
+
+  //掩码，用于判断对应的byte是否是valid
   val mask = WireDefault(UInt(4.W), 0.U)
   switch(io.ld_func3){
     is(0.U){
@@ -546,6 +555,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
     }
   }
 
+  //stq的搜索操作，用于loadpipeline的forwarding
   when(!need_flush && io.addr_search_stq.valid){
     for(delta_byte <- 0 until 4){
       val curr_addr = SearchAddr + delta_byte.U
@@ -555,7 +565,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
           Mux(entry.func3 === 1.U, 2.U,
             Mux(entry.func3 === 2.U, 4.U, 0.U)))
         byteSearched(delta_byte)(i) := (isInrange(i.U,head, io.input_tail)) &&
-          (curr_addr >= entry.data_Addr) && (curr_addr < (entry.data_Addr + store_byte)) && mask(delta_byte)
+          (curr_addr >= entry.data_Addr) && (curr_addr < (entry.data_Addr + store_byte)) && mask(delta_byte).asBool
       }
     }
 
@@ -572,7 +582,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
       val realIdx = (head + p.STQ_DEPTH.U -1.U - sel) % p.STQ_DEPTH.U
       val entry = stq_entries(realIdx)
       val offset = SearchAddr + delta_byte.asUInt - entry.data_Addr
-      found_data(delta_byte) := (entry.data >> offset)(7, 0)
+      found_data(delta_byte) := (entry.data >> (offset << 3))(7, 0)
     }
   }
 
@@ -586,7 +596,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
   )
 
   io.searched_data.data := found_data.asUInt
-  io.searched_data.data_Addr := io.dataAddr_into_stq.bits
+  io.searched_data.data_Addr := io.addr_search_stq.bits
   io.searched_data.func3 := io.ld_func3
   io.searched_data.bit_valid := found_data_bitvalid
 
