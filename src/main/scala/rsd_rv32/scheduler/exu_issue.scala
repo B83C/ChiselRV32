@@ -52,7 +52,7 @@ class exu_issue_content(implicit p: Parameters) extends Bundle {
     val ready2 = Bool() //操作数2的ready信号
 }
 
-class exu_iq_select_logic(implicit p: Parameters) extends Module {
+class exu_iq_select_logic(implicit p: Parameters) extends CustomModule {
     val io = IO(new Bundle {
         val mul_ready = Input(Bool()) //乘法器的ready信号
         val div_ready = Input(Bool()) //除法器的ready信号
@@ -149,7 +149,7 @@ class exu_iq_select_logic(implicit p: Parameters) extends Module {
 }
 
 //exu_issue->exu的级间寄存器
-class issue2exu(implicit p: Parameters) extends Module {
+class issue2exu(implicit p: Parameters) extends CustomModule {
     val io = IO(new Bundle {
         val if_valid = Input(Vec(p.CORE_WIDTH, Bool())) //指令是否有效
         val ps1_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数1
@@ -174,7 +174,7 @@ class issue2exu(implicit p: Parameters) extends Module {
     io.issue_exu_uop := uop
 }
 
-class exu_issue_queue(implicit p: Parameters) extends Module {
+class exu_issue_queue(implicit p: Parameters) extends CustomModule {
     val io = IO(new exu_issue_IO())
 
     val issue_queue = RegInit(

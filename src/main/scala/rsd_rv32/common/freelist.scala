@@ -8,7 +8,7 @@ abstract class FreeList(
   val read_ports: Int, /* Number of read ports */
   val depth: Int,      /* Depth of the freelist buffer */
   val data_width: Int,
-)(implicit p: Parameters) extends Module {
+)(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
     val requests = Input(Vec(depth, Bool()))
     val data  = Output(Vec(depth, Valid(UInt(data_width.W))))

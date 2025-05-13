@@ -17,7 +17,7 @@ class MultiportRam(
   val WriterCount: Int,
   val Depth: Int,
   val DataWidth: Int
-)(implicit p: Parameters) extends Module {
+)(implicit p: Parameters) extends CustomModule {
   val addr_width = log2Ceil(Depth)
   val io = IO(new Bundle {
     val readers = Input(Vec(ReadersCount, new Port(addr_width, DataWidth, true)))

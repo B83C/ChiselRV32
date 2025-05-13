@@ -29,13 +29,22 @@ case class Parameters(
   LDISSUE_DEPTH: Int = 16,
   STISSUE_DEPTH: Int = 16,
   EXU_Fj_CNT_MAX: Int = 10, //一个执行单元所包含的FU最多的数量
-) {
-  
-}
+)
 
+//为了简化interface的设计，对每个知名的模块定义一个名称，这样使用起来就统一了
 object CpuModuleEnum extends Enumeration {
   type CpuModuleEnum = Value
-  val F, BP, RN, DP, EI, SI, LI, ROB, PRF, WB = Value
+  val
+     F, //Fetch Unit
+    BP, //Branch Predictor Unit
+    RN, //Rename Unit
+    DP, //Dispatch Unit
+    EI, //Execute Issue Unit
+    SI, //Store Issue Unit
+    LI, //Load Issue Unit
+    ALU, //ALU FU
+    WB, //WriteBack Unit
+    None = Value
 }
 
 class CustomBundle(implicit val p: Parameters) extends Bundle

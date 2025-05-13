@@ -19,7 +19,7 @@ class Decode_IO(implicit p: Parameters) extends CustomBundle {
 
 
 
-class DecodeUnit(implicit p: Parameters) extends Module {
+class DecodeUnit(implicit p: Parameters) extends CustomModule {
   val io = IO(new Decode_IO())
   
   //是否接受指令

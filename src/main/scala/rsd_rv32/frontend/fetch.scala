@@ -27,7 +27,7 @@ class Fetch_IO(implicit p: Parameters) extends CustomBundle {
 
 
 
-class FetchUnit(implicit p: Parameters) extends Module {
+class FetchUnit(implicit p: Parameters) extends CustomModule {
     val io = IO(new Fetch_IO())
 
     val pc_reg = RegInit(0.UInt(p.XLEN.W))        //存储当前PC

@@ -33,7 +33,7 @@ class BP_IO (implicit p: Parameters) extends CustomBundle {
   val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))  // ROB提交时的广播信号
 }
 
-class BranchPredictorUnit(implicit p: Parameters) extends Module {
+class BranchPredictorUnit(implicit p: Parameters) extends CustomModule {
   // 参数定义
   val bimodeTableSize = 1024         // T/NT 表大小
   val choiceTableSize = 1024         // 选择器表大小

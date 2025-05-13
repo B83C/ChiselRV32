@@ -22,7 +22,7 @@ class EXUIO(implicit p: Parameters) extends Bundle{
 }
 
 //把exu的各个fu封装起来的顶层模块
-class EXU(implicit p: Parameters) extends Module{
+class EXU(implicit p: Parameters) extends CustomModule{
   val io = IO(new EXUIO())
 
   val in = Flipped(Decoupled(new EXUISSUE_EXU_uop))
@@ -45,7 +45,7 @@ class ALUIO(implicit p: Parameters) extends Bundle {
   val cmp_out = Output(Bool())  // 比较结果
 }
 
-class ALU(implicit p: Parameters) extends Module with ALUConsts {
+class ALU(implicit p: Parameters) extends CustomModule with ALUConsts {
   val io = IO(new ALUIO)
 
   import ALUOp._
@@ -96,7 +96,7 @@ class BypassNetworkIO(
 
 class BypassNetwork(
   bypassCount: Int //旁路输入宽度
-)(implicit p: Parameters) extends Module {
+)(implicit p: Parameters) extends CustomModule {
   val io = IO(new BypassNetworkIO)
   val bypass_signals = IO(Input(Vec(bypassCount, Valid(new BypassInfo)))) //从功能单元传回的旁路输入
 
@@ -162,7 +162,7 @@ class DIVSignals extends Bundle {
 abstract class FunctionalUnit(
   needInformBranch: Boolean = false, //通知前端信息，比如BU需要提供转调信息
   needROBSignals: Boolean = false, //需要从ROB获得信息
-)(implicit p: Parameters) extends Module {
+)(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
     val req = Flipped(Valid(new FUReq())) 
     val out = Decoupled(new ExuDataOut())

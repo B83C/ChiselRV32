@@ -45,7 +45,7 @@ class LSUIO(implicit p: Parameters) extends CustomBundle {
 }
 
 //PipelineReg模块，用于将数据从一个阶段传递到下一个阶段
-class PipelineReg(val width: Int) extends Module {
+class PipelineReg(val width: Int) extends CustomModule {
   val io = IO(new Bundle {
     val stall_in = Input(Bool())
     val data_in  = Input(UInt(width.W))
@@ -66,7 +66,7 @@ class PipelineReg(val width: Int) extends Module {
 }
 
 //LSU的arbiter模块，用于将stq和ldq的请求信号进行仲裁，选择一个信号传递给存储器
-class LSUArbiter(implicit p: Parameters) extends Module {
+class LSUArbiter(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
     val stqReq  = Flipped(Decoupled(new Req_Abter()))//stq的请求信号
     val ldReq   = Flipped(Decoupled(new Req_Abter()))//ldq的请求信号
@@ -91,7 +91,7 @@ class LSUArbiter(implicit p: Parameters) extends Module {
 }
 
 //LSU的加载管线模块，用于处理加载指令的执行
-class LoadPipeline(implicit p: Parameters) extends Module {
+class LoadPipeline(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
     val ld_issue_uop = Flipped(Decoupled(new LDISSUE_LDPIPE_uop()))//加载指令的uop
     val ldu_wb_uop  = Valid((new ALU_WB_uop()))//加载完成的信号,wb to ROB and PRF
@@ -268,7 +268,7 @@ class LoadPipeline(implicit p: Parameters) extends Module {
 }
 
 
-class StorePipeline(implicit p: Parameters) extends Module {
+class StorePipeline(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
     val st_issue_uop = Flipped(Valid(new STISSUE_STPIPE_uop()))//存储指令的uop
     val stu_wb_uop = Valid((new STPIPE_WB_uop()))//存储完成的信号,wb to ROB
@@ -363,7 +363,7 @@ class STQEntry(implicit p: Parameters) extends Bundle {
   val func3 = UInt(3.W)
 }
 
-class StoreQueue(implicit p: Parameters) extends Module {
+class StoreQueue(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
     val stq_full = Output(Bool())//stq是否为满,1表示满
     val stq_tail = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引 
@@ -592,7 +592,7 @@ class StoreQueue(implicit p: Parameters) extends Module {
 
 }
 //LSU的模块定义，目前只完成了IO接口的定义，内部逻辑还未完成
-class LSU(implicit p: Parameters) extends Module {
+class LSU(implicit p: Parameters) extends CustomModule {
 
     val io = IO(new LSUIO())//定义LSU的IO接口
 
