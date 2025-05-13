@@ -28,7 +28,7 @@ class ROB_broadcast(implicit p: Parameters) extends CustomBundle {
 */
 
 class ROBIO(implicit p: Parameters) extends CustomBundle {
-    val dis_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new DISPATCH_ROB_uop())))  //Dispatch Unit的uop,存入条目中
+    val dis_uop = Flipped(Decoulped(Vec(p.CORE_WIDTH, Flipped(Valid(new DISPATCH_ROB_uop())))))  //Dispatch Unit的uop,存入条目中
 
     val rob_full = Output(Bool())  //ROB满标志(1表示满，无法分配新条目)
     val rob_head = Output(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB头指针
@@ -45,6 +45,8 @@ class ROBIO(implicit p: Parameters) extends CustomBundle {
 }
 
 class ROB(implicit p: Parameters) extends Module {
+    implicit val _modtype = CpuModuleEnum.ROB
+    
     val io = IO(new ROBIO())
     val rob = RegInit(VecInit(Seq.fill(p.ROB_DEPTH)(0.U.asTypeOf(new ROBContent())))) //ROB条目
     val rob_head = RegInit(0.U(log2Ceil(p.ROB_DEPTH).W)) //ROB头指针

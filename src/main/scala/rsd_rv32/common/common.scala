@@ -33,4 +33,18 @@ case class Parameters(
   
 }
 
+object CpuModuleEnum extends Enumeration {
+  type CpuModuleEnum = Value
+  val F, BP, RN, DP, EI, SI, LI, ROB, PRF, WB = Value
+}
+
+class CustomBundle(implicit val p: Parameters) extends Bundle
+
+class CustomModule extends Module {
+  import CpuModuleEnum._
+  implicit lazy val ModuleName: CpuModuleEnum = this.getClass.getSimpleName match {
+    case "ROB" => ROB
+    case _ => None
+  }
+}
 

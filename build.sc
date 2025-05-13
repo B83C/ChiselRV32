@@ -31,7 +31,7 @@ object `rsd_rv32` extends SbtModule { m =>
   )
   object test extends SbtTests with TestModule.ScalaTest {
     override def ivyDeps = m.ivyDeps() ++ Agg(
-      //ivy"edu.berkeley.cs::chiseltest::6.0.0",
+      ivy"edu.berkeley.cs::chiseltest::6.0.0",
       ivy"org.scalatest::scalatest::3.2.16"
     )
   }

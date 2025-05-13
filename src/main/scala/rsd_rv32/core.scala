@@ -10,12 +10,13 @@ import rsd_rv32.frontend._
 import rsd_rv32.execution._
 
 // Top Level Structure
-class Core() extends Module {
+class Core(implicit p: Parameters) extends Module {
   val io = IO(new Bundle {
-    // val mem = new MemInterface
+      val rst = Bool()
   })
 
-  // val fetch = Module(new FetchUnit)
+  val mem = Module(new mem())
+  val fetch = Module(new FetchUnit)
   // val decode = Module(new DecodeUnit)
   // val rename = Module(new RenameUnit)
   // val dispatch = Module(new DispatchUnit)
