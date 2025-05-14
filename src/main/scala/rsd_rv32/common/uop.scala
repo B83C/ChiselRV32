@@ -74,6 +74,7 @@ object BUSignals {
 //     val fu_signals = new FUSignals() //opcode is compiled into fu specific control signals
 // }
 
+
 class IF_ID_uop(implicit p: Parameters) extends CustomBundle {
     val instr = UInt(p.XLEN.W) 
     val instr_addr = UInt(p.XLEN.W) //needed by rob, BU, ALU
