@@ -4,8 +4,6 @@ import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
 
-
-
 /*
 class Dispatch_ROB_Interface(implicit p: Parameters) extends CustomBundle {
     val dis_uops = Valid(Vec(p.DISPATCH_WIDTH, new uop()))  //Dispatch Unit的uop
@@ -26,6 +24,10 @@ class ROB_broadcast(implicit p: Parameters) extends CustomBundle {
     val commit_signal = Valid(Vec(p.DISPATCH_WIDTH, UInt((37 + ((34 + p.GHR_WIDTH) max (37 + log2Ceil(p.PRF_DEPTH)))).W))) //ROB条目
 }
 */
+
+class ROBInterface extends CustomBundle {
+
+}
 
 class ROBIO(implicit p: Parameters) extends CustomBundle {
     val dis_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new DISPATCH_ROB_uop())))  //Dispatch Unit的uop,存入条目中

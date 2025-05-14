@@ -39,15 +39,18 @@ object CpuModuleEnum extends Enumeration {
     BP, //Branch Predictor Unit
     RN, //Rename Unit
     DP, //Dispatch Unit
+    ROB, //Reorder buffer Unit
     EI, //Execute Issue Unit
     SI, //Store Issue Unit
     LI, //Load Issue Unit
     ALU, //ALU FU
     WB, //WriteBack Unit
+    ALL, //Accepts all unit
     None = Value
 }
 
-class CustomBundle(implicit val p: Parameters) extends Bundle
+import CpuModuleEnum._
+class CustomBundle(implicit val p: Parameters, implicit pt: CpuModuleEnum) extends Bundle
 
 class CustomModule extends Module {
   import CpuModuleEnum._
