@@ -3,6 +3,7 @@ package rsd_rv32.frontend
 import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
+import _root_.circt.stage.ChiselStage
 
 /*class BP_IFU_Interface(implicit p: Parameters) extends CustomBundle {
     val PC_cur = Input(UInt(p.XLEN.W)) //当前IFU的PC值
@@ -33,7 +34,7 @@ class BP_IO (implicit p: Parameters) extends CustomBundle {
   val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))  // ROB提交时的广播信号
 }
 
-class BranchPredictorUnit(implicit p: Parameters) extends CustomModule {
+class BranchPredictorUnit(implicit p: Parameters) extends Module {
   // 参数定义
   val bimodeTableSize = 1024         // T/NT 表大小
   val choiceTableSize = 1024         // 选择器表大小
@@ -251,7 +252,7 @@ class BranchPredictorUnit(implicit p: Parameters) extends CustomModule {
   io.branch_pred := branchPredVecReg
 
   // ---------------------------------------------------------------------------
-  // 4. 更新逻辑：处理ROB提交的分支结果 - 改进：更精确的饱和计数器更新，增强Jump指令处理
+  // 4. 更新逻辑：处理ROB提交的分支结果
   // ---------------------------------------------------------------------------
   for (i <- 0 until p.CORE_WIDTH) {
     when (io.rob_commitsignal(i).valid) {
@@ -279,26 +280,26 @@ class BranchPredictorUnit(implicit p: Parameters) extends CustomModule {
         ))
 
         // 获取BTB命中信息
-        val btb_hit = MuxCase(false.B, Seq(
-          (rc.rob_type === ROBType.Branch) -> rc.as_Branch.btb_hit,
-          (rc.rob_type === ROBType.Jump) -> rc.as_Jump.btb_hit
-        ))
+        //val btb_hit = MuxCase(false.B, Seq(
+        //(rc.rob_type === ROBType.Branch) -> rc.as_Branch.btb_hit,
+        //(rc.rob_type === ROBType.Jump) -> rc.as_Jump.btb_hit
+        //))
 
         // 更新BTB - 改进：始终更新BTB
         val btbIdx = btbIndex(pc)
-        val btbTag = btbTag(pc)
+        val btbtag = btbTag(pc)
 
         val newBtbEntry = Wire(new BTBEntry)
         newBtbEntry.valid := true.B
         newBtbEntry.target := target
         // 条件分支的isConditional为true，Jump指令的isConditional为false
         newBtbEntry.isConditional := rc.rob_type === ROBType.Branch
-        newBtbEntry.tag := btbTag
+        newBtbEntry.tag := btbtag
 
         // BTB更新策略：对所有分支类型都更新BTB
         btb.write(btbIdx, newBtbEntry)
 
-        // 更新Bi-Mode预测器 - 改进：只对条件分支更新模式预测器
+        // 更新Bi-Mode预测器 - 只对条件分支更新模式预测器
         when (rc.rob_type === ROBType.Branch) {
           // 计算与预测时相同的索引
           val histIdx = (pc ^ ghr_snapshot)(log2Ceil(bimodeTableSize)-1, 0)
@@ -316,15 +317,15 @@ class BranchPredictorUnit(implicit p: Parameters) extends CustomModule {
           val tPred = tValue(counterBits-1)
           val ntPred = ntValue(counterBits-1)
 
-/*        // 根据实际跳转结果更新对应的预测表(需要修改)
-          when (usedNT) {
-            // 如果选择了NT表，则更新NT表
-            bimodeNT.write(histIdx, satUpdate(ntValue, taken===(0.U)))
-          }.otherwise {
-            // 否则更新T表
-            bimodeT.write(histIdx, satUpdate(tValue, taken===(0.U)))
-          }
-*/
+          /*        // 根据实际跳转结果更新对应的预测表(需要修改)
+                    when (usedNT) {
+                      // 如果选择了NT表，则更新NT表
+                      bimodeNT.write(histIdx, satUpdate(ntValue, taken===(0.U)))
+                    }.otherwise {
+                      // 否则更新T表
+                      bimodeT.write(histIdx, satUpdate(tValue, taken===(0.U)))
+                    }
+          */
           // 根据PDF中的Bi-Mode算法更新选择器
           // 选择器的更新策略是：当预测正确时，强化当前选择；当预测错误时，减弱当前选择
           val predUsedTable = Mux(usedNT, ntPred, tPred)  // 获取使用的表的预测结果
@@ -340,7 +341,7 @@ class BranchPredictorUnit(implicit p: Parameters) extends CustomModule {
 
           choice.write(tagIdx, newChoice)
           // 根据实际跳转结果更新对应的预测表
-          when (newChoice(counterBits-1)) {
+          when (newChoice(counterBits-1).asBool) {
             // 如果以后选择T表，则更新T表
             bimodeT.write(histIdx, satUpdate(tValue, taken))
           }.otherwise {
@@ -362,10 +363,10 @@ class BranchPredictorUnit(implicit p: Parameters) extends CustomModule {
             ghr := taken.asUInt
           }.otherwise {
             // 否则按位置插入实际结果
-            val mask1 = 1.U << shift_amt
-            val mask = mask1.asUInt - 1.U
+            val mask = (1.U << shift_amt).asUInt - 1.U  // 生成位宽为 shift_amt 的掩码
             val preserved_bits = ghr >> shift_amt
-            val new_bits = Cat(Fill((shift_amt - 1.U).asUInt.litValue.toInt, 0.U(1.W)), taken.asUInt)
+//            val new_bits = Cat(Fill((shift_amt - 1.U).asUInt.litValue.toInt, 0.U(1.W)), taken.asUInt)
+            val new_bits = taken.asUInt & mask    // 保留最低位，高位清零
             ghr := (preserved_bits << shift_amt).asUInt | new_bits
           }
         }
@@ -398,21 +399,4 @@ class BranchPredictorUnit(implicit p: Parameters) extends CustomModule {
       choice(i) := 2.U(counterBits.W) // 选择器默认为2'b10 (弱选择NT表)
     }
   }
-}
-object GenerateVerilog extends App {
-  // 导入项目自定义参数类
-  import rsd_rv32.common.Parameters
-
-  // 定义隐式参数实例（可自定义参数值）
-  implicit val p: Parameters = Parameters(
-  )
-
-  // 生成 Verilog
-  (new chisel3.stage.ChiselStage).emitVerilog(
-    new BranchPredictorUnit()(p), // 传递隐式参数
-    Array(
-      "--target-dir", "generated/verilog",
-      "--full-stacktrace"          // 可选：生成详细错误信息
-    )
-  )
 }
