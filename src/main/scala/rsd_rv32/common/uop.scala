@@ -52,27 +52,27 @@ object BUSignals {
 // }
 
 // Will be removed!
-abstract trait HasUOP extends CustomBundle {
-    val uop = new uop()
-}
+// abstract trait HasUOP extends CustomBundle {
+//     val uop = new uop()
+// }
 
 // Will be removed!
-class uop(implicit p: Parameters) extends CustomBundle {
-    val instr = UInt((32 - 7).W) //func3, func7, rd, rs1 , rs2, imm without opcode
-    val instr_type = InstrType()
-    val instr_addr = UInt(p.XLEN.W)
-    val target_PC = UInt(p.XLEN.W)
-    val GHR = UInt(p.GHR_WIDTH.W)
-    // Signals created in the middle of the pipeline
-    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
-    val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
-    val ps2 = UInt(log2Ceil(p.PRF_DEPTH).W)
-    val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
-    val branch_taken = Bool()
-    val btb_hit = Bool()
+// class uop(implicit p: Parameters) extends CustomBundle {
+//     val instr = UInt((32 - 7).W) //func3, func7, rd, rs1 , rs2, imm without opcode
+//     val instr_type = InstrType()
+//     val instr_addr = UInt(p.XLEN.W)
+//     val target_PC = UInt(p.XLEN.W)
+//     val GHR = UInt(p.GHR_WIDTH.W)
+//     // Signals created in the middle of the pipeline
+//     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
+//     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
+//     val ps2 = UInt(log2Ceil(p.PRF_DEPTH).W)
+//     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+//     val branch_taken = Bool()
+//     val btb_hit = Bool()
     
-    val fu_signals = new FUSignals() //opcode is compiled into fu specific control signals
-}
+//     val fu_signals = new FUSignals() //opcode is compiled into fu specific control signals
+// }
 
 class IF_ID_uop(implicit p: Parameters) extends CustomBundle {
     val instr = UInt(p.XLEN.W) 

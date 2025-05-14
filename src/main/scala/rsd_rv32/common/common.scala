@@ -44,18 +44,17 @@ object CpuModuleEnum extends Enumeration {
     SI, //Store Issue Unit
     LI, //Load Issue Unit
     ALU, //ALU FU
-    WB, //WriteBack Unit
-    ALL, //Accepts all unit
-    None = Value
+    WB //WriteBack Unit
+    = Value
 }
 
 import CpuModuleEnum._
-class CustomBundle(implicit val p: Parameters, implicit pt: CpuModuleEnum) extends Bundle
+class CustomBundle(implicit p: Parameters, pt: Option[CpuModuleEnum] = None) extends Bundle
 
 class CustomModule extends Module {
   import CpuModuleEnum._
-  implicit lazy val ModuleName: CpuModuleEnum = this.getClass.getSimpleName match {
-    case "ROB" => ROB
+  implicit lazy val ModuleName: Option[CpuModuleEnum] = this.getClass.getSimpleName match {
+    case "ROB" => Some(ROB)
     case _ => None
   }
 }
