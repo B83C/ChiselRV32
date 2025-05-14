@@ -11,7 +11,7 @@ class Dispatcher_IO(implicit p:Parameters) extends CustomBundle {
   // with ROB
   val rob_uop = Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop())) //发往ROB的uop
   val rob_full = Input(Bool()) // ROB空标志(0表示非满，1表示满)
-  val rob_head = Input(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB头部指针
+  // val rob_head = Input(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB头部指针
   // val rob_tail = Input(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾部指针，指向入队处
   val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
   // with exu_issue
@@ -39,13 +39,6 @@ class DispatchUnit(implicit p: Parameters) extends CustomModule{
   io.dis_ready := !io.rob_full
 
   for(i <- 0 until p.CORE_WIDTH) {
-    if(io.rename_uop(i).instr_type == ST) {
-      
-    } else if(io.rename_uop(i).instr_type == LD) {
-      
-    } else {
-      
-    }
     
   }
 }
