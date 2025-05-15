@@ -7,10 +7,10 @@ import rsd_rv32.common._
 class exu_issue_IO(implicit p: Parameters) extends CustomBundle {
     //来自Dispatch Unit的输入
     // val bits.iq_index = Input(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID,
-    val dis_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop())))  //来自Dispatch Unit的输入
+    val exu_issue_uop = Flipped(Decoupled(Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop()))))  //来自Dispatch Unit的输入
 
     //with EXU
-    val issue_exu_uop = Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())) //发往EXU的uop
+    val execute_uop = Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())) //发往EXU的uop
     val mul_ready = Input(Bool()) //乘法器的ready信号
     val div_ready = Input(Bool()) //除法器的ready信号
 
@@ -155,7 +155,7 @@ class issue2exu(implicit p: Parameters) extends CustomModule {
         val ps1_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数1
         val ps2_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数2
         val dis_issue_uop = Input(Vec(p.CORE_WIDTH, new DISPATCH_EXUISSUE_uop())) //来自Dispatch的uop
-        val issue_exu_uop = Output(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop()))) //发往EXU的uop
+        val execute_uop = Output(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop()))) //发往EXU的uop
     })
     val uop = Reg(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())))
     for (i <-0 until p.CORE_WIDTH){
@@ -171,7 +171,7 @@ class issue2exu(implicit p: Parameters) extends CustomModule {
         uop(i).bits.target_PC := io.dis_issue_uop(i).target_PC
         uop(i).bits.rob_index := io.dis_issue_uop(i).rob_index
     }
-    io.issue_exu_uop := uop
+    io.execute_uop := uop
 }
 
 class exu_issue_queue(implicit p: Parameters) extends CustomModule {
@@ -208,7 +208,7 @@ class exu_issue_queue(implicit p: Parameters) extends CustomModule {
     )
 
 
-    io.issue_exu_uop := 0.U.asTypeOf(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())))
+    io.execute_uop := 0.U.asTypeOf(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())))
     io.exu_issued_index := 0.U.asTypeOf(Vec(p.CORE_WIDTH, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))))
     io.prf_raddr1 := 0.U.asTypeOf(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W)))
     io.prf_raddr2 := 0.U.asTypeOf(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W)))
@@ -221,56 +221,56 @@ class exu_issue_queue(implicit p: Parameters) extends CustomModule {
         }
     }.otherwise{
         //来自Dispatch的入队指令
-        when(io.dis_uop(0).valid && !io.dis_uop(1).valid){
-            payload(io.dis_uop(0).bits.iq_index) := io.dis_uop(0).bits
-            issue_queue(io.dis_uop(0).bits.iq_index).busy := true.B
-            issue_queue(io.dis_uop(0).bits.iq_index).instr_type := io.dis_uop(0).bits.instr_type
-            issue_queue(io.dis_uop(0).bits.iq_index).ps1 := io.dis_uop(0).bits.ps1
-            issue_queue(io.dis_uop(0).bits.iq_index).ps2 := io.dis_uop(0).bits.ps2
+        when(io.exu_issue_uop(0).valid && !io.exu_issue_uop(1).valid){
+            payload(io.exu_issue_uop(0).bits.iq_index) := io.exu_issue_uop(0).bits
+            issue_queue(io.exu_issue_uop(0).bits.iq_index).busy := true.B
+            issue_queue(io.exu_issue_uop(0).bits.iq_index).instr_type := io.exu_issue_uop(0).bits.instr_type
+            issue_queue(io.exu_issue_uop(0).bits.iq_index).ps1 := io.exu_issue_uop(0).bits.ps1
+            issue_queue(io.exu_issue_uop(0).bits.iq_index).ps2 := io.exu_issue_uop(0).bits.ps2
 
             //入队时判断ps1和ps2的ready信号
             val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps1)
+                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.exu_issue_uop(0).bits.ps1)
             }
             val conditions2 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                io.prf_valid(io.dis_uop(0).bits.ps2) ||
-                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps2)
+                io.prf_valid(io.exu_issue_uop(0).bits.ps2) ||
+                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.exu_issue_uop(0).bits.ps2)
             }
-            when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps1) || (io.dis_uop(0).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
-                issue_queue(io.dis_uop(0).bits.iq_index).ready1 := true.B
+            when (conditions1.reduce(_ || _) || io.prf_valid(io.exu_issue_uop(0).bits.ps1) || (io.exu_issue_uop(0).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
+                issue_queue(io.exu_issue_uop(0).bits.iq_index).ready1 := true.B
             } .otherwise{
-                issue_queue(io.dis_uop(0).bits.iq_index).ready1 := false.B
+                issue_queue(io.exu_issue_uop(0).bits.iq_index).ready1 := false.B
             }
-            when (conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps2) || (io.dis_uop(0).bits.fu_signals.opr2_sel =/= OprSel.REG)) {
-                issue_queue(io.dis_uop(0).bits.iq_index).ready2 := true.B
+            when (conditions2.reduce(_ || _) || io.prf_valid(io.exu_issue_uop(0).bits.ps2) || (io.exu_issue_uop(0).bits.fu_signals.opr2_sel =/= OprSel.REG)) {
+                issue_queue(io.exu_issue_uop(0).bits.iq_index).ready2 := true.B
             } .otherwise{
-                issue_queue(io.dis_uop(0).bits.iq_index).ready2 := false.B
+                issue_queue(io.exu_issue_uop(0).bits.iq_index).ready2 := false.B
             }
             //结束ready信号赋值
-        } .elsewhen(io.dis_uop(0).valid && io.dis_uop(1).valid){
+        } .elsewhen(io.exu_issue_uop(0).valid && io.exu_issue_uop(1).valid){
             for (k <- 0 until 2){
-                payload(io.dis_uop(k).bits.iq_index) := io.dis_uop(k).bits
-                issue_queue(io.dis_uop(k).bits.iq_index).busy := true.B
-                issue_queue(io.dis_uop(k).bits.iq_index).instr_type := io.dis_uop(k).bits.instr_type
-                issue_queue(io.dis_uop(k).bits.iq_index).ps1 := io.dis_uop(k).bits.ps1
-                issue_queue(io.dis_uop(k).bits.iq_index).ps2 := io.dis_uop(k).bits.ps2
+                payload(io.exu_issue_uop(k).bits.iq_index) := io.exu_issue_uop(k).bits
+                issue_queue(io.exu_issue_uop(k).bits.iq_index).busy := true.B
+                issue_queue(io.exu_issue_uop(k).bits.iq_index).instr_type := io.exu_issue_uop(k).bits.instr_type
+                issue_queue(io.exu_issue_uop(k).bits.iq_index).ps1 := io.exu_issue_uop(k).bits.ps1
+                issue_queue(io.exu_issue_uop(k).bits.iq_index).ps2 := io.exu_issue_uop(k).bits.ps2
 
                 //入队时判断ps1和ps2的ready信号
                 val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps1)
+                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.exu_issue_uop(k).bits.ps1)
                 }
                 val conditions2 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps2)
+                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.exu_issue_uop(k).bits.ps2)
                 }
-                when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps1) || (io.dis_uop(k).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
-                    issue_queue(io.dis_uop(k).bits.iq_index).ready1 := true.B
+                when (conditions1.reduce(_ || _) || io.prf_valid(io.exu_issue_uop(k).bits.ps1) || (io.exu_issue_uop(k).bits.fu_signals.opr1_sel =/= OprSel.REG)) {
+                    issue_queue(io.exu_issue_uop(k).bits.iq_index).ready1 := true.B
                 } .otherwise{
-                    issue_queue(io.dis_uop(k).bits.iq_index).ready1 := false.B
+                    issue_queue(io.exu_issue_uop(k).bits.iq_index).ready1 := false.B
                 }
-                when (conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps2) || (io.dis_uop(k).bits.fu_signals.opr2_sel =/= OprSel.REG)) {
-                    issue_queue(io.dis_uop(k).bits.iq_index).ready2 := true.B
+                when (conditions2.reduce(_ || _) || io.prf_valid(io.exu_issue_uop(k).bits.ps2) || (io.exu_issue_uop(k).bits.fu_signals.opr2_sel =/= OprSel.REG)) {
+                    issue_queue(io.exu_issue_uop(k).bits.iq_index).ready2 := true.B
                 } .otherwise{
-                    issue_queue(io.dis_uop(k).bits.iq_index).ready2 := false.B
+                    issue_queue(io.exu_issue_uop(k).bits.iq_index).ready2 := false.B
                 }
                 //结束ready信号赋值
             }
@@ -337,7 +337,7 @@ class exu_issue_queue(implicit p: Parameters) extends CustomModule {
             issue_to_exu.io.dis_issue_uop(i) := payload(select_index(i).bits)
             issue_to_exu.io.ps1_value(i) := io.ps1_value(i)
             issue_to_exu.io.ps2_value(i) := io.ps2_value(i)
-            io.issue_exu_uop(i) := issue_to_exu.io.issue_exu_uop(i)
+            io.execute_uop(i) := issue_to_exu.io.execute_uop(i)
 
 
         }

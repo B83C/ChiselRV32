@@ -74,8 +74,36 @@ object BUSignals {
 //     val fu_signals = new FUSignals() //opcode is compiled into fu specific control signals
 // }
 
+// trait UopBase extends CustomBundle {
+//     def transformTo[T<: UopBase](implicit transformer: UopTransformer[this.type, T]): T = {
+//         transformer.transform(this)
+//     }
+// }
 
-class IF_ID_uop(implicit p: Parameters) extends CustomBundle {
+// trait UopTransformer[A <: UopBase, B <: UopBase] {
+//     def transform(a: A) : B
+// }
+
+// object UopTransformer {
+//   implicit def defaultTransformer[A <: UopBase, B <: UopBase](implicit genB: => B): UopTransformer[A, B] = new UopTransformer[A, B] {
+//     def transform(a: A): B = {
+//       val b = Wire(genB)
+//       (b: Data).waiveAll :<>= (a: Data).waiveAll
+//       b
+//     }
+//   }
+// }
+
+// object conversion {
+//     implicit object IF_ID extends UopTransformer[IF_ID_uop, ID_RENAME_uop]
+// }
+
+// import conversion._
+
+abstract class uop(implicit p: Parameters) extends CustomBundle {
+}
+
+class IF_ID_uop(implicit p: Parameters) extends uop {
     val instr = UInt(p.XLEN.W) 
     val instr_addr = UInt(p.XLEN.W) //needed by rob, BU, ALU
     val target_PC = UInt(p.XLEN.W) //needed by BU
@@ -84,7 +112,7 @@ class IF_ID_uop(implicit p: Parameters) extends CustomBundle {
     val btb_hit = BTBHit() //needed by rob
 }
 
-class ID_RENAME_uop(implicit p: Parameters) extends CustomBundle {
+class ID_RENAME_uop(implicit p: Parameters) extends uop {
 
     //opcode is compiled into fu specific control signals
     val instr_type = InstrType() 
@@ -105,7 +133,7 @@ class RENAME_DISPATCH_uop(implicit p: Parameters) extends ID_RENAME_uop {
     val ps2 = UInt(log2Ceil(p.PRF_DEPTH).W)
 }
 
-class DISPATCH_ROB_uop(implicit p: Parameters) extends CustomBundle {
+class DISPATCH_ROB_uop(implicit p: Parameters) extends uop {
     val instr_addr = UInt(p.XLEN.W)
 
     val instr_type = InstrType()
@@ -121,7 +149,7 @@ class DISPATCH_ROB_uop(implicit p: Parameters) extends CustomBundle {
     //val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
 }
 
-class DISPATCH_EXUISSUE_uop(implicit p: Parameters) extends CustomBundle {
+class DISPATCH_EXUISSUE_uop(implicit p: Parameters) extends uop {
     val instr = UInt((p.XLEN-7).W) //EXU need it to get imm,func,etc
     val instr_addr = UInt(p.XLEN.W)
 
@@ -140,7 +168,7 @@ class DISPATCH_EXUISSUE_uop(implicit p: Parameters) extends CustomBundle {
     val iq_index = UInt(log2Ceil(p.EXUISSUE_DEPTH).W)
 }
 
-class DISPATCH_LDISSUE_uop(implicit p: Parameters) extends CustomBundle {
+class DISPATCH_LDISSUE_uop(implicit p: Parameters) extends uop {
     val instr = UInt((p.XLEN-7).W) //Load Pipeline need it to get imm,func,etc
     
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
@@ -152,7 +180,7 @@ class DISPATCH_LDISSUE_uop(implicit p: Parameters) extends CustomBundle {
     val iq_index = UInt(log2Ceil(p.LDISSUE_DEPTH).W)
 }
 
-class DISPATCH_STISSUE_uop(implicit p: Parameters) extends CustomBundle {
+class DISPATCH_STISSUE_uop(implicit p: Parameters) extends uop {
     val instr = UInt((p.XLEN-7).W) //Store Pipeline need it to get imm,func
     
     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
@@ -164,7 +192,7 @@ class DISPATCH_STISSUE_uop(implicit p: Parameters) extends CustomBundle {
     val iq_index = UInt(log2Ceil(p.STISSUE_DEPTH).W)
 }
 
-class EXUISSUE_EXU_uop(implicit p: Parameters) extends CustomBundle {
+class EXUISSUE_EXU_uop(implicit p: Parameters) extends uop {
     val instr = UInt((p.XLEN-7).W)
     val instr_addr = UInt((p.XLEN).W)
 
@@ -183,7 +211,7 @@ class EXUISSUE_EXU_uop(implicit p: Parameters) extends CustomBundle {
     
 }
 
-class STISSUE_STPIPE_uop(implicit p: Parameters) extends CustomBundle {
+class STISSUE_STPIPE_uop(implicit p: Parameters) extends uop {
     val instr = UInt((p.XLEN-7).W)
 
     val ps1_value = UInt(p.XLEN.W)
@@ -193,7 +221,7 @@ class STISSUE_STPIPE_uop(implicit p: Parameters) extends CustomBundle {
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
 }
 
-class LDISSUE_LDPIPE_uop(implicit p: Parameters) extends CustomBundle {
+class LDISSUE_LDPIPE_uop(implicit p: Parameters) extends uop {
     val instr = UInt((p.XLEN-7).W)
 
     val ps1_value = UInt(p.XLEN.W)
@@ -203,7 +231,7 @@ class LDISSUE_LDPIPE_uop(implicit p: Parameters) extends CustomBundle {
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
 }
 
-class ALU_WB_uop(implicit p: Parameters) extends CustomBundle {
+class ALU_WB_uop(implicit p: Parameters) extends uop {
     //wrieback to PRF
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val pdst_value = UInt(p.XLEN.W)
@@ -213,7 +241,7 @@ class ALU_WB_uop(implicit p: Parameters) extends CustomBundle {
 }
 //乘除法器、Load pipeline的WB uop和ALU的WB uop相同
 
-class BU_WB_uop(implicit p: Parameters) extends CustomBundle {
+class BU_WB_uop(implicit p: Parameters) extends uop {
     val is_conditional = Bool() //needed to distinguish between conditional branches and unconditional branches, 1 represents conditional branch
 
     //writeback to ROB
@@ -227,7 +255,7 @@ class BU_WB_uop(implicit p: Parameters) extends CustomBundle {
     val pdst_value = UInt(p.XLEN.W)
 }
 
-/*class LDPIPE_WB_uop(implicit p: Parameters) extends CustomBundle {
+/*class LDPIPE_WB_uop(implicit p: Parameters) extends uop {
     //writeback to PRF
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val pdst_value = UInt(p.XLEN.W)
@@ -236,6 +264,6 @@ class BU_WB_uop(implicit p: Parameters) extends CustomBundle {
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
 }*/
 
-class STPIPE_WB_uop(implicit p: Parameters) extends CustomBundle {
+class STPIPE_WB_uop(implicit p: Parameters) extends uop {
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
 }

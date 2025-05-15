@@ -7,10 +7,10 @@ import rsd_rv32.common._
 class st_issue_IO(implicit p: Parameters) extends CustomBundle {
     //来自Dispatch Unit的输入
     //val iq_id = Input(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID
-    val dis_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new DISPATCH_STISSUE_uop())))  //来自Dispatch Unit的输入
+    val st_issue_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new DISPATCH_STISSUE_uop())))  //来自Dispatch Unit的输入
 
     //发射到st的输出
-    val issue_st_uop = Valid(new STISSUE_STPIPE_uop())  //发射的指令
+    val store_uop = Valid(new STISSUE_STPIPE_uop())  //发射的指令
     // val value_o1 = Output(UInt(p.XLEN.W)) //发射的指令的操作数1
     // val value_o2 = Output(UInt(p.XLEN.W)) //发射的指令的操作数2
 
@@ -73,7 +73,7 @@ class issue2st(implicit p: Parameters) extends CustomModule {
         val ps1_value = Input(UInt(p.XLEN.W)) //操作数1
         val ps2_value = Input(UInt(p.XLEN.W)) //操作数2
         val dis_issue_uop = Input(new DISPATCH_STISSUE_uop()) //被select的uop
-        val issue_st_uop = Output(Valid(new STISSUE_STPIPE_uop())) //发往STPIPE的uop
+        val store_uop = Output(Valid(new STISSUE_STPIPE_uop())) //发往STPIPE的uop
     })
     val uop = Reg(Valid(new STISSUE_STPIPE_uop()))
     uop.valid := io.if_valid
@@ -82,8 +82,8 @@ class issue2st(implicit p: Parameters) extends CustomModule {
     uop.bits.ps2_value := io.ps2_value
     uop.bits.stq_index := io.dis_issue_uop.stq_index
     uop.bits.rob_index := io.dis_issue_uop.rob_index
-    io.issue_st_uop.valid := uop.valid
-    io.issue_st_uop.bits := uop.bits
+    io.store_uop.valid := uop.valid
+    io.store_uop.bits := uop.bits
 }
 
 
@@ -124,8 +124,8 @@ class st_issue_queue(implicit p: Parameters) extends CustomModule {
     //存储结构定义结束
 
     //初始化
-    io.issue_st_uop.bits := 0.U.asTypeOf(new STISSUE_STPIPE_uop())
-    io.issue_st_uop.valid := 0.B
+    io.store_uop.bits := 0.U.asTypeOf(new STISSUE_STPIPE_uop())
+    io.store_uop.valid := 0.B
     io.st_issued_index := 0.U.asTypeOf(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)))
     io.prf_raddr1 := 0.U.asTypeOf(UInt(log2Ceil(p.PRF_DEPTH).W))
     io.prf_raddr2 := 0.U.asTypeOf(UInt(log2Ceil(p.PRF_DEPTH).W))
@@ -139,54 +139,54 @@ class st_issue_queue(implicit p: Parameters) extends CustomModule {
         }
     }.otherwise{
         //Dispatch入队命令
-        when(io.dis_uop(0).valid && !io.dis_uop(1).valid){
-            payload(io.dis_uop(0).bits.iq_index) := io.dis_uop(0).bits
-            issue_queue(io.dis_uop(0).bits.iq_index).busy := true.B
-            issue_queue(io.dis_uop(0).bits.iq_index).ps1 := io.dis_uop(0).bits.ps1
-            issue_queue(io.dis_uop(0).bits.iq_index).ps2 := io.dis_uop(0).bits.ps2
+        when(io.st_issue_uop(0).valid && !io.st_issue_uop(1).valid){
+            payload(io.st_issue_uop(0).bits.iq_index) := io.st_issue_uop(0).bits
+            issue_queue(io.st_issue_uop(0).bits.iq_index).busy := true.B
+            issue_queue(io.st_issue_uop(0).bits.iq_index).ps1 := io.st_issue_uop(0).bits.ps1
+            issue_queue(io.st_issue_uop(0).bits.iq_index).ps2 := io.st_issue_uop(0).bits.ps2
 
             //入队时判断ps1和ps2的ready信号
             val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps1)
+                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.st_issue_uop(0).bits.ps1)
             }
             val conditions2 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                io.prf_valid(io.dis_uop(0).bits.ps2) ||
-                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(0).bits.ps2)
+                io.prf_valid(io.st_issue_uop(0).bits.ps2) ||
+                (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.st_issue_uop(0).bits.ps2)
             }
-            when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps1)) {
-                issue_queue(io.dis_uop(0).bits.iq_index).ready1 := true.B
+            when (conditions1.reduce(_ || _) || io.prf_valid(io.st_issue_uop(0).bits.ps1)) {
+                issue_queue(io.st_issue_uop(0).bits.iq_index).ready1 := true.B
             } .otherwise{
-                issue_queue(io.dis_uop(0).bits.iq_index).ready1 := false.B
+                issue_queue(io.st_issue_uop(0).bits.iq_index).ready1 := false.B
             }
-            when (conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(0).bits.ps2)) {
-                issue_queue(io.dis_uop(0).bits.iq_index).ready2 := true.B
+            when (conditions2.reduce(_ || _) || io.prf_valid(io.st_issue_uop(0).bits.ps2)) {
+                issue_queue(io.st_issue_uop(0).bits.iq_index).ready2 := true.B
             } .otherwise{
-                issue_queue(io.dis_uop(0).bits.iq_index).ready2 := false.B
+                issue_queue(io.st_issue_uop(0).bits.iq_index).ready2 := false.B
             }
             //结束ready信号赋值
-        } .elsewhen(io.dis_uop(0).valid && io.dis_uop(1).valid){
+        } .elsewhen(io.st_issue_uop(0).valid && io.st_issue_uop(1).valid){
             for (k <- 0 until 2){
-                payload(io.dis_uop(k).bits.iq_index) := io.dis_uop(k).bits
-                issue_queue(io.dis_uop(k).bits.iq_index).busy := true.B
-                issue_queue(io.dis_uop(k).bits.iq_index).ps1 := io.dis_uop(k).bits.ps1
-                issue_queue(io.dis_uop(k).bits.iq_index).ps2 := io.dis_uop(k).bits.ps2
+                payload(io.st_issue_uop(k).bits.iq_index) := io.st_issue_uop(k).bits
+                issue_queue(io.st_issue_uop(k).bits.iq_index).busy := true.B
+                issue_queue(io.st_issue_uop(k).bits.iq_index).ps1 := io.st_issue_uop(k).bits.ps1
+                issue_queue(io.st_issue_uop(k).bits.iq_index).ps2 := io.st_issue_uop(k).bits.ps2
 
                 //入队时判断ps1和ps2的ready信号
                 val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps1)
+                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.st_issue_uop(k).bits.ps1)
                 }
                 val conditions2 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
-                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.dis_uop(k).bits.ps2)
+                    (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.st_issue_uop(k).bits.ps2)
                 }
-                when (conditions1.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps1)) {
-                    issue_queue(io.dis_uop(k).bits.iq_index).ready1 := true.B
+                when (conditions1.reduce(_ || _) || io.prf_valid(io.st_issue_uop(k).bits.ps1)) {
+                    issue_queue(io.st_issue_uop(k).bits.iq_index).ready1 := true.B
                 } .otherwise{
-                    issue_queue(io.dis_uop(k).bits.iq_index).ready1 := false.B
+                    issue_queue(io.st_issue_uop(k).bits.iq_index).ready1 := false.B
                 }
-                when (conditions2.reduce(_ || _) || io.prf_valid(io.dis_uop(k).bits.ps2)) {
-                    issue_queue(io.dis_uop(k).bits.iq_index).ready2 := true.B
+                when (conditions2.reduce(_ || _) || io.prf_valid(io.st_issue_uop(k).bits.ps2)) {
+                    issue_queue(io.st_issue_uop(k).bits.iq_index).ready2 := true.B
                 } .otherwise{
-                    issue_queue(io.dis_uop(0).bits.iq_index).ready2 := false.B
+                    issue_queue(io.st_issue_uop(0).bits.iq_index).ready2 := false.B
                 }
                 //结束ready信号赋值
             }
@@ -251,8 +251,8 @@ class st_issue_queue(implicit p: Parameters) extends CustomModule {
         issue_to_st.io.dis_issue_uop := payload(select_index.bits)
         issue_to_st.io.ps1_value := io.ps1_value
         issue_to_st.io.ps2_value := io.ps2_value
-        io.issue_st_uop.bits := issue_to_st.io.issue_st_uop.bits
-        io.issue_st_uop.valid := issue_to_st.io.issue_st_uop.valid
+        io.store_uop.bits := issue_to_st.io.store_uop.bits
+        io.store_uop.valid := issue_to_st.io.store_uop.valid
 
         //发射st_queue状态至ld_queue
         for (i <- 0 until p.STISSUE_DEPTH){

@@ -6,7 +6,7 @@ import rsd_rv32.common._
 
 class Decode_IO(implicit p: Parameters) extends CustomBundle {
   // with IF
-  val if_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new IF_ID_uop())))
+  val id_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new IF_ID_uop())))
   val id_ready = Output(Bool()) // ID是否准备好接收指令
   // with Rename
   val rename_uop = Vec(p.CORE_WIDTH, Valid(new ID_RENAME_uop()))
@@ -27,10 +27,10 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
   io.id_ready = io.rename_ready && !rob_flush
 
   for (i <-0 until p.CORE_WIDTH){
-    val valid = io.if_uop(i).valid && ready
+    val valid = io.id_uop(i).valid && ready
 
     //分解IF来的指令
-    val instr = io.if_uop(i).bits.instr
+    val instr = io.id_uop(i).bits.instr
     val opcode = instr(6,0)
     val rd = instr(11,7)
     val funct3 = instr(14,12)
@@ -146,11 +146,11 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
     rename.uop.bits.fu_signals := fuSignals
 
     //if给的部分
-    rename.uop.bits.instr_addr := if_uop.instr_addr
-    rename_uop.bits.target_PC := if_uop.target_PC
-    rename_uop.bits.GHR := if_uop.GHR
-    rename_uop.bits.branch_pred := if_uop.branch_pred
-    rename_uop.bits.btb_hit := if_uop.btb_hit
+    rename.uop.bits.instr_addr := id_uop.instr_addr
+    rename_uop.bits.target_PC := id_uop.target_PC
+    rename_uop.bits.GHR := id_uop.GHR
+    rename_uop.bits.branch_pred := id_uop.branch_pred
+    rename_uop.bits.btb_hit := id_uop.btb_hit
 
     
     //输出完成

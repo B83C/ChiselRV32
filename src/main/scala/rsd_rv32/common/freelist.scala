@@ -16,8 +16,8 @@ class FreeList[T <: Data](
   val depth_bits = log2Ceil(depth)
   val io = IO(new Bundle {
     val checkpoint, restore = Input(Bool()) // Signals to checkpoint and restore both head and tail pointer
-    val deq_request = DecoupledIO(Vec(multiShot, dType))
-    val enq_request  = Flipped(DecoupledIO(Vec(multiShot, dType)))
+    val deq_request = Decoupled(Vec(multiShot, dType))
+    val enq_request  = Flipped(Decoupled(Vec(multiShot, dType)))
     // val is_empty = Output(Bool())
   })
 

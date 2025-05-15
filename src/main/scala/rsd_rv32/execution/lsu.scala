@@ -27,16 +27,16 @@ class LSUIO(implicit p: Parameters) extends CustomBundle {
   val data_out_mem  = Input(UInt(64.W))//从储存器中读取的数据
 
   //with store issue queue
-  val st_issue_uop = Flipped(Valid(new STISSUE_STPIPE_uop()))//存储指令的uop
+  val store_uop = Flipped(Valid(new STISSUE_STPIPE_uop()))//存储指令的uop
 
   //with load issue queue
-  val ld_issue_uop  = Flipped(Decoupled(new LDISSUE_LDPIPE_uop()))//加载指令的uop
+  val load_uop  = Flipped(Decoupled(new LDISSUE_LDPIPE_uop()))//加载指令的uop
 
   //with dispatcher
   val stq_tail  = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引 
   val stq_head  = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的头部索引
   val stq_full  = Output(Bool())//stq是否为满,1表示满
-  val st_dis = Input(Vec(p.CORE_WIDTH, Bool()))//存储指令被派遣的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）
+  val st_cnt = Input(Vec(p.CORE_WIDTH, Bool()))//存储指令被派遣的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）
   
   //with ROB
   val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
@@ -93,7 +93,7 @@ class LSUArbiter(implicit p: Parameters) extends CustomModule {
 //LSU的加载管线模块，用于处理加载指令的执行
 class LoadPipeline(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
-    val ld_issue_uop = Flipped(Decoupled(new LDISSUE_LDPIPE_uop()))//加载指令的uop
+    val load_uop = Flipped(Decoupled(new LDISSUE_LDPIPE_uop()))//加载指令的uop
     val ldu_wb_uop  = Valid((new ALU_WB_uop()))//加载完成的信号,wb to ROB and PRF
 
     val addr_search_stq = Valid(UInt(p.XLEN.W))//地址搜索信号,进入stq的搜索地址
@@ -115,9 +115,9 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   val ps1_value = Wire(UInt(p.XLEN.W))
   val stage1_pipevalid = Wire(Bool())
 
-  instr := io.ld_issue_uop.bits.instr
-  ps1_value := io.ld_issue_uop.bits.ps1_value
-  stage1_pipevalid := io.ld_issue_uop.valid
+  instr := io.load_uop.bits.instr
+  ps1_value := io.load_uop.bits.ps1_value
+  stage1_pipevalid := io.load_uop.valid
 
 
   val imm_temp = instr(24, 13)
@@ -139,9 +139,9 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   Stage1ToStage2_ldAddr_reg.io.data_in := stage1_ldAddr
   Stage1ToStage2_func3_reg.io.data_in := stage1_func3
   Stage1ToStage2_pipevalid_reg.io.data_in := stage1_pipevalid.asUInt
-  Stage1ToStage2_stqtail_reg.io.data_in := io.ld_issue_uop.bits.stq_tail
-  Stage1ToStage2_robidx_reg.io.data_in := io.ld_issue_uop.bits.rob_index
-  Stage1ToStage2_pdst_reg.io.data_in := io.ld_issue_uop.bits.pdst
+  Stage1ToStage2_stqtail_reg.io.data_in := io.load_uop.bits.stq_tail
+  Stage1ToStage2_robidx_reg.io.data_in := io.load_uop.bits.rob_index
+  Stage1ToStage2_pdst_reg.io.data_in := io.load_uop.bits.pdst
 
   Stage1ToStage2_ldAddr_reg.io.stall_in := stall
   Stage1ToStage2_func3_reg.io.stall_in  := stall
@@ -198,7 +198,7 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   io.ldReq.bits.write_en := false.B
   io.ldReq.valid := stage2_pipevalid && (!need_flush) && (!expected)
 
-  io.ld_issue_uop.ready := (!need_flush) && (!stall)
+  io.load_uop.ready := (!need_flush) && (!stall)
 
 
 
@@ -272,7 +272,7 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
 
 class StorePipeline(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
-    val st_issue_uop = Flipped(Valid(new STISSUE_STPIPE_uop()))//存储指令的uop
+    val store_uop = Flipped(Valid(new STISSUE_STPIPE_uop()))//存储指令的uop
     val stu_wb_uop = Valid((new STPIPE_WB_uop()))//存储完成的信号,wb to ROB
 
     val data_into_stq = UInt(p.XLEN.W)//需要写入stq的数据
@@ -287,8 +287,8 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
   val instr = Wire(UInt((p.XLEN - 7).W))
   val ps1_value = Wire(UInt(p.XLEN.W))
 
-  instr := io.st_issue_uop.bits.instr
-  ps1_value := io.st_issue_uop.bits.ps1_value
+  instr := io.store_uop.bits.instr
+  ps1_value := io.store_uop.bits.ps1_value
   
   val imm_high = instr(24, 18)
   val imm_low = instr(4, 0)
@@ -299,7 +299,7 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
   val stage1_dataAddr = ps1_value + stage1_imm
 
   val pipeline_valid = Wire(Bool())
-  pipeline_valid := io.st_issue_uop.valid
+  pipeline_valid := io.store_uop.valid
   
 
 
@@ -311,11 +311,11 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
   val Stage1ToStage2_func3_reg = Module(new PipelineReg(3))
   val Stage1ToStage2_valid_reg = Module(new PipelineReg(1))
   
-  Stage1ToStage2_data_reg.io.data_in := io.st_issue_uop.bits.ps2_value
+  Stage1ToStage2_data_reg.io.data_in := io.store_uop.bits.ps2_value
   Stage1ToStage2_addr_reg.io.data_in := stage1_dataAddr
-  Stage1ToStage2_stqidx_reg.io.data_in := io.st_issue_uop.bits.stq_index
-  Stage1ToStage2_robidx_reg.io.data_in := io.st_issue_uop.bits.rob_index
-  Stage1ToStage2_valid_reg.io.data_in  := io.st_issue_uop.valid.asUInt
+  Stage1ToStage2_stqidx_reg.io.data_in := io.store_uop.bits.stq_index
+  Stage1ToStage2_robidx_reg.io.data_in := io.store_uop.bits.rob_index
+  Stage1ToStage2_valid_reg.io.data_in  := io.store_uop.valid.asUInt
   Stage1ToStage2_func3_reg.io.data_in  := stage1_func3
 
   Stage1ToStage2_data_reg.io.stall_in := false.B
@@ -379,7 +379,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
 
     val stqReq = Decoupled(new Req_Abter())//存储请求信号
 
-    val st_dis = Input(Vec(p.CORE_WIDTH, Bool()))//用于更新store queue（在lsu中）的tail（full标志位）
+    val st_cnt = Input(UInt(log2Ceil(p.CORE_WIDTH).W))//用于更新store queue（在lsu中）的tail（full标志位）
     val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
 
     val dataAddr_into_stq = Flipped(Valid(UInt(p.XLEN.W)))//需要写入stq的地址
@@ -423,7 +423,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
     Mux(next >= p.STQ_DEPTH.U, next - p.STQ_DEPTH.U, next)
   }
 
-  val tail_inc = Mux(io.st_dis(1), 2.U, Mux(io.st_dis(0), 1.U, 0.U))
+  val tail_inc = st_cnt
   val tail_next = nextPtr(tail, tail_inc)
 
 
@@ -626,7 +626,7 @@ class LSU(implicit p: Parameters) extends CustomModule {
 
 
   //连接加载管线模块的信号
-    load_pipeline.io.ld_issue_uop <> io.ld_issue_uop//将加载指令的uop连接到加载管线模块的输入端口
+    load_pipeline.io.load_uop <> io.load_uop//将加载指令的uop连接到加载管线模块的输入端口
     load_pipeline.io.data_out_mem := io.data_out_mem(31,0)//将从存储器中读取的数据连接到加载管线模块的输入端口
     load_pipeline.io.addr_search_stq <> store_queue.io.addr_search_stq//将地址搜索信号连接到加载管线模块的输入端口
     load_pipeline.io.func3 <> store_queue.io.ld_func3
@@ -636,7 +636,7 @@ class LSU(implicit p: Parameters) extends CustomModule {
     load_pipeline.io.ldu_wb_uop <> io.ldu_wb_uop
 
   //连接storepipeline的信号
-    store_pipeline.io.st_issue_uop := io.st_issue_uop
+    store_pipeline.io.store_uop := io.store_uop
     io.stu_wb_uop := store_pipeline.io.stu_wb_uop
     store_pipeline.io.data_into_stq <> store_queue.io.data_into_stq
     store_pipeline.io.dataAddr_into_stq <> store_queue.io.dataAddr_into_stq
@@ -645,7 +645,7 @@ class LSU(implicit p: Parameters) extends CustomModule {
     store_pipeline.io.rob_commitsignal := io.rob_commitsignal
 
   //连接STQ的信号
-    store_queue.io.st_dis := io.st_dis
+    store_queue.io.st_cnt := io.st_cnt
     store_queue.io.rob_commitsignal := io.rob_commitsignal
     io.stq_head := store_queue.io.stq_head
     io.stq_tail := store_queue.io.stq_tail

@@ -25,16 +25,20 @@ class ROB_broadcast(implicit p: Parameters) extends CustomBundle {
 }
 */
 
-class ROBInterface extends CustomBundle {
-
+import Utils._
+import CpuModuleEnum._
+class ROBInterface(implicit p: CpuModuleEnum) extends CustomBundle {
+    val uop = is(Decoupled(Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop()))), ROB, DP)
+    // val commit = Vec
 }
 
 class ROBIO(implicit p: Parameters) extends CustomBundle {
-    val dis_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new DISPATCH_ROB_uop())))  //Dispatch Unit的uop,存入条目中
+    val rob_uop = Flipped(Decoupled(Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop()))))  //Dispatch Unit的uop,存入条目中
 
     val rob_full = Output(Bool())  //ROB满标志(1表示满，无法分配新条目)
-    val rob_head = Output(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB头指针
-    val rob_tail = Output(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
+    // 没必要
+    // val rob_head = Output(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB头指针
+    // val rob_tail = Output(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
 
     val alu_wb_uop = Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Flipped(Valid(new ALU_WB_uop())))  //来自alu0、alu1、mul、div、load pipeline的uop
     val bu_wb_uop = Vec(p.BU_NUM, Flipped(Valid(new BU_WB_uop()))) //来自bu的uop,更新就绪状态
@@ -60,9 +64,11 @@ class ROB(implicit p: Parameters) extends CustomModule {
     rob_head := head_next
     rob_tail := tail_next
 
+    io.rob_uop.ready := !rob_full
     io.rob_full := rob_full //ROB满标志输出
-    io.rob_head := rob_head //ROB头指针输出
-    io.rob_tail := rob_tail //ROB尾指针输出
+    // 没必要
+    // io.rob_head := rob_head //ROB头指针输出
+    // io.rob_tail := rob_tail //ROB尾指针输出
 
     io.rob_commitsignal(0).bits := rob(rob_head)
     val commit0_valid = WireDefault(false.B)
@@ -75,7 +81,7 @@ class ROB(implicit p: Parameters) extends CustomModule {
     val flush = Wire(Bool()) //Flush信号
     flush := commit0_valid && rob(rob_head).mispred
 
-    val dis_valid_bits = WireDefault(io.dis_uop(0).valid ## io.dis_uop(1).valid)
+    val dis_valid_bits = WireDefault(io.rob_uop.bits(0).valid ## io.rob_uop.bits(1).valid)
 
     //commit的逻辑
     /*val commit0 = WireDefault(false.B)
@@ -109,8 +115,8 @@ class ROB(implicit p: Parameters) extends CustomModule {
         rob_full := false.B
         for(i <- 0 until p.ROB_DEPTH){
             rob(i) := 0.U.asTypeOf(new ROBContent())
+            io.rob_uop.ready := !rob_full
         }
-    }
 
     //非flush时为dispatch单元发来的指令分配条目
     val rob_allocate0 = WireDefault(rob(rob_tail))
@@ -173,8 +179,8 @@ class ROB(implicit p: Parameters) extends CustomModule {
     when(!flush){
         switch(dis_valid_bits){
             is("b11".U){
-                allocate_rob_entry(io.dis_uop(0).bits, rob_allocate0)
-                allocate_rob_entry(io.dis_uop(1).bits, rob_allocate1)
+                allocate_rob_entry(io.rob_uop.bits(0).bits, rob_allocate0)
+                allocate_rob_entry(io.rob_uop.bits(1).bits, rob_allocate1)
 
                 tail_next := MuxLookup(rob_tail, rob_tail + 2.U)(Seq(
                     (p.ROB_DEPTH - 1).U -> 1.U,
@@ -184,7 +190,7 @@ class ROB(implicit p: Parameters) extends CustomModule {
                 full_next := tail_next === rob_head
             }
             is("b10".U){
-                allocate_rob_entry(io.dis_uop(0).bits, rob_allocate0)
+                allocate_rob_entry(io.rob_uop.bits(0).bits, rob_allocate0)
                 
                 tail_next := Mux(rob_tail === (p.ROB_DEPTH - 1).U, 0.U, rob_tail + 1.U)
 
@@ -208,16 +214,15 @@ class ROB(implicit p: Parameters) extends CustomModule {
     for(i <- 0 until p.BU_NUM){
         when(io.bu_wb_uop(i).valid){
             rob(io.bu_wb_uop(i).bits.rob_index).mispred := io.bu_wb_uop(i).bits.mispred
+            io.rob_uop.ready := !rob_full
             rob(io.bu_wb_uop(i).bits.rob_index).completed := true.B
-
-            when(io.bu_wb_uop(i).bits.is_conditional){
                 val branch_payload = WireDefault(rob(io.bu_wb_uop(i).bits.rob_index).as_Branch)
                 branch_payload.target_PC := io.bu_wb_uop(i).bits.target_PC
                 branch_payload.branch_direction := io.bu_wb_uop(i).bits.branch_direction
                 rob(io.bu_wb_uop(i).bits.rob_index).payload := branch_payload.asUInt
             }.otherwise{
+                io.rob_uop.ready := !rob_full
                 //rob(io.bu_wb_uop(i).bits.rob_index).completed := true.B
-                val jump_payload = WireDefault(rob(io.bu_wb_uop(i).bits.rob_index).as_Jump)
                 jump_payload.target_PC := io.bu_wb_uop(i).bits.target_PC
                 rob(io.bu_wb_uop(i).bits.rob_index).payload := jump_payload.asUInt
             }
@@ -230,11 +235,11 @@ class ROB(implicit p: Parameters) extends CustomModule {
         }
     }
 
-    /*when(io.dis_uop(0).valid ## io.dis_uop(1).valid === "b10".U){
-        switch(io.dis_uop(0).instr_type){
+    /*when(io.rob_uop.bits(0).valid ## io.rob_uop.bits(1).valid === "b10".U){
+        switch(io.rob_uop.bits(0).instr_type){
             is(InstrType.ALU, InstrType.MUL, InstrType.DIV, InstrType.LD){
                 val temp = WireDefault(0.U(ROBContent.width.W))
-                temp := Cat(io.dis_uop(0).instr_addr, ROBType.Arithmetic, false.B, false.B, 0.U((Payload.width - ROB_Arithmetic.width).W), io.dis_uop(0).pdst, io.dis_uop(0).rd)
+                temp := Cat(io.rob_uop.bits(0).instr_addr, ROBType.Arithmetic, false.B, false.B, 0.U((Payload.width - ROB_Arithmetic.width).W), io.rob_uop.bits(0).pdst, io.rob_uop.bits(0).rd)
                 rob(rob_tail) := temp
             }
             is(){
@@ -243,7 +248,7 @@ class ROB(implicit p: Parameters) extends CustomModule {
             
             //更新rob_tail and rob_full
         }
-        }.elsewhen(io.dis_uop(0).valid ## io.dis_uop(1).valid === "b11".U){
+        }.elsewhen(io.rob_uop.bits(0).valid ## io.rob_uop.bits(1).valid === "b11".U){
         //处理 “11”
     }*/
 
@@ -262,20 +267,18 @@ class ROB(implicit p: Parameters) extends CustomModule {
                     val a = rob(i).as_Arithmetic
                     printf(p"[ARITH] rd=${a.rd} pdst=${a.pdst}\n")
                 }
+                io.rob_uop.ready := !rob_full
                 is (ROBType.Branch) {
-                    val b = rob(i).as_Branch
-                    printf(p"[BRANCH] hit=${b.btb_hit} dir=${b.branch_direction} " +
-                      p"tgt=0x${Hexadecimal(b.target_PC)} GHR=0x${Hexadecimal(b.GHR)}\n")
+                    io.rob_uop.ready := !rob_full
                 }
-                is (ROBType.Jump) {
                     val j = rob(i).as_Jump
                     printf(p"[JUMP] rd=${j.rd} pdst=${j.pdst} " +
                       p"hit=${j.btb_hit} tgt=0x${Hexadecimal(j.target_PC)}\n")
                 }
                 is (ROBType.Store) {
                     // 如果 Store 有字段，可解包打印；否则只标记
+                    // io.rob_uop.ready := !rob_full
                     printf(p"[STORE]\n")
-                }
                 is (ROBType.CSR) {
                     val c = rob(i).as_CSR
                     printf(p"[CSR] rd=${c.rd} pdst=${c.pdst}\n")
