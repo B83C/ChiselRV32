@@ -12,17 +12,17 @@ class PRF_IO(implicit p: Parameters) extends CustomBundle{
   val mul_wb_uop = Input(Vec(p.MUL_NUM, Valid(new ALU_WB_uop())))
   val divrem_wb_uop = Input(Vec(p.DIV_NUM, Valid(new ALU_WB_uop())))
 
-  //exu_issue的读地址与写地址
+  //exu_issue的读地址与寄存器值
   val exu_issue_r_addr1 = Input(Vec(2, UInt(log2Ceil(p.PRF_DEPTH).W)))
   val exu_issue_r_addr2 = Input(Vec(2, UInt(log2Ceil(p.PRF_DEPTH).W)))
   val exu_issue_r_value1 = Output(Vec(2, UInt(p.XLEN.W)))
   val exu_issue_r_value2 = Output(Vec(2, UInt(p.XLEN.W)))
-  //st_issue的读地址与写地址
+  //st_issue的读地址与寄存器值
   val st_issue_r_addr1 = Input(UInt(log2Ceil(p.PRF_DEPTH).W))
   val st_issue_r_addr2 = Input(UInt(log2Ceil(p.PRF_DEPTH).W))
   val st_issue_r_value1 = Output(UInt(p.XLEN.W))
   val st_issue_r_value2 = Output(UInt(p.XLEN.W))
-  //ld_issue的读地址与写地址
+  //ld_issue的读地址与寄存器值
   val ld_issue_r_addr1 = Input(UInt(log2Ceil(p.PRF_DEPTH).W))
   val ld_issue_r_value1 = Output(UInt(p.XLEN.W))
 
