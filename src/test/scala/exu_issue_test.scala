@@ -1,5 +1,3 @@
-package rsd_rv32
-
 import chisel3._
 import chiseltest.WriteVcdAnnotation
 import scala.util.Random

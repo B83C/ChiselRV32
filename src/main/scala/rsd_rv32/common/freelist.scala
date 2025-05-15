@@ -16,38 +16,47 @@ class FreeList[T <: Data](
   val depth_bits = log2Ceil(depth)
   val io = IO(new Bundle {
     val checkpoint, restore = Input(Bool()) // Signals to checkpoint and restore both head and tail pointer
-    val read_request = Decoupled(Vec(multiShot, dType))
-    val dealloc_request  = Flipped(Decoupled(Vec(multiShot, dType)))
+    val deq_request = DecoupledIO(Vec(multiShot, dType))
+    val enq_request  = Flipped(DecoupledIO(Vec(multiShot, dType)))
+    // val is_empty = Output(Bool())
   })
 
-  require(depth > 0 && isPow2(multishot), "multishot length must be a power of two")
+  require(depth > 0 && isPow2(multiShot), "multishot length must be a power of two")
 
-  val buffer = Vec(depth >> log2Ceil(multishot), Vec(multiShot, dType))
+  // val buffer = Vec(depth >> log2Ceil(multiShot), Vec(multiShot, dType))
+  val buffer = Mem(depth >> log2Ceil(multiShot), Vec(multiShot, dType))
   // To efficiently encode full and empty states
-  val head, tail = RegInit(0.U((depth_bits + 1).W))
-  val whead = head.bits(depth_bits - 1, 0)
-  val wtail = tail.bits(depth_bits - 1, 0)
-  val hwrap = head.bits(depth_bits)
-  val twrap = tail.bits(depth_bits)
-  val head_checkpoint, tail_checkpoint
+  val
+    head, tail,
+    head_checkpoint, tail_checkpoint
     = RegInit(0.U((depth_bits + 1).W))
+  val whead = head(depth_bits - 1, 0)
+  val wtail = tail(depth_bits - 1, 0)
+  val hwrap = head(depth_bits)
+  val twrap = tail(depth_bits)
 
   val empty = head === tail
   val full = head === tail && hwrap =/= twrap
 
-  read_request.valid := !empty
-  dealloc_request.ready := !full
+  // io.is_empty := empty
+  io.deq_request.valid := !empty
+  io.enq_request.ready := !full
 
-  when(io.read_request.fire()) {
-    read_request.bits := buffer(head).bits
-    head := head + 1
+  //Asynchronous read
+  io.deq_request.bits := buffer(head)
+  when(io.deq_request.fire) {
+    printf(cf"dequeuing ${io.deq_request.bits}")
+    head := head + 1.U
   }
 
-  when(io.dealloc_request.fire()) {
-    buffer(head).bits := read_request.bits
-    tail := tail + 1
+  //Synchronous write
+  when(io.enq_request.fire) {
+    printf(cf"Enqueuing ${io.enq_request.bits}")
+    buffer(tail) := io.enq_request.bits
+    tail := tail + 1.U
   }
 
+  //Checkpointing
   when(io.checkpoint && !io.restore) {
     head_checkpoint := head
     tail_checkpoint := tail
@@ -57,4 +66,7 @@ class FreeList[T <: Data](
      tail := tail_checkpoint
   }
 
+  when (true.B) {
+    printf(cf"head : 0x$head%x, tail : 0x$tail%x, empty: $empty\n")
+  }
 }
