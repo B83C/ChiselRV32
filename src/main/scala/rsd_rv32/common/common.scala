@@ -26,7 +26,7 @@ case class Parameters(
   STQ_DEPTH: Int = 32,
 
   //TODO: Merge all of them
-  ISSUE_FREELIST_DEPTH: Int 16,
+  ISSUE_FREELIST_DEPTH: Int = 16,
   ISSUE_DEPTH: Int = 16,
   EXUISSUE_DEPTH: Int = 16,
   LDISSUE_DEPTH: Int = 16,

@@ -7,7 +7,7 @@ import rsd_rv32.common._
 
 import rsd_rv32.frontend._
 
-class EXUIO(implicit p: Parameters) extends Bundle{
+/*class EXUIO(implicit p: Parameters) extends Bundle{
   //来自exu_issue queue的输入
   val exu_issue_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new EXUISSUE_EXU_uop)))
   //反馈给exu_issue queue的信号
@@ -57,7 +57,7 @@ class ALUTop(implicit p: Parameters) extends Module {
         val pc = UInt(p.XLEN.W)
         val imm = UInt(p.XLEN.W)
         val uop = new EXUISSUE_EXU_uop()
-      })
+      }))
 
       // 写回端口
       val wb = Valid(new ALU_WB_uop())
@@ -109,7 +109,7 @@ class ALUTop(implicit p: Parameters) extends Module {
         val rs1 = UInt(p.XLEN.W)
         val rs2 = UInt(p.XLEN.W)
         val uop = new EXUISSUE_EXU_uop()
-      })
+      }))
 
       // 写回端口
       val wb = Valid(new ALU_WB_uop())
@@ -618,7 +618,7 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   io.out.bits := data_out
   io.busy := state =/= s_idle
 }
-
+*/
 /*
 class CSRFU(implicit p: Parameters) extends FunctionalUnit(false, true) {
   val csr_signals = io.req.bits.uop.fu_signals.asTypeOf(new CSRSignals)
