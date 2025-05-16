@@ -9,7 +9,7 @@ class ld_issue_IO(implicit p: Parameters) extends CustomBundle {
     val ld_issue_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new DISPATCH_LDISSUE_uop())))  //来自Dispatch Unit的输入
 
     //发射到ld的输出
-    val load_uop = Valid(new LDISSUE_LDPIPE_uop())  //发射的指令
+    val load_uop = Decoupled(new LDISSUE_LDPIPE_uop())  //发射的指令
     // val value_o1 = Output(UInt(p.XLEN.W)) //发射的指令的操作数1
     // val value_o2 = Output(UInt(p.XLEN.W)) //发射的指令的操作数2
 
@@ -26,6 +26,7 @@ class ld_issue_IO(implicit p: Parameters) extends CustomBundle {
     //val ldu_wb_uop2 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
     //监听FU处物理寄存器的ready信号
     val wb_uop1 = Input((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop())))) //来自alu、mul、div、load pipeline的uop
+    val bu_wb_uop = Input((Vec(p.BU_NUM, Valid(new BU_WB_uop()))))
     //val ldu_wb_uop1 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
 
     //输出至Dispatch Unit的信号
@@ -140,10 +141,13 @@ class ld_issue_queue(implicit p: Parameters) extends CustomModule {
             issue_queue(io.ld_issue_uop(0).bits.iq_index).ps := io.ld_issue_uop(0).bits.ps1
 
             //入队时判断ps1和ps2的ready信号
-            val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
+            val alu_conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
                 (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.ld_issue_uop(0).bits.ps1)
             }
-            when (conditions1.reduce(_ || _) || io.prf_valid(io.ld_issue_uop(0).bits.ps1)) {
+            val bu_conditions1 = for (i <- 0 until p.BU_NUM ) yield {
+                (io.bu_wb_uop(i).valid && !io.bu_wb_uop(i).bits.is_conditional && io.bu_wb_uop(i).bits.pdst === io.ld_issue_uop(0).bits.ps1)
+            }
+            when (alu_conditions1.reduce(_ || _) || bu_conditions1.reduce(_ || _) || io.prf_valid(io.ld_issue_uop(0).bits.ps1)) {
                 issue_queue(io.ld_issue_uop(0).bits.iq_index).ps_ready := true.B
             }.otherwise{
                 issue_queue(io.ld_issue_uop(0).bits.iq_index).ps_ready := false.B
@@ -159,10 +163,13 @@ class ld_issue_queue(implicit p: Parameters) extends CustomModule {
                 issue_queue(io.ld_issue_uop(k).bits.iq_index).ps := io.ld_issue_uop(k).bits.ps1
 
                 //入队时判断ps1和ps2的ready信号
-                val conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
+                val alu_conditions1 = for (i <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
                     (io.wb_uop1(i).valid && io.wb_uop1(i).bits.pdst === io.ld_issue_uop(k).bits.ps1)
                 }
-                when (conditions1.reduce(_ || _) || io.prf_valid(io.ld_issue_uop(k).bits.ps1)) {
+                val bu_conditions1 = for (i <- 0 until p.BU_NUM ) yield {
+                    (io.bu_wb_uop(i).valid && !io.bu_wb_uop(i).bits.is_conditional && io.bu_wb_uop(i).bits.pdst === io.ld_issue_uop(0).bits.ps1)
+                }
+                when (alu_conditions1.reduce(_ || _) || bu_conditions1.reduce(_ || _) || io.prf_valid(io.ld_issue_uop(k).bits.ps1)) {
                     issue_queue(io.ld_issue_uop(k).bits.iq_index).ps_ready := true.B
                 } .otherwise{
                     issue_queue(io.ld_issue_uop(k).bits.iq_index).ps_ready := false.B
@@ -179,10 +186,13 @@ class ld_issue_queue(implicit p: Parameters) extends CustomModule {
         //每周期监听后续寄存器的ready信号，更新ps_ready状态
         for (i <- 0 until p.LDISSUE_DEPTH){
             when (issue_queue(i).busy){
-                val update_conditions1 = for (j <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
+                val alu_update_conditions1 = for (j <- 0 until (p.FU_NUM - p.BU_NUM - p.STU_NUM)) yield {
                     (io.wb_uop1(j).valid && io.wb_uop1(j).bits.pdst === issue_queue(i).ps)
                 }
-                when (update_conditions1.reduce(_ || _) || io.prf_valid(issue_queue(i).ps)) {
+                val bu_update_conditions1 = for (j <- 0 until p.BU_NUM ) yield {
+                    (io.bu_wb_uop(j).valid && !io.bu_wb_uop(j).bits.is_conditional && io.bu_wb_uop(j).bits.pdst === issue_queue(i).ps)
+                }
+                when (alu_update_conditions1.reduce(_ || _) || bu_update_conditions1.reduce(_ || _) || io.prf_valid(issue_queue(i).ps)) {
                     issue_queue(i).ps_ready := true.B
                 }
             }
