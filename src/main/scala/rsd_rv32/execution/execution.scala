@@ -16,8 +16,9 @@ class EXUIO(fu_num: UInt)(implicit p: Parameters) extends Bundle{
   // val wb = Output(Vec(p.FU_NUM, Valid(new WB_uop())))
   
   // val branch_info = Output(new FUBranchInfo())
-  // val rob_signal = Input(new ROBSignal())
-  
+  //val rob_signal = Input(new ROBSignal())
+  val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Valid(new ROBContent())))
+  //flush = rob_commitsignal(0).valid && rob_commitsignal(0).bits.mispred
   // Should be removed in place of more general readys
   //反馈给exu_issue queue的信号
   val mul_ready = Output(Bool())
