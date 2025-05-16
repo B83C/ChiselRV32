@@ -30,7 +30,7 @@ class Dispatcher_IO(implicit p:Parameters) extends CustomBundle {
   val stq_full = Input(Bool()) // Store Queue空标志(0表示非满，1表示满)
   val stq_head = Input(UInt(log2Ceil(p.STQ_DEPTH).W)) //store queue头部指针
   val stq_tail = Input(UInt(log2Ceil(p.STQ_DEPTH).W)) //store queue尾部指针，指向入队处
-  val st_cnt = Output(UInt(log2Ceil(p.CORE_WIDTH).W)) //本cycle派遣store指令的数量
+  val st_cnt = Output(UInt(log2Ceil(p.CORE_WIDTH + 1).W)) //本cycle派遣store指令的数量
 }
 
 // TODO: freelist write, stq_head/tail, commit signal

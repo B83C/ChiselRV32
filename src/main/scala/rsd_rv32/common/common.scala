@@ -34,6 +34,27 @@ case class Parameters(
   EXU_Fj_CNT_MAX: Int = 10, //一个执行单元所包含的FU最多的数量
 )
 
+object IType extends Enumeration {
+  type Type = Value
+  val
+     I,
+     S,
+     B,
+     U,
+     J
+     = Value
+}
+
+object FUType extends ChiselEnum {
+   val
+     ALU,
+     BU,
+     MUL,
+     DIV,
+     CSR
+     = Value
+}
+
 //为了简化interface的设计，对每个知名的模块定义一个名称，这样使用起来就统一了
 object CpuModuleEnum extends Enumeration {
   type CpuModuleEnum = Value
