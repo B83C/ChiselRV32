@@ -16,9 +16,6 @@ class Decode_IO(implicit p: Parameters) extends CustomBundle {
 }
 
 
-
-
-
 class DecodeUnit(implicit p: Parameters) extends CustomModule {
   val io = IO(new Decode_IO())
   
@@ -62,8 +59,8 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
       
       is("b0110011".U){
         when (func7 ==="b0000001".U){
-          when(func3(2)===0.U){instr_type := InstrType.MUL}
-          when(func3(2)===1.U){instr_type := InstrType.DIV_REM}
+          when(funct3(2)===0.U){instr_type := InstrType.MUL}
+          when(funct3(2)===1.U){instr_type := InstrType.DIV_REM}
       }.otherwise{
         instr_type := InstrType.ALU}
         

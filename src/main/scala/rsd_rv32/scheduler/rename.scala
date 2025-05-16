@@ -14,8 +14,8 @@ class RenameUnit_IO(implicit p: Parameters) extends Bundle {
   //with ROB
   val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))  //ROB提交时的广播信号，rob正常提交指令时更新amt与rmt，发生误预测时对本模块进行恢复
   //with Dispatch
-  val dis_uop = Decoupled(Vec(p.CORE_WIDTH, Valid(new RENAME_DISPATCH_uop())))//发往Dispatch单元的uop
-  // val dis_ready = Input(Bool()) // 来自Dispatch单元的反馈，显示dispatch单元是否准备好接收指令
+  val dis_uop = Vec(p.CORE_WIDTH, Valid(new RENAME_DISPATCH_uop()))//发往Dispatch单元的uop
+  val dis_ready = Input(Bool()) // 来自Dispatch单元的反馈，显示dispatch单元是否准备好接收指令
   //for prf valid bits
   val amt = Output(Vec(32,UInt(log2Ceil(p.PRF_DEPTH).W)))
 }
@@ -46,11 +46,10 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
   val head_next = WireDefault(freelist_head)
   val tail_next = WireDefault(freelist_tail)
   val empty_next = WireDefault(freelist_empty)
-  val reg_dis_uop = RegEnable(dis_uop, VecInit(Seq.fill(p.CORE_WIDTH)(0.U.asTypeOf(Valid(new RENAME_DISPATCH_uop())))), io.dis_uop.ready) //寄存器存储发往Dispatch单元的uop
+  val reg_dis_uop = RegEnable(dis_uop, VecInit(Seq.fill(p.CORE_WIDTH)(0.U.asTypeOf(Valid(new RENAME_DISPATCH_uop())))), io.dis_ready //寄存器存储发往Dispatch单元的uop
 
   io.rename_ready := rename_ready //反馈给ID单元
-  io.dis_uop.bits := reg_dis_uop //发往Dispatch单元的uop
-  io.dis_uop.valid := true.B //TODO should be something eles
+  io.dis_uop := reg_dis_uop //发往Dispatch单元的uop
   freelist_head := head_next //更新空闲寄存器列表头指针
   freelist_tail := tail_next //更新空闲寄存器列表尾指针
 
@@ -79,7 +78,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
     switch(valid_bits){
       is("b10".U){
         when(needPd(io.rename_uop(0).bits.instr_type)){
-          rename_ready := io.dis_uop.ready&& (freelist_head =/= freelist_tail || !freelist_empty)
+          rename_ready := io.dis_ready& (freelist_head =/= freelist_tail || !freelist_empty)
 
           when(rename_ready){
             dis_uop(0).valid := true.B
@@ -108,8 +107,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
             dis_uop(0).bits.ps2 := Mux(rmt_valid(io.rename_uop(0).bits.instr(17,13)), rmt(io.rename_uop(0).bits.instr(17,13)), amt(io.rename_uop(0).bits.instr(17,13))) //读出源操作数映射的物理寄存器地址
           }
         }.otherwise{
-          rename_ready := io.dis_uop.ready
-
+          rename_ready := io.dis_ready
           dis_uop(0).valid := true.B
           dis_uop(0).bits.instr := io.rename_uop(0).bits.instr
           dis_uop(0).bits.instr_type := io.rename_uop(0).bits.instr_type
@@ -125,8 +123,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
 
         /*switch(io.rename_uop(0).bits.instr_type){
           is(InstrType.Branch, InstrType.ST){
-            rename_ready := io.dis_uop.ready
-
+            rename_ready := io.dis_ready
             dis_uop(0).valid := true.B
             dis_uop(0).bits.instr := io.rename_uop(0).bits.instr
             dis_uop(0).bits.instr_type := io.rename_uop(0).bits.instr_type
@@ -138,7 +135,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
             dis_uop(0).bits.btb_hit := io.rename_uop(0).bits.btb_hit
           }
           is(InstrType.ALU, InstrType.Jump, InstrType.LD, InstrType.CSR, InstrType.MUL, InstrType.DIV_REM){
-            rename_ready := io.dis_uop.ready&& (freelist_head =/= freelist_tail || !freelist_empty)
+            rename_ready := io.dis_ready& (freelist_head =/= freelist_tail || !freelist_empty)
 
             when(rename_ready){
               dis_uop(0).valid := true.B
@@ -170,7 +167,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
       is("b11".U){
         when(needPd(io.rename_uop(0).bits.instr_type)){
           when(needPd(io.rename_uop(1).bits.instr_type)){
-            rename_ready := io.dis_uop.ready&& (freelist_tail - freelist_head >= 2.U || (freelist_head === freelist_tail && !freelist_empty))
+            rename_ready := io.dis_ready& (freelist_tail - freelist_head >= 2.U || (freelist_head === freelist_tail && !freelist_empty))
             when(rename_ready){
               dis_uop(0).valid := true.B
               dis_uop(0).bits.instr := io.rename_uop(0).bits.instr
@@ -234,7 +231,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
               }
             }
           }.otherwise{
-            rename_ready := io.dis_uop.ready&& (freelist_head =/= freelist_tail || !freelist_empty)
+            rename_ready := io.dis_ready& (freelist_head =/= freelist_tail || !freelist_empty)
 
             when(rename_ready){
               dis_uop(0).valid := true.B
@@ -286,7 +283,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
           }
         }.otherwise{
           when(needPd(io.rename_uop(1).bits.instr_type)){
-            rename_ready := io.dis_uop.ready&& (freelist_head =/= freelist_tail || !freelist_empty)
+            rename_ready := io.dis_ready& (freelist_head =/= freelist_tail || !freelist_empty)
 
             when(rename_ready){
               dis_uop(0).valid := true.B
@@ -328,8 +325,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
               dis_uop(1).bits.ps2 := Mux(rmt_valid(io.rename_uop(1).bits.instr(17,13)), rmt(io.rename_uop(1).bits.instr(17,13)), amt(io.rename_uop(1).bits.instr(17,13))) //读出源操作数映射的物理寄存器地址
             }
           }.otherwise{
-            rename_ready := io.dis_uop.ready
-
+            rename_ready := io.dis_ready
             dis_uop(0).valid := true.B
             dis_uop(0).bits.instr := io.rename_uop(0).bits.instr
             dis_uop(0).bits.instr_type := io.rename_uop(0).bits.instr_type
