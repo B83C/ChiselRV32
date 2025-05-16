@@ -160,3 +160,12 @@ trait BRConsts {
   val BR_JAL    = 6.U(3.W)  // 无条件跳转
   val BR_JALR   = 7.U(3.W)  // 寄存器跳转
 }
+
+trait CSRConsts{
+  val CSRRW = 1.U(3.W)
+  val CSRRS = 2.U(3.W)
+  val CSRRC = 3.U(3.W)
+  val CSRRWI = (4 + 1).U(3.W)
+  val CSRRSI = (4 + 2).U(3.W)
+  val CSRRCI = (4 + 3).U(3.W)
+}

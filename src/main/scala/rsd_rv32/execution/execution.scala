@@ -9,9 +9,9 @@ import rsd_rv32.frontend._
 
 class EXUIO(fu_num: UInt)(implicit p: Parameters) extends Bundle{
   //来自exu_issue queue的输入
-  val execute_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop)))
+  val execute_uop = Flipped(Vec(fu_num, Valid(new EXUISSUE_EXU_uop)))
 
-  // val readys = Output(Vec(p.FU_NUM, (Bool())))
+  // val readys = Output(Vec(fu_num, Bool()))
 
   // val wb = Output(Vec(p.FU_NUM, Valid(new WB_uop())))
   
@@ -23,12 +23,12 @@ class EXUIO(fu_num: UInt)(implicit p: Parameters) extends Bundle{
   val mul_ready = Output(Bool())
   val div_ready = Output(Bool())
 
-  val wb_uop = Vec(fu_num, Valid(new WB_uop()))
+  // val wb_uop = Vec(fu_num, Valid(new WB_uop()))
   //写回信号
-  // val alu_wb_uop = Vec(p.ALU_NUM, Valid(new ALU_WB_uop()))
-  // val bu_wb_uop = Vec(p.BU_NUM, Valid(new BU_WB_uop()))
-  // val mul_wb_uop = Vec(p.MUL_NUM, Valid(new ALU_WB_uop()))
-  // val divrem_wb_uop = Vec(p.DIV_NUM, Valid(new ALU_WB_uop()))
+  val alu_wb_uop = Vec(p.ALU_NUM, Valid(new ALU_WB_uop()))
+  val bu_wb_uop = Vec(p.BU_NUM, Valid(new BU_WB_uop()))
+  val mul_wb_uop = Vec(p.MUL_NUM, Valid(new ALU_WB_uop()))
+  val divrem_wb_uop = Vec(p.DIV_NUM, Valid(new ALU_WB_uop()))
 }
 
 //把exu的各个fu封装起来的顶层模块
@@ -48,7 +48,11 @@ class EXU(implicit p: Parameters) extends Module {
   io.div_ready  := VecInit((div).map(_.io.uop.ready)).orR
   def get_readys_instr_type: Seq[InstrType] = fus.map(_.supportedInstrTypes())
 
-  io.wb_uop := VecInit(fus.map(_.io.out))
+  // io.wb_uop := VecInit(fus.map(_.io.out))
+  alu_wb_uop = VecInit((alu ++ csru).map(_.out))
+  bu_wb_uop = VecInit(bu.map(_.out))
+  mul_wb_uop = VecInit(mul.map(_.out))
+  divrem_wb_uop = VecInit(div.map(_.out))
 }
 
 
@@ -356,18 +360,23 @@ abstract class FunctionalUnit(
   def supportedInstrTypes: Set[InstrType.Type]
   val io = IO(new Bundle {
     val uop = Flipped(Decoupled(new EXUISSUE_EXU_uop()))
-    val out = Decoupled(new WB_uop())
   })
 }
 
 class ALUFU(implicit p: Parameters) extends FunctionalUnit() {
   override def supportedInstrTypes = Set(InstrType.ALU)
+  // 为了配合上一级的uop，输出按FU区分
+  val out = Valid(new ALU_WB_uop())
+  
   val internal_alu = Module(new ALU())
   val fu_signals = io.uop.bits.fu_signals
 
+  val is_LUI = fu_signals.opr1_sel1 === OprSel.IMM
+  val is_AUIPC = fu_signals.opr1_sel1 === OprSel.PC
+  
   def Sel(sel: OprSel.Type, reg: UInt) = {
     MuxLookup(sel, 0.U)(Seq(
-      OprSel.IMM -> immExtract(Cat(io.uop.bits.instr, 0.U(7.W)), IType.I),
+      OprSel.IMM -> Mux(is_LUI || is_AUIPC, immExtract(Cat(io.uop.bits.instr, 0.U(7.W)), IType.U), immExtract(Cat(io.uop.bits.instr, 0.U(7.W)), IType.I)),
       OprSel.REG -> reg,
       OprSel.PC -> io.uop.bits.instr_addr,
       OprSel.Z -> 0.U,
@@ -385,8 +394,8 @@ class ALUFU(implicit p: Parameters) extends FunctionalUnit() {
   data_out.pdst_value := internal_alu.io.out
   data_out.rob_index := io.uop.bits.rob_index
 
-  io.out.valid := io.uop.valid
-  io.out.bits := data_out
+  out.valid := io.uop.valid
+  out.bits := data_out
   io.uop.ready := true.B
 }
 

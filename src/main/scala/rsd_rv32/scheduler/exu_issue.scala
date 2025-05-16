@@ -7,7 +7,7 @@ import rsd_rv32.common._
 class exu_issue_IO(implicit p: Parameters) extends CustomBundle {
     //来自Dispatch Unit的输入
     // val bits.iq_index = Input(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID,
-    val exu_issue_uop = Flipped(Decoupled(Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop()))))  //来自Dispatch Unit的输入
+    val exu_issue_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop())))  //来自Dispatch Unit的输入
 
     //with EXU
     val execute_uop = Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())) //发往EXU的uop

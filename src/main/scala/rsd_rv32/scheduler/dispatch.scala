@@ -51,9 +51,9 @@ class DispatchUnit(implicit p: Parameters) extends CustomModule {
   val is_ld = VecInit(io.rob_uop.bits.map(x => x.bits.instr_type === InstrType.LD))
   val is_ex = VecInit(is_st.zip(is_ld).map{case (x, y) => !x && !y})
 
-  val st_valid = is_st.reduce(_ || _)
-  val ld_valid = is_ld.reduce(_ || _)
-  val ex_valid = is_ex.reduce(_ || _)
+  val st_valid = is_st.orR
+  val ld_valid = is_ld.orR
+  val ex_valid = is_ex.orR
 
   io.st_cnt := PopCount(is_st)
    
