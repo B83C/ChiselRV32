@@ -36,7 +36,7 @@ class LSUIO(implicit p: Parameters) extends CustomBundle {
   val stq_tail  = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引 
   val stq_head  = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的头部索引
   val stq_full  = Output(Bool())//stq是否为满,1表示满
-  val st_cnt = Input(Vec(p.CORE_WIDTH, Bool()))//存储指令被派遣的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）
+  val st_cnt = Input(UInt(log2Ceil(p.CORE_WIDTH + 1).W))//存储指令被派遣的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）
   
   //with ROB
   val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
@@ -181,7 +181,9 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   val expected = MuxCase(false.B, Seq(
       (stage2_func3 === 0.U) -> (stage2_data_bitvalid(7,0) === "hFF".U),    // LB
       (stage2_func3 === 1.U) -> (stage2_data_bitvalid(15,0) === "hFFFF".U),  // LH
-      (stage2_func3 === 2.U) -> (stage2_data_bitvalid(31,0) === "hFFFFFFFF".U) // LW
+      (stage2_func3 === 2.U) -> (stage2_data_bitvalid(31,0) === "hFFFFFFFF".U), // LW
+      (stage2_func3 === 4.U) -> (stage2_data_bitvalid(7,0) === "hFF".U),     // LBU
+      (stage2_func3 === 5.U) -> (stage2_data_bitvalid(15,0) === "hFFFF".U)  // LHU
     ))
     //我们期望的bitvalid值，与stq传出的bitvalid值进行比较，决定后续是否需要向Abter发起访存请求
 
@@ -209,24 +211,28 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   val Stage2ToStage3_pdst_reg = Module(new PipelineReg(log2Ceil(p.PRF_DEPTH)))
   val Stage2ToStage3_pipevalid_reg = Module(new PipelineReg(1))
   val Stage2ToStage3_robidx_reg = Module(new PipelineReg(log2Ceil(p.ROB_DEPTH)))
+  val Stage2ToStage3_func3_reg  = Module(new PipelineReg(3))
   
   Stage2ToStage3_data_reg.io.data_in := stage2_data_out_stq
   Stage2ToStage3_bitvalid_reg.io.data_in := stage2_data_bitvalid
   Stage2ToStage3_pdst_reg.io.data_in := stage2_pdst
   Stage2ToStage3_pipevalid_reg.io.data_in := stage2_pipevalid.asUInt
   Stage2ToStage3_robidx_reg.io.data_in := stage2_robidx
+  Stage2ToStage3_func3_reg.io.data_in := stage2_func3
 
   Stage2ToStage3_data_reg.io.stall_in := stall
   Stage2ToStage3_bitvalid_reg.io.stall_in := stall
   Stage2ToStage3_pdst_reg.io.stall_in := stall
   Stage2ToStage3_pipevalid_reg.io.stall_in := stall
   Stage2ToStage3_robidx_reg.io.stall_in := stall
+  Stage2ToStage3_func3_reg.io.stall_in := stall
 
   Stage2ToStage3_data_reg.io.reset := need_flush
   Stage2ToStage3_bitvalid_reg.io.reset := need_flush
   Stage2ToStage3_pdst_reg.io.reset := need_flush
   Stage2ToStage3_pipevalid_reg.io.reset := need_flush
   Stage2ToStage3_robidx_reg.io.reset := need_flush
+  Stage2ToStage3_func3_reg.io.reset := need_flush
   
 
 //stage3进行mem和stq的数据合并
@@ -235,7 +241,25 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   
   val data_out_mem = Wire(UInt(p.XLEN.W))
   data_out_mem := io.data_out_mem
-  val final_data = (stage3_data & stage3_bitvalid) | (data_out_mem & (~stage3_bitvalid).asUInt)
+  val data_merged = (stage3_data & stage3_bitvalid) | (data_out_mem & (~stage3_bitvalid).asUInt)
+  val final_data = Wire(UInt(p.XLEN.W))
+  switch(Stage2ToStage3_func3_reg.io.data_out){
+    is(0.U){ //LB
+      final_data := Cat(Fill(24,data_merged(7)),data_merged(7,0))
+    }
+    is(1.U){ //LH
+      final_data := Cat(Fill(16,data_merged(15)),data_merged(15,0))
+    }
+    is(2.U){ //LW
+      final_data := data_merged
+    }
+    is(4.U){ //LBU
+      final_data := Cat(0.U(24.W),data_merged(7,0))
+    }
+    is(5.U){ //LWU
+      final_data := Cat(0.U(16.W),data_merged(15,0))
+    }
+  }
 
 //stage3-stage4的PipelineReg
   val Stage3ToStage4_data_reg = Module(new PipelineReg(p.XLEN))
@@ -384,7 +408,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
 
     val dataAddr_into_stq = Flipped(Valid(UInt(p.XLEN.W)))//需要写入stq的地址
     val data_into_stq = Input(UInt(p.XLEN.W))//需要写入stq的数据
-    val stq_index = Input(UInt(log2Ceil(p.STQ_DEPTH).W))//需要写入stq的索引
+    val stq_index = Input(UInt(log2Ceil(p.STQ_DEPTH+1).W))//需要写入stq的索引
     val st_func3 = Input(UInt(3.W))//fun3信号
   })   
 
@@ -423,7 +447,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
     Mux(next >= p.STQ_DEPTH.U, next - p.STQ_DEPTH.U, next)
   }
 
-  val tail_inc = st_cnt
+  val tail_inc  = io.st_cnt
   val tail_next = nextPtr(tail, tail_inc)
 
 
@@ -520,11 +544,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
   def isInrange(idx: UInt,head: UInt, tail: UInt): Bool = {
     Mux(tail >= head, idx >= head && idx < tail, idx >= head || idx < tail)
   }
-  
-  val bit_width = Mux(io.ld_func3 === 0.U, 8.U, 
-                      Mux(io.ld_func3 === 1.U, 16.U,
-                         Mux(io.ld_func3 === 2.U, 32.U, 0.U)))
-  val bytewidth = (bit_width >> 3).asUInt
+
 
   val SearchAddr = Wire(UInt(p.XLEN.W))
   val data_res = Wire(UInt(p.XLEN.W))
@@ -539,6 +559,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
   SearchAddr := io.addr_search_stq.bits
   data_res := 0.U
   data_bit_valid := 0.U
+  //我们最后forwarding的结果，高位未填充的时候都是0
 
 
   //掩码，用于判断对应的byte是否是valid
@@ -552,6 +573,12 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
     }
     is(2.U){
       mask := "b1111".U
+    }
+    is(4.U){
+      mask := "b1000".U
+    }
+    is(5.U){
+      mask := "b1100".U
     }
   }
 
