@@ -37,8 +37,8 @@ class ROBIO(implicit p: Parameters) extends CustomBundle {
 
     val rob_full = Output(Bool())  //ROB满标志(1表示满，无法分配新条目)
     // 没必要
-    // val rob_head = Output(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB头指针
-    // val rob_tail = Output(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
+    val rob_head = Output(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB头指针
+    val rob_tail = Output(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
 
     val alu_wb_uop = Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Flipped(Valid(new ALU_WB_uop())))  //来自alu0、alu1、mul、div、load pipeline的uop
     val bu_wb_uop = Vec(p.BU_NUM, Flipped(Valid(new BU_WB_uop()))) //来自bu的uop,更新就绪状态
@@ -67,8 +67,8 @@ class ROB(implicit p: Parameters) extends CustomModule {
     io.rob_uop.ready := !rob_full
     io.rob_full := rob_full //ROB满标志输出
     // 没必要
-    // io.rob_head := rob_head //ROB头指针输出
-    // io.rob_tail := rob_tail //ROB尾指针输出
+    io.rob_head := rob_head //ROB头指针输出
+    io.rob_tail := rob_tail //ROB尾指针输出
 
     io.rob_commitsignal(0).bits := rob(rob_head)
     val commit0_valid = WireDefault(false.B)
