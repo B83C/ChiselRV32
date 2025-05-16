@@ -7,45 +7,66 @@ import rsd_rv32.common._
 
 import rsd_rv32.frontend._
 
-class EXUIO(implicit p: Parameters) extends Bundle{
+class EXUIO(fu_num: UInt)(implicit p: Parameters) extends Bundle{
   //来自exu_issue queue的输入
-  val exu_issue_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new EXUISSUE_EXU_uop)))
+  val execute_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop)))
+
+  // val readys = Output(Vec(p.FU_NUM, (Bool())))
+
+  // val wb = Output(Vec(p.FU_NUM, Valid(new WB_uop())))
+  
+  // val branch_info = Output(new FUBranchInfo())
+  // val rob_signal = Input(new ROBSignal())
+  
+  // Should be removed in place of more general readys
   //反馈给exu_issue queue的信号
   val mul_ready = Output(Bool())
   val div_ready = Output(Bool())
 
+  val wb_uop = Vec(fu_num, Valid(new WB_uop()))
   //写回信号
-  val alu_wb_uop = Vec(p.ALU_NUM, Valid(new ALU_WB_uop()))
-  val bu_wb_uop = Vec(p.BU_NUM, Valid(new BU_WB_uop()))
-  val mul_wb_uop = Vec(p.MUL_NUM, Valid(new ALU_WB_uop()))
-  val divrem_wb_uop = Vec(p.DIV_NUM, Valid(new ALU_WB_uop()))
+  // val alu_wb_uop = Vec(p.ALU_NUM, Valid(new ALU_WB_uop()))
+  // val bu_wb_uop = Vec(p.BU_NUM, Valid(new BU_WB_uop()))
+  // val mul_wb_uop = Vec(p.MUL_NUM, Valid(new ALU_WB_uop()))
+  // val divrem_wb_uop = Vec(p.DIV_NUM, Valid(new ALU_WB_uop()))
 }
 
 //把exu的各个fu封装起来的顶层模块
-class EXU(implicit p: Parameters) extends Module{
-  val io = IO(new EXUIO())
+class EXU(implicit p: Parameters) extends Module {
+  val alu = (0 until p.ALU_NUM).map(Module(new ALUFU))
+  val bu = (0 until p.BU_NUM).map(Module(new BranchFU))
+  val mul = (0 until p.MUL_NUM).map(Module(new MULFU))
+  val div = (0 until p.DIV_NUM).map(Module(new DIVFU))
+  val csru = (0 until p.CSRU_NUM).map(Module(new CSRFU))
 
-  val in = Flipped(Decoupled(new EXUISSUE_EXU_uop))
-  val out = Decoupled(new ExuDataOut)
-  val branch_info = Output(new FUBranchInfo())
-  val rob_signal = Input(new ROBSignal())
+  val fus = (alu ++ bu ++ mul ++ div ++ csru)
+  val io = IO(new EXUIO(fus.length))
+  
+  // io.readys := VecInit((alu ++ bu ++ mul ++ div ++ csru).map(!_.io.uop.ready))
+  //TODO 改成readys
+  io.mul_ready  := VecInit((mul).map(_.io.uop.ready)).orR
+  io.div_ready  := VecInit((div).map(_.io.uop.ready)).orR
+  def get_readys_instr_type: Seq[InstrType] = fus.map(_.supportedInstrTypes())
 
+  io.wb_uop := VecInit(fus.map(_.io.out))
 }
-class ALUTop(implicit p: Parameters) extends Module {
-  val io = IO(new Bundle {
-    // 来自前端的请求
-    val req = Flipped(Valid(new Bundle {
-      val rs1 = UInt(p.XLEN.W)
-      val rs2 = UInt(p.XLEN.W)
-      val uop = new EXUISSUE_EXU_uop()
-    }))
 
-    // 写回端口
-    val wb = Valid(new ALU_WB_uop())
 
-    // 其他控制信号
-    val busy = Output(Bool())
-  })
+// class ALUTop(implicit p: Parameters) extends Module {
+//   val io = IO(new Bundle {
+//     // 来自前端的请求
+//     val req = Flipped(Valid(new Bundle {
+//       val rs1 = UInt(p.XLEN.W)
+//       val rs2 = UInt(p.XLEN.W)
+//       val uop = new EXUISSUE_EXU_uop()
+//     }))
+
+//     // 写回端口
+//     val wb = Valid(new ALU_WB_uop())
+
+//     // 其他控制信号
+//     val busy = Output(Bool())
+//   })
 
   //Branch顶层模块
   class BRTop(implicit p: Parameters) extends Module {
@@ -130,10 +151,10 @@ class ALUTop(implicit p: Parameters) extends Module {
     val mul_fu = Module(new PipelinedBoothMultiplier())
 
     // 连接输入
-    mul_fu.io.exu_issue_uop(0).valid := io.req.valid
-    mul_fu.io.exu_issue_uop(0).bits := io.req.bits.uop
-    mul_fu.io.exu_issue_uop(0).bits.ps1_value := io.req.bits.rs1
-    mul_fu.io.exu_issue_uop(0).bits.ps2_value := io.req.bits.rs2
+    mul_fu.io.execute_uop(0).valid := io.req.valid
+    mul_fu.io.execute_uop(0).bits := io.req.bits.uop
+    mul_fu.io.execute_uop(0).bits.ps1_value := io.req.bits.rs1
+    mul_fu.io.execute_uop(0).bits.ps2_value := io.req.bits.rs2
     mul_fu.io.flush := io.flush
 
     // 连接输出到写回端口
@@ -181,9 +202,6 @@ class ALUIO(implicit p: Parameters) extends Bundle {
 
 class ALU(implicit p: Parameters) extends Module with ALUConsts {
   val io = IO(new ALUIO)
-
-
-
   // 主ALU逻辑
   val shamt = io.in2(4,0)  // 移位量
 
@@ -283,15 +301,15 @@ class BypassNetwork(
 
  */
 
-class FUReq()(implicit p: Parameters) extends CustomBundle with HasUOP {
+class FUReq()(implicit p: Parameters) extends CustomBundle {
   val kill = Input(Bool())   //Killed upon misprediction/exception
   val rs1 = Input(UInt(p.XLEN.W))  //通过RRDWB获得的rs1数据
   val rs2 = Input(UInt(p.XLEN.W))  //通过RRDWB获得的rs1数据
 }
 
-class ExuDataOut(
-                )(implicit p: Parameters) extends CustomBundle with HasUOP {
+class ExuDataOut()(implicit p: Parameters) extends CustomBundle {
   val data = UInt(p.XLEN.W)
+  val uop = new WB_uop()
 }
 
 class FUBranchInfo(implicit p: Parameters) extends CustomBundle {
@@ -310,85 +328,69 @@ class CSRSignals(implicit p: Parameters) extends Bundle {
 }
 */
 
-class ALUSignals extends Bundle {
-  val opr1_sel = UInt(3.W)
-  val opr2_sel = UInt(3.W)
-  val alu_fn = UInt(4.W)
-}
+// class ALUSignals extends Bundle {
+//   val opr1_sel = UInt(3.W)
+//   val opr2_sel = UInt(3.W)
+//   val alu_fn = UInt(4.W)
+// }
 
-class BranchSignals extends Bundle {
-  val opr1_sel = UInt(3.W)
-  val opr2_sel = UInt(3.W)
-  val br_fn = UInt(4.W)
-  val is_jalr = Bool()
-}
+// class BranchSignals extends Bundle {
+//   val opr1_sel = UInt(3.W)
+//   val opr2_sel = UInt(3.W)
+//   val br_fn = UInt(4.W)
+//   val is_jalr = Bool()
+// }
 
-class MULSignals extends Bundle {
-  val use_imm = Bool()
-}
+// class MULSignals extends Bundle {
+//   val use_imm = Bool()
+// }
 
-class DIVSignals extends Bundle {
-  val is_signed = Bool()
-  val use_imm = Bool()
-}
+// class DIVSignals extends Bundle {
+//   val is_signed = Bool()
+//   val use_imm = Bool()
+// }
 
 //功能单元的抽象类，定义了底层模块端口
 abstract class FunctionalUnit(
-                               needInformBranch: Boolean = false, //通知前端信息，比如BU需要提供转调信息
-                               needROBSignals: Boolean = false, //需要从ROB获得信息
-                             )(implicit p: Parameters) extends Module {
+)(implicit p: Parameters) extends Module {
+  def supportedInstrTypes: Set[InstrType.Type]
   val io = IO(new Bundle {
-    val req = Flipped(Valid(new FUReq()))
-    val out = Decoupled(new ExuDataOut())
-    val rob_signal = if (needROBSignals) Some(Input(new ROBSignal())) else None
-    val branch_info = if (needInformBranch) Some(Output(new FUBranchInfo())) else None
-    val busy = Output(Bool())
-
-    /*CSR专用信号
-    val csr_rdata = if (this.isInstanceOf[CSRFU]) Some(Input(UInt(p.XLEN.W))) else None
-    val csr_wen = if (this.isInstanceOf[CSRFU]) Some(Output(Bool())) else None
-    val csr_waddr = if (this.isInstanceOf[CSRFU]) Some(Output(UInt(12.W))) else None
-    val csr_wdata = if (this.isInstanceOf[CSRFU]) Some(Output(UInt(p.XLEN.W))) else None
-    */
+    val uop = Flipped(Decoupled(new EXUISSUE_EXU_uop()))
+    val out = Decoupled(new WB_uop())
   })
 }
 
 class ALUFU(implicit p: Parameters) extends FunctionalUnit() {
+  override def supportedInstrTypes = Set(InstrType.ALU)
   val internal_alu = Module(new ALU())
-  val alu_signals = io.req.bits.uop.fu_signals.asTypeOf(new ALUSignals)
+  val fu_signals = io.uop.bits.fu_signals
 
-  // 操作数1选择逻辑
-  internal_alu.io.in1 := MuxLookup(alu_signals.opr1_sel, 0.U)(Seq(
-    0.U -> io.req.bits.rs1,
-    1.U -> io.req.bits.uop.imm,
-    2.U -> io.req.bits.uop.instr_addr,
-    3.U -> 0.U,
-    4.U -> io.req.bits.rs1
-  ))
+  def Sel(sel: OprSel.Type, reg: UInt) = {
+    MuxLookup(sel, 0.U)(Seq(
+      OprSel.IMM -> immExtract(Cat(io.uop.bits.instr, 0.U(7.W)), IType.I),
+      OprSel.REG -> reg,
+      OprSel.PC -> io.uop.bits.instr_addr,
+      OprSel.Z -> 0.U,
+    ))
+  }
 
-  // 操作数2选择逻辑
-  internal_alu.io.in2 := MuxLookup(alu_signals.opr2_sel, 0.U)(Seq(
-    0.U -> io.req.bits.rs2,
-    1.U -> io.req.bits.uop.imm,
-    2.U -> io.req.bits.uop.instr_addr,
-    3.U -> 0.U,
-    4.U -> io.req.bits.rs2
-  ))
-
-  // ALU功能选择
+  internal_alu.io.in1 := Sel(fu_signals.opr1_sel, io.uop.bits.ps1_value)
+  internal_alu.io.in2 := Sel(fu_signals.opr2_sel, io.uop.bits.ps2_value)
+  
+  //TODO
   internal_alu.io.fn := alu_signals.alu_fn
 
   val data_out = Wire(new ALU_WB_uop())  // 改为使用新的ALU_WB_uop
-  data_out.pdst := io.req.bits.uop.pdst
+  data_out.pdst := io.uop.bits.pdst
   data_out.pdst_value := internal_alu.io.out
-  data_out.rob_index := io.req.bits.uop.rob_index
+  data_out.rob_index := io.uop.bits.rob_index
 
-  io.out.valid := io.req.valid
+  io.out.valid := io.uop.valid
   io.out.bits := data_out
-  io.busy := false.B
+  io.uop.ready := true.B
 }
 
-class BranchFU(implicit p: Parameters) extends FunctionalUnit(true) {
+class BranchFU(implicit p: Parameters) extends FunctionalUnit() {
   val internal_alu = Module(new ALU())
   val br_signals = io.req.bits.uop.fu_signals.asTypeOf(new BranchSignals)
 
@@ -500,8 +502,8 @@ class PipelinedBoothMultiplier(implicit p: Parameters) extends Module {
   //------------------------------
   // Stage 1: 操作数预处理
   //------------------------------
-  val issue_fire = io.exu_issue_uop(0).valid && io.mul_ready
-  val uop = io.exu_issue_uop(0).bits
+  val issue_fire = io.execute_uop(0).valid && io.mul_ready
+  val uop = io.execute_uop(0).bits
 
   when(issue_fire && !io.flush) {
     s1_reg.uop := uop

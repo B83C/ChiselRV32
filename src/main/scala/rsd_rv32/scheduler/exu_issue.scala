@@ -201,6 +201,7 @@ class exu_issue_queue(implicit p: Parameters) extends CustomModule {
         VecInit(List.fill(p.EXUISSUE_DEPTH)(
             0.U.asTypeOf(new DISPATCH_EXUISSUE_uop())))) //发射队列的有效载荷
     */
+    // Payload Table
     val payload = RegInit(
         VecInit(Seq.fill(p.EXUISSUE_DEPTH) {
             0.U.asTypeOf(new DISPATCH_EXUISSUE_uop())

@@ -26,13 +26,34 @@ case class Parameters(
   STQ_DEPTH: Int = 32,
 
   //TODO: Merge all of them
-  ISSUE_FREELIST_DEPTH: Int 16,
+  ISSUE_FREELIST_DEPTH: Int = 16,
   ISSUE_DEPTH: Int = 16,
   EXUISSUE_DEPTH: Int = 16,
   LDISSUE_DEPTH: Int = 16,
   STISSUE_DEPTH: Int = 16,
   EXU_Fj_CNT_MAX: Int = 10, //一个执行单元所包含的FU最多的数量
 )
+
+object IType extends Enumeration {
+  type Type = Value
+  val
+     I,
+     S,
+     B,
+     U,
+     J
+     = Value
+}
+
+object FUType extends ChiselEnum {
+   val
+     ALU,
+     BU,
+     MUL,
+     DIV,
+     CSR
+     = Value
+}
 
 //为了简化interface的设计，对每个知名的模块定义一个名称，这样使用起来就统一了
 object CpuModuleEnum extends Enumeration {

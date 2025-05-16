@@ -231,6 +231,15 @@ class LDISSUE_LDPIPE_uop(implicit p: Parameters) extends uop {
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
 }
 
+class WB_uop(implicit p: Parameters) extends uop {
+    //writeback to PRF
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
+    val pdst_value = UInt(p.XLEN.W)
+
+    //writeback to ROB
+    val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+}
+
 class ALU_WB_uop(implicit p: Parameters) extends uop {
     //wrieback to PRF
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)

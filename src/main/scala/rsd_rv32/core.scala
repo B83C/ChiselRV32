@@ -47,6 +47,7 @@ class Core(implicit p: Parameters) extends CustomModule {
 
   val rob = Module(new ROB())
   (rob.io: Data).waiveAll :<>= (dispatch.io: Data).waiveAll 
+  (branch_predictor.io: Data).waiveAll :<>= (rob.io: Data).waiveAll 
   (fetch.io: Data).waiveAll :<>= (rob.io: Data).waiveAll 
   (rename.io: Data).waiveAll :<>= (rob.io: Data).waiveAll 
   (dispatch.io: Data).waiveAll :<>= (rob.io: Data).waiveAll 
@@ -54,10 +55,14 @@ class Core(implicit p: Parameters) extends CustomModule {
   (st_issue.io: Data).waiveAll :<>= (rob.io: Data).waiveAll 
   (exu_issue.io: Data).waiveAll :<>= (rob.io: Data).waiveAll 
 
-  val lsu = 
-  val exu = 
+  val lsu = Module(new LSU())
+  (lsu.io: Data).waiveAll :<>= (dispatch.io: Data).waiveAll 
+  (lsu.io: Data).waiveAll :<>= (ld_issue.io: Data).waiveAll 
+  (lsu.io: Data).waiveAll :<>= (st_issue.io: Data).waiveAll 
+  (mem.io.ex_mem: Data).waiveAll :<>= (lsu.io: Data).waiveAll 
+  (lsu.io: Data).waiveAll :<>= (mem.io.mem_lsu: Data).waiveAll 
 
-  val wb = 
+  val exu = Module(new EXU()) //TODO: Execution Unit is tiny bit complicated here
 }
 
 object Core extends App {
