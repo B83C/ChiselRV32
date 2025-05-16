@@ -40,16 +40,16 @@ class EXU(implicit p: Parameters) extends Module {
   val csru = Seq.fill(p.CSRU_NUM)(Module(new CSRFU))
 
   val fus = (alu ++ bu ++ mul ++ div ++ csru)
-  val io = IO(new EXUIO(fus.length))
+  val io = IO(new EXUIO(fus.length.asUInt))
   
   // io.readys := VecInit((alu ++ bu ++ mul ++ div ++ csru).map(!_.io.uop.ready))
   //TODO 改成readys
-  io.mul_ready  := VecInit((mul).map(_.io.uop.ready)).orR
-  io.div_ready  := VecInit((div).map(_.io.uop.ready)).orR
+  io.mul_ready  := VecInit((mul).map(_.io.uop.ready)).asUInt.orR
+  io.div_ready  := VecInit((div).map(_.io.uop.ready)).asUInt.orR
   def get_readys_instr_type: Seq[InstrType] = fus.map(_.supportedInstrTypes())
 
   // io.wb_uop := VecInit(fus.map(_.io.out))
-  io.alu_wb_uop := VecInit((alu ++ csru).map(_.out))
+  io.alu_wb_uop := VecInit((alu).map(_.out))
   io.bu_wb_uop := VecInit(bu.map(_.out))
   io.mul_wb_uop := VecInit(mul.map(_.out))
   io.divrem_wb_uop := VecInit(div.map(_.out))
@@ -82,8 +82,7 @@ class EXU(implicit p: Parameters) extends Module {
         val pc = UInt(p.XLEN.W)
         val imm = UInt(p.XLEN.W)
         val uop = new EXUISSUE_EXU_uop()
-      })
-
+      }))
       // 写回端口
       val wb = Valid(new ALU_WB_uop())
 
