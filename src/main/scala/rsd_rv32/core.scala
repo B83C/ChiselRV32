@@ -62,7 +62,10 @@ class Core(implicit p: Parameters) extends CustomModule {
   (mem.io.ex_mem: Data).waiveAll :<>= (lsu.io: Data).waiveAll 
   (lsu.io: Data).waiveAll :<>= (mem.io.mem_lsu: Data).waiveAll 
 
-  val exu = Module(new EXU()) //TODO: Execution Unit is tiny bit complicated here
+  val exu = Module(new EXU()) 
+  (exu_issue.io: Data).waiveAll :<>= (exu.io: Data).waiveAll 
+  (ld_issue.io: Data).waiveAll :<>= (exu.io: Data).waiveAll 
+  (st_issue.io: Data).waiveAll :<>= (exu.io: Data).waiveAll 
 }
 
 object Core extends App {

@@ -33,11 +33,11 @@ class EXUIO(fu_num: UInt)(implicit p: Parameters) extends Bundle{
 
 //把exu的各个fu封装起来的顶层模块
 class EXU(implicit p: Parameters) extends Module {
-  val alu = (0 until p.ALU_NUM).map(Module(new ALUFU))
-  val bu = (0 until p.BU_NUM).map(Module(new BranchFU))
-  val mul = (0 until p.MUL_NUM).map(Module(new MULFU))
-  val div = (0 until p.DIV_NUM).map(Module(new DIVFU))
-  val csru = (0 until p.CSRU_NUM).map(Module(new CSRFU))
+  val alu = (0 until p.ALU_NUM).iterator.map(Module(new ALUFU))
+  val bu = (0 until p.BU_NUM).iterator.map(Module(new BranchFU))
+  val mul = (0 until p.MUL_NUM).iterator.map(Module(new MULFU))
+  val div = (0 until p.DIV_NUM).iterator.map(Module(new DIVFU))
+  val csru = (0 until p.CSRU_NUM).iterator.map(Module(new CSRFU))
 
   val fus = (alu ++ bu ++ mul ++ div ++ csru)
   val io = IO(new EXUIO(fus.length))
