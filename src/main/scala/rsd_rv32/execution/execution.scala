@@ -33,11 +33,11 @@ class EXUIO(fu_num: UInt)(implicit p: Parameters) extends Bundle{
 
 //把exu的各个fu封装起来的顶层模块
 class EXU(implicit p: Parameters) extends Module {
-  val alu = (0 until p.ALU_NUM).iterator.map(=> Module(new ALUFU))
-  val bu = (0 until p.BU_NUM).iterator.map(=> Module(new BranchFU))
-  val mul = (0 until p.MUL_NUM).iterator.map(=> Module(new MULFU))
-  val div = (0 until p.DIV_NUM).iterator.map(=> Module(new DIVFU))
-  val csru = (0 until p.CSRU_NUM).iterator.map(=> Module(new CSRFU))
+  val alu = Seq.fill(p.ALU_NUM)(Module(new ALUFU))
+  val bu = Seq.fill(p.BU_NUM)(Module(new BranchFU))
+  val mul = Seq.fill(p.MUL_NUM)(Module(new MULFU))
+  val div = Seq.fill(p.DIV_NUM)(Module(new DIVFU))
+  val csru = Seq.fill(p.CSRU_NUM)(Module(new CSRFU))
 
   val fus = (alu ++ bu ++ mul ++ div ++ csru)
   val io = IO(new EXUIO(fus.length))
@@ -49,10 +49,10 @@ class EXU(implicit p: Parameters) extends Module {
   def get_readys_instr_type: Seq[InstrType] = fus.map(_.supportedInstrTypes())
 
   // io.wb_uop := VecInit(fus.map(_.io.out))
-  alu_wb_uop = VecInit((alu ++ csru).map(_.out))
-  bu_wb_uop = VecInit(bu.map(_.out))
-  mul_wb_uop = VecInit(mul.map(_.out))
-  divrem_wb_uop = VecInit(div.map(_.out))
+  io.alu_wb_uop := VecInit((alu ++ csru).map(_.out))
+  io.bu_wb_uop := VecInit(bu.map(_.out))
+  io.mul_wb_uop := VecInit(mul.map(_.out))
+  io.divrem_wb_uop := VecInit(div.map(_.out))
 }
 
 
