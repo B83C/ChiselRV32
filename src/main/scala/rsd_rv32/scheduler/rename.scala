@@ -46,7 +46,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
   val head_next = WireDefault(freelist_head)
   val tail_next = WireDefault(freelist_tail)
   val empty_next = WireDefault(freelist_empty)
-  val reg_dis_uop = RegEnable(dis_uop, VecInit(Seq.fill(p.CORE_WIDTH)(0.U.asTypeOf(Valid(new RENAME_DISPATCH_uop())))), io.dis_ready //寄存器存储发往Dispatch单元的uop
+  val reg_dis_uop = RegEnable(dis_uop, VecInit(Seq.fill(p.CORE_WIDTH)(0.U.asTypeOf(Valid(new RENAME_DISPATCH_uop())))),io.dis_ready) //寄存器存储发往Dispatch单元的uop
 
   io.rename_ready := rename_ready //反馈给ID单元
   io.dis_uop := reg_dis_uop //发往Dispatch单元的uop
@@ -62,22 +62,34 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
   val rob_valid_bits = Wire(UInt(2.W))
   rob_valid_bits := io.rob_commitsignal(0).valid ## io.rob_commitsignal(1).valid //ROB单元的指令有效位
 
-  def needPd(instr_type : InstrType.Type) : Bool = {
-    instr_type === InstrType.ALU || instr_type === InstrType.Jump || instr_type === InstrType.LD || instr_type === InstrType.CSR || instr_type === InstrType.MUL || instr_type === InstrType.DIV_REM
+  def needPd(instr_type : InstrType.Type, rd : UInt) : Bool = {
+    (instr_type === InstrType.ALU || instr_type === InstrType.Jump || instr_type === InstrType.LD || instr_type === InstrType.CSR || instr_type === InstrType.MUL || instr_type === InstrType.DIV_REM) && (rd =/= 0.U)
   }
 
+  def hasPd(rob_type : ROBType.Type, rd : UInt) : Bool = {
+    (rob_type === ROBType.Arithmetic || rob_type === ROBType.Jump || rob_type === ROBType.CSR) && (rd =/= 0.U)
+  }
+
+  //flush逻辑
   when(flush){
-    head_next := freelist_tail
+    head_next := tail_next
     for(i <- 0 until 32){
       rmt_valid(i) := false.B
     }
     freelist_empty := false.B
+    
+    when(hasPd(io.rob_commitsignal(0).bits.rob_type, io.rob_commitsignal(0).bits.payload(4,0))){
+      amt(io.rob_commitsignal(0).bits.payload(4,0)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1, 5)
+      freelist(freelist_tail) := amt(io.rob_commitsignal(0).bits.payload(4,0))
+      tail_next := Mux(freelist_tail === (p.PRF_DEPTH - 32 - 1).U, 0.U, freelist_tail + 1.U)
+    }
   }
 
+  //向下一级递送uop
   when(!flush){
     switch(valid_bits){
       is("b10".U){
-        when(needPd(io.rename_uop(0).bits.instr_type)){
+        when(needPd(io.rename_uop(0).bits.instr_type, io.rename_uop(0).bits.instr(4,0))){
           rename_ready := io.dis_ready& (freelist_head =/= freelist_tail || !freelist_empty)
 
           when(rename_ready){
@@ -165,8 +177,8 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
         dis_uop(0).bits.ps2 := Mux(rmt_valid(io.rename_uop(0).bits.instr(17,13)), rmt(io.rename_uop(0).bits.instr(17,13)), amt(io.rename_uop(0).bits.instr(17,13))) //读出源操作数映射的物理寄存器地址 */
       }
       is("b11".U){
-        when(needPd(io.rename_uop(0).bits.instr_type)){
-          when(needPd(io.rename_uop(1).bits.instr_type)){
+        when(needPd(io.rename_uop(0).bits.instr_type, io.rename_uop(0).bits.instr(4,0))){
+          when(needPd(io.rename_uop(1).bits.instr_type, io.rename_uop(1).bits.instr(4,0))){
             rename_ready := io.dis_ready& (freelist_tail - freelist_head >= 2.U || (freelist_head === freelist_tail && !freelist_empty))
             when(rename_ready){
               dis_uop(0).valid := true.B
@@ -282,7 +294,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
             }
           }
         }.otherwise{
-          when(needPd(io.rename_uop(1).bits.instr_type)){
+          when(needPd(io.rename_uop(1).bits.instr_type, io.rename_uop(1).bits.instr(4,0))){
             rename_ready := io.dis_ready& (freelist_head =/= freelist_tail || !freelist_empty)
 
             when(rename_ready){
@@ -357,22 +369,20 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
     }
   }
 
-  def hasPd(rob_type : ROBType.Type) : Bool = {
-    rob_type === ROBType.Arithmetic || rob_type === ROBType.Jump || rob_type === ROBType.CSR
-  }
-
+  
+  //非flush时，更新amt、freelist
   when(!flush){
     switch(rob_valid_bits){
       is("b10".U){
-        when(hasPd(io.rob_commitsignal(0).bits.rob_type)){
+        when(hasPd(io.rob_commitsignal(0).bits.rob_type, io.rob_commitsignal(0).bits.payload(4,0))){
           amt(io.rob_commitsignal(0).bits.payload(4,0)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
           freelist(freelist_tail) := amt(io.rob_commitsignal(0).bits.payload(4,0))
           tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1).U, freelist_tail + 1.U, 0.U)
         }
       }
       is("b11".U){
-        when(hasPd(io.rob_commitsignal(0).bits.rob_type)){
-          when(hasPd(io.rob_commitsignal(1).bits.rob_type)){
+        when(hasPd(io.rob_commitsignal(0).bits.rob_type, io.rob_commitsignal(0).bits.payload(4,0))){
+          when(hasPd(io.rob_commitsignal(1).bits.rob_type, io.rob_commitsignal(1).bits.payload(4,0))){
             tail_next := MuxLookup(freelist_tail, freelist_tail + 2.U)(Seq(
               (p.PRF_DEPTH - 32 - 2).U -> 0.U,
               (p.PRF_DEPTH - 32 - 1).U -> 1.U
@@ -393,7 +403,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
             freelist(freelist_tail) := amt(io.rob_commitsignal(0).bits.payload(4,0))
           }
         }.otherwise{
-          when(hasPd(io.rob_commitsignal(1).bits.rob_type)){
+          when(hasPd(io.rob_commitsignal(1).bits.rob_type, io.rob_commitsignal(1).bits.payload(4,0))){
             tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1).U, freelist_tail + 1.U, 0.U)
             amt(io.rob_commitsignal(1).bits.payload(4,0)) := io.rob_commitsignal(1).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
             freelist(freelist_tail) := amt(io.rob_commitsignal(1).bits.payload(4,0))
@@ -403,7 +413,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
     }
   }
 
-  //freelist_empty的逻辑
+  //非flush时，freelist_empty的逻辑
   when(!flush){
     freelist_empty := Mux(head_next === tail_next, empty_next, false.B)
   }

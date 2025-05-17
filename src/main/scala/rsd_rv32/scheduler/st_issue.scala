@@ -76,7 +76,7 @@ class issue2st(implicit p: Parameters) extends CustomModule {
         val dis_issue_uop = Input(new DISPATCH_STISSUE_uop()) //被select的uop
         val store_uop = Output(Valid(new STISSUE_STPIPE_uop())) //发往STPIPE的uop
     })
-    val uop = Reg(Valid(new STISSUE_STPIPE_uop()))
+    val uop = RegInit(Valid(new STISSUE_STPIPE_uop()), 0.U.asTypeOf(Valid(new STISSUE_STPIPE_uop())))
     uop.valid := io.if_valid
     uop.bits.instr := io.dis_issue_uop.instr
     uop.bits.ps1_value := io.ps1_value
@@ -132,7 +132,9 @@ class st_issue_queue(implicit p: Parameters) extends CustomModule {
     io.prf_raddr2 := 0.U.asTypeOf(UInt(log2Ceil(p.PRF_DEPTH).W))
     io.st_queue_state := 0.U.asTypeOf(Vec(p.STISSUE_DEPTH, Bool()))
     //判断是否flush
-    when(io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred){
+    val flush = Wire(Bool())
+    flush := io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
+    when(flush){
         for (i <- 0 until p.STISSUE_DEPTH){
             issue_queue(i).busy := false.B
             issue_queue(i).ready1 := false.B
@@ -233,51 +235,52 @@ class st_issue_queue(implicit p: Parameters) extends CustomModule {
             }
         }
 
-        //Select Logic
-        val select_logic = Module(new st_iq_select_logic())
-        val select_index = Wire(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)))
-        select_logic.io.issue_queue := issue_queue
-        select_index := select_logic.io.sel_index
 
-        //读PRF
-        when (select_index.valid){
-            io.prf_raddr1 := issue_queue(select_index.bits).ps1
-            io.prf_raddr2 := issue_queue(select_index.bits).ps2
-        }.otherwise{
-            io.prf_raddr1 := 0.U
-            io.prf_raddr2 := 0.U
-        }
+    }
+    //Select Logic
+    val select_logic = Module(new st_iq_select_logic())
+    val select_index = Wire(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)))
+    select_logic.io.issue_queue := issue_queue
+    select_index := select_logic.io.sel_index
+
+    //读PRF
+    when (select_index.valid){
+        io.prf_raddr1 := issue_queue(select_index.bits).ps1
+        io.prf_raddr2 := issue_queue(select_index.bits).ps2
+    }.otherwise{
+        io.prf_raddr1 := 0.U
+        io.prf_raddr2 := 0.U
+    }
 
 
-        //更新IQ Freelist的信号
-        when (select_index.valid){
-            io.st_issued_index.valid := true.B
-            io.st_issued_index.bits := select_index.bits
-        }.otherwise{
-            io.st_issued_index.valid := false.B
-            io.st_issued_index.bits := 0.U
-        }
+    //更新IQ Freelist的信号
+    when (!flush && select_index.valid){
+        io.st_issued_index.valid := true.B
+        io.st_issued_index.bits := select_index.bits
+    }.otherwise{
+        io.st_issued_index.valid := false.B
+        io.st_issued_index.bits := 0.U
+    }
 
-        //发射命令到级间寄存器
-        val issue_to_st = Module(new issue2st())
+    //发射命令到级间寄存器
+    val issue_to_st = Module(new issue2st())
+    //在其他issue_queue中，有flush信号接入级间寄存器用于清空，但我发现这是没有必要的，因为下方的判断逻辑已经可以在flush时让if_valid置0
+    when (!flush && select_index.valid){
+        issue_to_st.io.if_valid := true.B
+        issue_queue(select_index.bits).busy := false.B
+        issue_queue(select_index.bits).ready1 := false.B
+        issue_queue(select_index.bits).ready2 := false.B
+    }.otherwise{
+        issue_to_st.io.if_valid := false.B
+    }
+    issue_to_st.io.dis_issue_uop := payload(select_index.bits)
+    issue_to_st.io.ps1_value := io.ps1_value
+    issue_to_st.io.ps2_value := io.ps2_value
+    io.store_uop.bits := issue_to_st.io.store_uop.bits
+    io.store_uop.valid := issue_to_st.io.store_uop.valid
 
-        when (select_index.valid){
-            issue_to_st.io.if_valid := true.B
-            issue_queue(select_index.bits).busy := false.B
-            issue_queue(select_index.bits).ready1 := false.B
-            issue_queue(select_index.bits).ready2 := false.B
-        }.otherwise{
-            issue_to_st.io.if_valid := false.B
-        }
-        issue_to_st.io.dis_issue_uop := payload(select_index.bits)
-        issue_to_st.io.ps1_value := io.ps1_value
-        issue_to_st.io.ps2_value := io.ps2_value
-        io.store_uop.bits := issue_to_st.io.store_uop.bits
-        io.store_uop.valid := issue_to_st.io.store_uop.valid
-
-        //发射st_queue状态至ld_queue
-        for (i <- 0 until p.STISSUE_DEPTH){
-            io.st_queue_state(i) := !issue_queue(i).busy
-        }
+    //发射st_queue状态至ld_queue
+    for (i <- 0 until p.STISSUE_DEPTH){
+        io.st_queue_state(i) := !issue_queue(i).busy
     }
 }
