@@ -67,34 +67,32 @@ class PRF_Value(implicit p: Parameters) extends Module {
   })
 
   //your code here
-  val regBank = RegInit(Vec(p.PRF_DEPTH,0.U(32.W)))
-
+  val regBank = RegInit(
+      VecInit(Seq.fill(p.PRF_DEPTH) {
+          0.U(32.W)
+      })
+  )
   //定义地址写入和数据写入
-  val writeAddr  = Vec(8,WireDefault(0.U(log2Ceil(p.PRF_DEPTH).W)))
-  val writeData  = Vec(8,WireDefault(0.U(p.XLEN.W)))
+  val writeAddr  = Wire(Vec(6,UInt(log2Ceil(p.PRF_DEPTH).W)))
+  val writeData  = Wire(Vec(6,UInt(p.XLEN.W)))
   //地址写入
   writeAddr(0) := io.alu_wb_uop(0).bits.pdst
   writeAddr(1) := io.alu_wb_uop(1).bits.pdst
   writeAddr(2) := io.bu_wb_uop(0).bits.pdst
-  writeAddr(3) := io.bu_wb_uop(1).bits.pdst
-  writeAddr(4) := io.mul_wb_uop(0).bits.pdst
-  writeAddr(5) := io.mul_wb_uop(1).bits.pdst
-  writeAddr(6) := io.divrem_wb_uop(0).bits.pdst
-  writeAddr(7) := io.divrem_wb_uop(1).bits.pdst
+  writeAddr(3) := io.mul_wb_uop(0).bits.pdst
+  writeAddr(4) := io.divrem_wb_uop(0).bits.pdst
+  writeAddr(5) := io.ldu_wb_uop(0).bits.pdst
 
   //数据写入
   writeData(0) := io.alu_wb_uop(0).bits.pdst_value
   writeData(1) := io.alu_wb_uop(1).bits.pdst_value
   writeData(2) := io.bu_wb_uop(0).bits.pdst_value
-  writeData(3) := io.bu_wb_uop(1).bits.pdst_value
-  writeData(4) := io.mul_wb_uop(0).bits.pdst_value
-  writeData(5) := io.mul_wb_uop(1).bits.pdst_value
-  writeData(6) := io.divrem_wb_uop(0).bits.pdst_value
-  writeData(7) := io.divrem_wb_uop(1).bits.pdst_value
-
+  writeData(3) := io.mul_wb_uop(0).bits.pdst_value
+  writeData(4) := io.divrem_wb_uop(0).bits.pdst_value
+  writeData(5) := io.ldu_wb_uop(0).bits.pdst_value
 
   // 执行寄存器写入
-  for (i <- 0 until 7) {
+  for (i <- 0 until 6) {
     regBank(writeAddr(i)) := writeData(i)
   }
 

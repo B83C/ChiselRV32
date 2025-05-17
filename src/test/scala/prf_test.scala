@@ -43,17 +43,17 @@ class prf_test extends AnyFlatSpec with ChiselScalatestTester {
           dut.io.bu_wb_uop(0).bits.pdst.poke(addr)
           dut.io.bu_wb_uop(0).bits.pdst_value.poke(data)
         } else if (index == 3) {
-          dut.io.bu_wb_uop(1).valid.poke(true.B)
-          dut.io.bu_wb_uop(1).bits.pdst.poke(addr)
-          dut.io.bu_wb_uop(1).bits.pdst_value.poke(data)
-        } else if (index == 4) {
           dut.io.mul_wb_uop(0).valid.poke(true.B)
           dut.io.mul_wb_uop(0).bits.pdst.poke(addr)
           dut.io.mul_wb_uop(0).bits.pdst_value.poke(data)
+        } else if (index == 4) {
+          dut.io.divrem_wb_uop(0).valid.poke(true.B)
+          dut.io.divrem_wb_uop(0).bits.pdst.poke(addr)
+          dut.io.divrem_wb_uop(0).bits.pdst_value.poke(data)
         } else if (index == 5) {
-          dut.io.mul_wb_uop(1).valid.poke(true.B)
-          dut.io.mul_wb_uop(1).bits.pdst.poke(addr)
-          dut.io.mul_wb_uop(1).bits.pdst_value.poke(data)
+          dut.io.ldu_wb_uop(0).valid.poke(true.B)
+          dut.io.ldu_wb_uop(0).bits.pdst.poke(addr)
+          dut.io.ldu_wb_uop(0).bits.pdst_value.poke(data)
         } else if (index == 6) {
           dut.io.divrem_wb_uop(0).valid.poke(true.B)
           dut.io.divrem_wb_uop(0).bits.pdst.poke(addr)
