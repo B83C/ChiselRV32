@@ -163,8 +163,6 @@ class PRF_Valid_Test extends AnyFlatSpec with ChiselScalatestTester {
       // It should still be valid
       dut.io.prf_valid(10).peek().expect(true.B)
 
-      // Simulate deallocation (this part might depend on how your deallocation works,
-      // here we are just testing the effect of commit)
     }
   }
 }

@@ -109,7 +109,6 @@ class PRF_Value(implicit p: Parameters) extends Module {
         // Load指令读取端口
         io.ld_issue_r_value1 := regBank(io.ld_issue_r_addr1);
 
-
 }
 
 class PRF_Valid(implicit p: Parameters) extends Module {
