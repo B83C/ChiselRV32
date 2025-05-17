@@ -67,6 +67,49 @@ class PRF_Value(implicit p: Parameters) extends Module {
   })
 
   //your code here
+  val regBank = RegInit(Vec(p.PRF_DEPTH,0.U(32.W)))
+
+  //定义地址写入和数据写入
+  val writeAddr  = Vec(8,WireDefault(0.U(log2Ceil(p.PRF_DEPTH).W)))
+  val writeData  = Vec(8,WireDefault(0.U(p.XLEN.W)))
+  //地址写入
+  writeAddr(0) := io.alu_wb_uop(0).bits.pdst
+  writeAddr(1) := io.alu_wb_uop(1).bits.pdst
+  writeAddr(2) := io.bu_wb_uop(0).bits.pdst
+  writeAddr(3) := io.bu_wb_uop(1).bits.pdst
+  writeAddr(4) := io.mul_wb_uop(0).bits.pdst
+  writeAddr(5) := io.mul_wb_uop(1).bits.pdst
+  writeAddr(6) := io.divrem_wb_uop(0).bits.pdst
+  writeAddr(7) := io.divrem_wb_uop(1).bits.pdst
+
+  //数据写入
+  writeData(0) := io.alu_wb_uop(0).bits.pdst_value
+  writeData(1) := io.alu_wb_uop(1).bits.pdst_value
+  writeData(2) := io.bu_wb_uop(0).bits.pdst_value
+  writeData(3) := io.bu_wb_uop(1).bits.pdst_value
+  writeData(4) := io.mul_wb_uop(0).bits.pdst_value
+  writeData(5) := io.mul_wb_uop(1).bits.pdst_value
+  writeData(6) := io.divrem_wb_uop(0).bits.pdst_value
+  writeData(7) := io.divrem_wb_uop(1).bits.pdst_value
+
+
+  // 执行寄存器写入
+  for (i <- 0 until 7) {
+    regBank(writeAddr(i)) := writeData(i)
+  }
+
+  // EXU双发射读取端口
+  for (i <- 0 until 2) {
+    io.exu_issue_r_value1(i) := regBank(io.exu_issue_r_addr1(i))
+    io.exu_issue_r_value2(i) := regBank(io.exu_issue_r_addr2(i))
+  }
+
+  // Store指令读取端口
+  io.st_issue_r_value1 := regBank(io.st_issue_r_addr1)
+  io.st_issue_r_value2 := regBank(io.st_issue_r_addr2)
+
+  // Load指令读取端口
+  io.ld_issue_r_value1 := regBank(io.ld_issue_r_addr1)
 }
 
 class PRF_Valid(implicit p: Parameters) extends Module {
