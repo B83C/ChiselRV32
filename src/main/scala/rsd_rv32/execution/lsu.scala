@@ -242,7 +242,8 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   val data_out_mem = Wire(UInt(p.XLEN.W))
   data_out_mem := io.data_out_mem
   val data_merged = (stage3_data & stage3_bitvalid) | (data_out_mem & (~stage3_bitvalid).asUInt)
-  val final_data = Wire(UInt(p.XLEN.W))
+  val final_data = WireDefault(UInt(p.XLEN.W),0.U)
+
   switch(Stage2ToStage3_func3_reg.io.data_out){
     is(0.U){ //LB
       final_data := Cat(Fill(24,data_merged(7)),data_merged(7,0))
@@ -256,7 +257,7 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
     is(4.U){ //LBU
       final_data := Cat(0.U(24.W),data_merged(7,0))
     }
-    is(5.U){ //LWU
+    is(5.U){ //LHU
       final_data := Cat(0.U(16.W),data_merged(15,0))
     }
   }
@@ -403,7 +404,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
 
     val stqReq = Decoupled(new Req_Abter())//存储请求信号
 
-    val st_cnt = Input(UInt(log2Ceil(p.CORE_WIDTH).W))//用于更新store queue（在lsu中）的tail（full标志位）
+    val st_cnt = Input(UInt(log2Ceil(p.CORE_WIDTH + 1).W))//用于更新store queue（在lsu中）的tail（full标志位）
     val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
 
     val dataAddr_into_stq = Flipped(Valid(UInt(p.XLEN.W)))//需要写入stq的地址
@@ -434,12 +435,12 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
   val write_valid = RegInit(0.U(log2Ceil(p.STQ_DEPTH).W))
 
   //调试用，忽略
-  printf(p"head=${head} write_valid=${write_valid} tail=${tail}\n")
-  for (i <- 0 until p.STQ_DEPTH) {
-    val entry = stq_entries(i)
-    printf(p"STQ[${"%02d".format(i)}]: data=0x${Hexadecimal(entry.data)} addr=0x${Hexadecimal(entry.data_Addr)} bits_valid=0x${Hexadecimal(entry.bit_valid)} func3=0x${Hexadecimal(entry.func3)}\n")
-  }
-  printf(p"\n\n")
+//  printf(p"head=${head} write_valid=${write_valid} tail=${tail}\n")
+//  for (i <- 0 until p.STQ_DEPTH) {
+//    val entry = stq_entries(i)
+//    printf(p"STQ[${"%02d".format(i)}]: data=0x${Hexadecimal(entry.data)} addr=0x${Hexadecimal(entry.data_Addr)} bits_valid=0x${Hexadecimal(entry.bit_valid)} func3=0x${Hexadecimal(entry.func3)}\n")
+//  }
+//  printf(p"\n")
 
   //更新指针位置
   def nextPtr(ptr: UInt, inc: UInt): UInt = {
@@ -566,19 +567,19 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
   val mask = WireDefault(UInt(4.W), 0.U)
   switch(io.ld_func3){
     is(0.U){
-      mask := "b1000".U
+      mask := "b0001".U
     }
     is(1.U){
-      mask := "b1100".U
+      mask := "b0011".U
     }
     is(2.U){
       mask := "b1111".U
     }
     is(4.U){
-      mask := "b1000".U
+      mask := "b0001".U
     }
     is(5.U){
-      mask := "b1100".U
+      mask := "b0011".U
     }
   }
 
@@ -591,7 +592,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
         val store_byte = Mux(entry.func3 === 0.U, 1.U,
           Mux(entry.func3 === 1.U, 2.U,
             Mux(entry.func3 === 2.U, 4.U, 0.U)))
-        byteSearched(delta_byte)(i) := (isInrange(i.U,head, io.input_tail)) &&
+        byteSearched(delta_byte)(i) := isInrange(i.U,head, io.input_tail) &&
           (curr_addr >= entry.data_Addr) && (curr_addr < (entry.data_Addr + store_byte)) && mask(delta_byte).asBool
       }
     }
@@ -609,7 +610,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
       val realIdx = (head + p.STQ_DEPTH.U -1.U - sel) % p.STQ_DEPTH.U
       val entry = stq_entries(realIdx)
       val offset = SearchAddr + delta_byte.asUInt - entry.data_Addr
-      found_data(delta_byte) := (entry.data >> (offset << 3))(7, 0)
+      found_data(delta_byte) := (entry.data >> (offset << 3)).asUInt(7, 0)
     }
   }
 
@@ -626,6 +627,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
   io.searched_data.data_Addr := io.addr_search_stq.bits
   io.searched_data.func3 := io.ld_func3
   io.searched_data.bit_valid := found_data_bitvalid
+
 
 }
 //LSU的模块定义，目前只完成了IO接口的定义，内部逻辑还未完成

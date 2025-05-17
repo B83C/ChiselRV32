@@ -13,7 +13,7 @@ import rsd_rv32.scheduler._
 import rsd_rv32.common.Parameters
 import rsd_rv32.common._
 import chiseltest.testableClock
-import rsd_rv32.execution.LSU
+import rsd_rv32.execution.{LSU, StoreQueue}
 /**
  * This is a trivial example of how to run this Specification
  * From within sbt use:
@@ -28,27 +28,133 @@ import rsd_rv32.execution.LSU
 
 class lsu_test extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = Parameters()
-  "lsu" should "ptr move correctly" in {
-    test(new LSU()) { c =>
-      c.io.st_dis(0).poke(1.U)
-      c.io.st_dis(1).poke(1.U)
-      c.clock.step()
-      c.io.st_dis(1).poke(0.U)
-      c.clock.step()
-      c.io.st_dis(0).poke(0.U)
-      c.clock.step()
-      c.io.rob_commitsignal(1).valid.poke(1.U)
-      c.io.rob_commitsignal(1).bits.rob_type.poke(ROBType.Store)
-      c.io.rob_commitsignal(0).valid.poke(1.U)
-      c.io.rob_commitsignal(0).bits.rob_type.poke(ROBType.Arithmetic)
-      c.clock.step()
-      c.io.rob_commitsignal(1).bits.rob_type.poke(ROBType.Store)
-      c.io.rob_commitsignal(0).bits.rob_type.poke(ROBType.Store)
-      c.clock.step()
-      c.io.rob_commitsignal(1).valid.poke(0.U)
-      c.io.rob_commitsignal(0).valid.poke(0.U)
-      c.clock.step(3)
-      println("pass!")
+  "Loadpipeline" should "write and forward store data correctly" in {
+    test(new StoreQueue()) { c =>
+
+//      c.io.st_cnt.poke(2.U)
+//      c.clock.step(1)
+//
+//      c.io.st_cnt.poke(0.U)
+//      c.io.dataAddr_into_stq.valid.poke(true.B)
+//      c.io.dataAddr_into_stq.bits.poke("h1000".U)
+//      c.io.data_into_stq.poke(16.U)
+//      c.io.stq_index.poke(0.U)
+//      c.io.st_func3.poke(1.U)
+//      c.clock.step(1)
+//
+//      c.io.st_cnt.poke(1.U)
+//      c.io.dataAddr_into_stq.valid.poke(true.B)
+//      c.io.dataAddr_into_stq.bits.poke("h1002".U)
+//      c.io.data_into_stq.poke(32.U)
+//      c.io.stq_index.poke(1.U)
+//      c.io.st_func3.poke(2.U)
+//      c.clock.step(1)
+//
+//      c.io.st_cnt.poke(1.U)
+//      c.io.dataAddr_into_stq.valid.poke(true.B)
+//      c.io.dataAddr_into_stq.bits.poke("h100C".U)
+//      c.io.data_into_stq.poke(32.U)
+//      c.io.stq_index.poke(2.U)
+//      c.io.st_func3.poke(2.U)
+//      c.clock.step(1)
+//
+//
+//      c.io.st_cnt.poke(0.U)
+//      c.io.dataAddr_into_stq.valid.poke(true.B)
+//      c.io.dataAddr_into_stq.bits.poke("h100D".U)
+//      c.io.data_into_stq.poke(8.U)
+//      c.io.stq_index.poke(3.U)
+//      c.io.st_func3.poke(0.U)
+//      c.clock.step(1)
+//
+//      c.io.dataAddr_into_stq.valid.poke(false.B)
+//      c.io.rob_commitsignal(0).valid.poke(true.B)
+//      c.io.rob_commitsignal(0).bits.mispred.poke(false)
+//      c.io.rob_commitsignal(0).bits.rob_type.poke(ROBType.Store)
+//      c.io.rob_commitsignal(1).valid.poke(false.B)
+//      c.io.rob_commitsignal(1).bits.rob_type.poke(ROBType.Arithmetic)
+//      c.clock.step(1)
+//
+//      c.io.rob_commitsignal(0).valid.poke(false)
+//      c.io.rob_commitsignal(0).bits.mispred.poke(false)
+//      c.io.rob_commitsignal(0).bits.rob_type.poke(ROBType.Arithmetic)
+//      c.io.rob_commitsignal(1).valid.poke(false.B)
+//      c.io.rob_commitsignal(1).bits.rob_type.poke(ROBType.Arithmetic)
+//      c.io.stqReq.ready.poke(true.B)
+//      c.clock.step(1)
+//
+//      c.io.rob_commitsignal(0).bits.mispred.poke(true.B)
+//      c.io.rob_commitsignal(0).valid.poke(true.B)
+//      c.clock.step(1)
+
+//      c.io.addr_search_stq.valid.poke(true.B)
+//      c.io.addr_search_stq.bits.poke("h100D".U)
+//      c.io.ld_func3.poke(0.U)
+//      c.io.input_tail.poke(3.U)
+//      c.io.rob_commitsignal(0).valid.poke(true.B)
+//      c.io.rob_commitsignal(0).bits.mispred.poke(false)
+//      c.io.rob_commitsignal(0).bits.rob_type.poke(ROBType.Store)
+//      c.io.rob_commitsignal(1).valid.poke(true.B)
+//      c.io.rob_commitsignal(1).bits.rob_type.poke(ROBType.Store)
+//      c.clock.step(1)
+//
+//      c.io.rob_commitsignal(0).valid.poke(false.B)
+//      c.io.rob_commitsignal(0).bits.mispred.poke(false)
+//      c.io.rob_commitsignal(0).bits.rob_type.poke(ROBType.Store)
+//      c.io.rob_commitsignal(1).valid.poke(false.B)
+//      c.io.rob_commitsignal(1).bits.rob_type.poke(ROBType.Arithmetic)
+//      c.io.stqReq.ready.poke(true.B)
+//      c.io.addr_search_stq.valid.poke(false.B)
+//      c.clock.step(1)
+//
+//      c.io.ld_func3.poke(1.U)
+//      c.io.input_tail.poke(4.U)
+//      c.io.stqReq.ready.poke(false.B)
+//      c.io.addr_search_stq.valid.poke(true.B)
+//      c.io.addr_search_stq.bits.poke("h100D".U)
+//      c.io.rob_commitsignal(0).valid.poke(true.B)
+//      c.io.rob_commitsignal(0).bits.mispred.poke(false)
+//      c.io.rob_commitsignal(0).bits.rob_type.poke(ROBType.Store)
+//      c.io.rob_commitsignal(1).valid.poke(false.B)
+//      c.io.rob_commitsignal(1).bits.rob_type.poke(ROBType.Arithmetic)
+//      c.clock.step(1)
+//
+//      c.io.stqReq.ready.poke(true.B)
+//      c.io.input_tail.poke(4.U)
+//      c.io.addr_search_stq.valid.poke(true.B)
+//      c.io.addr_search_stq.bits.poke("h100C".U)
+//      c.io.ld_func3.poke(1.U)
+//      c.io.input_tail.poke(4.U)
+//      c.io.rob_commitsignal(0).valid.poke(true.B)
+//      c.io.rob_commitsignal(0).bits.mispred.poke(false)
+//      c.io.rob_commitsignal(0).bits.rob_type.poke(ROBType.Store)
+//      c.io.rob_commitsignal(1).valid.poke(false.B)
+//      c.io.rob_commitsignal(1).bits.rob_type.poke(ROBType.Arithmetic)
+//      c.clock.step(1)
+//
+//      c.io.rob_commitsignal(0).valid.poke(false.B)
+//      c.io.rob_commitsignal(0).bits.mispred.poke(false)
+//      c.io.rob_commitsignal(0).bits.rob_type.poke(ROBType.Store)
+//      c.io.rob_commitsignal(1).valid.poke(false.B)
+//      c.io.rob_commitsignal(1).bits.rob_type.poke(ROBType.Arithmetic)
+//      c.io.addr_search_stq.valid.poke(false.B)
+//      c.io.stqReq.ready.poke(false.B)
+//      c.clock.step(1)
+//
+//
+//      c.io.stqReq.ready.poke(true.B)
+//      c.clock.step(1)
+//
+//      c.io.stqReq.ready.poke(false.B)
+//      c.clock.step(1)
+//
+//      c.io.stqReq.ready.poke(true.B)
+//      c.clock.step(1)
+//
+//      c.io.stqReq.ready.poke(false.B)
+//      c.clock.step(1)
+
+        c.io
     }
   }
 

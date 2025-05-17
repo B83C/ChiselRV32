@@ -21,12 +21,12 @@ class MyModuleTest extends AnyFlatSpec with ChiselScalatestTester with Matchers 
     "Rename_Unit" should "correctly work" in {
         test(new RenameUnit()) { c =>
             //测试两条指令的rd相同，较老的指令的rs2和较年轻指令的rd相同
-            c.io.id_uop(0).valid.poke(true.B)
-            c.io.id_uop(1).valid.poke(true.B)
-            c.io.id_uop(0).bits.instr_type.poke(InstrType.ALU)
-            c.io.id_uop(1).bits.instr_type.poke(InstrType.ALU)
-            c.io.id_uop(0).bits.instr.poke(Constants.and1.U)
-            c.io.id_uop(1).bits.instr.poke(Constants.and2.U)
+            c.io.rename_uop(0).valid.poke(true.B)
+            c.io.rename_uop(1).valid.poke(true.B)
+            c.io.rename_uop(0).bits.instr_type.poke(InstrType.ALU)
+            c.io.rename_uop(1).bits.instr_type.poke(InstrType.ALU)
+            c.io.rename_uop(0).bits.instr.poke(Constants.and1.U)
+            c.io.rename_uop(1).bits.instr.poke(Constants.and2.U)
 
             c.io.dis_ready.poke(true.B)
 
@@ -36,16 +36,16 @@ class MyModuleTest extends AnyFlatSpec with ChiselScalatestTester with Matchers 
             println("cycle 1")
             c.clock.step()
 
-            c.io.id_uop(1).bits.instr_type.poke(InstrType.ST)
-            c.io.id_uop(1).bits.instr.poke(Constants.sb.U)
+            c.io.rename_uop(1).bits.instr_type.poke(InstrType.ST)
+            c.io.rename_uop(1).bits.instr.poke(Constants.sb.U)
 
             println("cycle 2")
             c.clock.step()
 
-            c.io.id_uop(0).bits.instr_type.poke(InstrType.Branch)
-            c.io.id_uop(0).bits.instr.poke(Constants.beq.U)
+            c.io.rename_uop(0).bits.instr_type.poke(InstrType.Branch)
+            c.io.rename_uop(0).bits.instr.poke(Constants.beq.U)
 
-            c.io.id_uop(1).valid.poke(false.B)
+            c.io.rename_uop(1).valid.poke(false.B)
 
             println("cycle 3")
             c.clock.step()
@@ -60,9 +60,9 @@ class MyModuleTest extends AnyFlatSpec with ChiselScalatestTester with Matchers 
             c.io.rob_commitsignal(1).bits.rob_type.poke(ROBType.Arithmetic)
             c.io.rob_commitsignal(1).bits.payload.poke(0b100001_00001.U)
 
-            c.io.id_uop(1).valid.poke(true.B)
-            c.io.id_uop(1).bits.instr_type.poke(InstrType.ALU)
-            c.io.id_uop(1).bits.instr.poke(Constants.and1.U)
+            c.io.rename_uop(1).valid.poke(true.B)
+            c.io.rename_uop(1).bits.instr_type.poke(InstrType.ALU)
+            c.io.rename_uop(1).bits.instr.poke(Constants.and1.U)
 
             println("cycle 4")
             c.clock.step()
@@ -86,8 +86,8 @@ class MyModuleTest extends AnyFlatSpec with ChiselScalatestTester with Matchers 
 
             c.io.rob_commitsignal(0).bits.mispred.poke(true.B)
 
-            c.io.id_uop(0).valid.poke(false.B)
-            c.io.id_uop(1).valid.poke(false.B)
+            c.io.rename_uop(0).valid.poke(false.B)
+            c.io.rename_uop(1).valid.poke(false.B)
 
             println("cycle 7")
             c.clock.step()
