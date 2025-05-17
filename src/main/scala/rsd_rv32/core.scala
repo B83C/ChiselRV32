@@ -35,8 +35,8 @@ class Core(implicit p: Parameters) extends CustomModule {
   val dispatch = Module(new DispatchUnit())
   (dispatch.io: Data).waiveAll :<>= (rename.io: Data).waiveAll 
 
-  val iq_freelist = Module(new FreeList(UInt(log2Ceil(p.ISSUE_WIDTH).W), p.ISSUE_FREELIST_WIDTH, p.CORE_WIDTH))
-  (iq_freelist.io: Data).waiveAll :<>= (dispatch.io: Data).waiveAll 
+  // val iq_freelist = Module(new FreeList(UInt(log2Ceil(p.ISSUE_WIDTH).W), p.ISSUE_FREELIST_WIDTH, p.CORE_WIDTH))
+  // (iq_freelist.io: Data).waiveAll :<>= (dispatch.io: Data).waiveAll 
 
   val ld_issue = Module(new ld_issue_queue())
   val st_issue = Module(new st_issue_queue())

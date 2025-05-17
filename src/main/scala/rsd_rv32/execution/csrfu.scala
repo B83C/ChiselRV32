@@ -5,8 +5,6 @@ import chisel3.util._
 
 import rsd_rv32.common._
 
-import rsd_rv32.frontend._
-
 abstract class MmapDevice(addrBase: UInt, length_in_word: UInt) extends Module {
   val io = IO(new Bundle {
     val addr  = Input(UInt(12.W))    // 12‑bit address as defined in RISCV manual
@@ -17,10 +15,10 @@ abstract class MmapDevice(addrBase: UInt, length_in_word: UInt) extends Module {
   })
 
   def read(offset: UInt): UInt
-  def write(offset: UInt, data: UInt): UInt
+  def write(offset: UInt, data: UInt): Unit
 
-  val offset = (io.addr - addrBase).asSInt
-  val hit = offset > 0 && offset < (length_in_word << 2) //hardcoded
+  val offset = io.addr - addrBase
+  val hit = io.addr > addrBase && offset < (length_in_word << 2) //hardcoded
   io.ready := hit 
   io.rdata := Mux(hit && io.ren, read(offset), 0.U)
   when(hit && io.wdata.valid)  {
@@ -28,18 +26,18 @@ abstract class MmapDevice(addrBase: UInt, length_in_word: UInt) extends Module {
   }
 }
 
-class McycleDevice(addrBase: UInt) extends MmapDevice(addrBase, 2) {
+class McycleDevice(addrBase: UInt) extends MmapDevice(addrBase, 2.U) {
   val cycle = RegInit(0.U(64.W))
   cycle := cycle + 1.U
 
   override def read(offset: UInt): UInt = {
-    MuxLookup(offset, 0.U, Seq(
+    MuxLookup(offset, 0.U)(Seq(
       0.U -> cycle(31, 0),
       4.U -> cycle(63, 32)
     ))
   }
 
-  override def write(offset: UInt, wdata: UInt): UInt = {
+  override def write(offset: UInt, wdata: UInt): Unit = {
     switch (offset) {
       is (0.U) {
         cycle(31, 0) := wdata
@@ -51,17 +49,17 @@ class McycleDevice(addrBase: UInt) extends MmapDevice(addrBase, 2) {
   }
 }
 
-class MtimeDevice(addrBase: UInt) extends Mcycle(addrBase, 2) 
+class MtimeDevice(addrBase: UInt) extends McycleDevice(addrBase) 
 
 
 class CSRFU(implicit p: Parameters) extends FunctionalUnit with CSRConsts {
   override def supportedInstrTypes = Set(InstrType.CSR)
 
   val out = Valid(new ALU_WB_uop())
-  val uop = io.uop
+  val uop = io.uop.bits
 
-  val mcycle = Module(new McycleDevice(0xEEF))
-  val mtime  = Module(new MtimeDevice(0xEAF))
+  val mcycle = Module(new McycleDevice(0xEEF.U))
+  val mtime  = Module(new MtimeDevice(0xEAF.U))
 
   val all_devices = Seq(mcycle, mtime)
 
@@ -75,10 +73,10 @@ class CSRFU(implicit p: Parameters) extends FunctionalUnit with CSRConsts {
     dev.io.ren   := ren 
   }
 
-  val rdata = VecInit(all_devices.map(_.rdata))
-  val ready = VecInit(all_devices.map(_.ready))
+  val rdata = VecInit(all_devices.map(_.io.rdata))
+  val ready = VecInit(all_devices.map(_.io.ready))
 
-  val first_ready_data = PriorityMux(ready.zip(rdata))
+  val first_ready_rdata = PriorityMux(ready.zip(rdata))
 
   val instr = Cat(uop.instr, 0.U(7.W))
   val func3 = instr(14, 12)
@@ -87,8 +85,8 @@ class CSRFU(implicit p: Parameters) extends FunctionalUnit with CSRConsts {
   wdata.valid := false.B
   ren := false.B
 
-  io.out.bits.rob_index := uop.rob_index
-  io.out.valid := false.B
+  out.bits.rob_index := uop.rob_index
+  out.valid := false.B
 
   switch(func3) {
     is(CSRRW) {
@@ -96,9 +94,9 @@ class CSRFU(implicit p: Parameters) extends FunctionalUnit with CSRConsts {
       wdata.bits := uop.ps1_value
       wdata.valid := true.B
       addr := csr
-      io.out.bits.pdst := uop.pdst
-      io.out.bits.pdst_value := first_ready_rdata
-      io.out.vaild := true.B
+      out.bits.pdst := uop.pdst
+      out.bits.pdst_value := first_ready_rdata
+      out.valid := true.B
     }
   }
 }

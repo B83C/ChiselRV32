@@ -242,6 +242,8 @@ class LDISSUE_LDPIPE_uop(implicit p: Parameters) extends uop {
 
 class ALU_WB_uop(implicit p: Parameters) extends uop {
     //wrieback to PRF
+    // TODO: Temporary
+    val instr = UInt((p.XLEN-7).W)
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val pdst_value = UInt(p.XLEN.W)
 
@@ -251,6 +253,8 @@ class ALU_WB_uop(implicit p: Parameters) extends uop {
 //乘除法器、Load pipeline、CSRU的WB uop和ALU的WB uop相同
 
 class BU_WB_uop(implicit p: Parameters) extends uop {
+    // TODO: Temporary
+    val instr = UInt((p.XLEN-7).W)
     val is_conditional = Bool() //needed to distinguish between conditional branches and unconditional branches, 1 represents conditional branch
 
     //writeback to ROB
