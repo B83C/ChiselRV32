@@ -3,24 +3,6 @@ package rsd_rv32.frontend
 import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
-import _root_.circt.stage.ChiselStage
-
-/*class BP_IFU_Interface(implicit p: Parameters) extends CustomBundle {
-    val PC_cur = Input(UInt(p.XLEN.W)) //当前IFU的PC值
-    val target_PC = Output(UInt(p.XLEN.W)) //预测的下个cycle取指的目标地址
-    val btb_hit = Output(Vec(p.CORE_WIDTH, Bool())) //1代表hit，0相反；将最年轻的命中BTB的置为1，其余为0
-    val branch_pred = Output(Bool()) //branch指令的BHT的预测结果；1代表跳转，0相反
-    val GHR = Output(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照
-}
-
-class BP_ROB_Interface(implicit p: Parameters) extends CustomBundle {
-    val PC = Input(UInt(p.XLEN.W)) //当前ROB的PC值
-    val instrType = Input(UInt(3.W)) //当前指令类型,该模块需要区分条件分支和无条件分支
-    val btb_hit = Input(Bool()) //该分支指令最初是否命中BTB
-    val actual_Taken = Input(Bool()) //实际是否taken
-    val GHR = Input(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照，使得更新BHT时能够生成正确的index
-    val actualTargetPC = Input(UInt(p.XLEN.W)) //目标地址
-} */
 
 class BP_IO (implicit p: Parameters) extends CustomBundle {
   // With IF
@@ -62,7 +44,7 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
   def btbTag(pc: UInt): UInt = pc(p.XLEN-1, log2Ceil(instBytes) + log2Ceil(btbSize))
 
   // 双发射下访问连续两条指令的地址
-  val pc0 = io.instr_addr  // 第一条指令PC
+  val pc0 = io.instr_addr            // 第一条指令PC
   val pc1 = io.instr_addr + instBytes.U  // 第二条指令PC
 
   // 分别计算两条指令的BTB索引和标签
@@ -72,179 +54,157 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
   val btbTag1 = btbTag(pc1)
 
   // 读取两条指令对应的BTB表项
-  val rawEntry0 = RegNext(btb.read(btbIdx0))
-  val rawEntry1 = RegNext(btb.read(btbIdx1))
+  val btbEntry0 = btb.read(btbIdx0)
+  val btbEntry1 = btb.read(btbIdx1)
+
+  // 流水线寄存器 - 记录BTB查询结果
+  val btbEntry0_reg = RegNext(btbEntry0)
+  val btbEntry1_reg = RegNext(btbEntry1)
+  val btbTag0_reg = RegNext(btbTag0)
+  val btbTag1_reg = RegNext(btbTag1)
 
   // 判断BTB是否命中
-  val btbHit0 = rawEntry0.valid && rawEntry0.tag === btbTag0
-  val btbHit1 = rawEntry1.valid && rawEntry1.tag === btbTag1
+  val btbHit0 = btbEntry0_reg.valid && btbEntry0_reg.tag === btbTag0_reg
+  val btbHit1 = btbEntry1_reg.valid && btbEntry1_reg.tag === btbTag1_reg
 
   // ---------------------------------------------------------------------------
-  // 2. Bi-Mode BHT 部分 - 改进：独立预测两条指令
+  // 2. 全局历史寄存器(GHR)
   // ---------------------------------------------------------------------------
-  // 全局历史寄存器
   val ghr = RegInit(0.U(p.GHR_WIDTH.W))
-  io.GHR := ghr  // 输出当前GHR值
+  // 输出当前GHR值作为预测时的快照
+  io.GHR := ghr
 
+  // ---------------------------------------------------------------------------
+  // 3. Bi-Mode BHT 部分
+  // ---------------------------------------------------------------------------
   // T/NT表和选择器
   val bimodeT = Mem(bimodeTableSize, UInt(counterBits.W))
   val bimodeNT = Mem(bimodeTableSize, UInt(counterBits.W))
   val choice = Mem(choiceTableSize, UInt(counterBits.W))
 
-  // 计算两条指令的索引
+  // 计算预测索引 - 第一条指令
   val histIdx0 = (pc0 ^ ghr)(log2Ceil(bimodeTableSize)-1, 0)
   val tagIdx0 = pc0(log2Ceil(choiceTableSize)-1, 0)
 
-  // 改进：第二条指令的GHR需要考虑第一条指令可能造成的更新
-  // 假设第一条指令预测为taken，则GHR向左移动1位，并在最低位填入1
-  val specGHR_taken = Cat(ghr(p.GHR_WIDTH-2, 0), 1.U(1.W))
-  // 假设第一条指令预测为not taken，则GHR向左移动1位，并在最低位填入0
-  val specGHR_notTaken = Cat(ghr(p.GHR_WIDTH-2, 0), 0.U(1.W))
+  // 读取预测表和选择器的值
+  val tValue0 = bimodeT.read(histIdx0)
+  val ntValue0 = bimodeNT.read(histIdx0)
+  val choiceValue0 = choice.read(tagIdx0)
 
-  // 使用两种可能的GHR状态分别预测第二条指令
-  val histIdx1_taken = (pc1 ^ specGHR_taken)(log2Ceil(bimodeTableSize)-1, 0)
-  val histIdx1_notTaken = (pc1 ^ specGHR_notTaken)(log2Ceil(bimodeTableSize)-1, 0)
+  // 流水线寄存器 - 预测器状态
+  val tValue0_reg = RegNext(tValue0)
+  val ntValue0_reg = RegNext(ntValue0)
+  val choiceValue0_reg = RegNext(choiceValue0)
+
+  // 预测第一条指令
+  val useNT0 = choiceValue0_reg(counterBits-1)
+  val predBit0 = Mux(useNT0, ntValue0_reg(counterBits-1), tValue0_reg(counterBits-1))
+
+  // 为第二条指令计算推测性GHR
+  val specGHR = Cat(ghr(p.GHR_WIDTH-2, 0), predBit0)
+
+  // 计算预测索引 - 第二条指令（使用推测性GHR）
+  val histIdx1 = (pc1 ^ specGHR)(log2Ceil(bimodeTableSize)-1, 0)
   val tagIdx1 = pc1(log2Ceil(choiceTableSize)-1, 0)
 
-  // 读取预测表和选择器的值 - 第一条指令
-  val cntT0 = RegNext(bimodeT.read(histIdx0))
-  val cntNT0 = RegNext(bimodeNT.read(histIdx0))
-  val sel0 = RegNext(choice.read(tagIdx0))
+  // 读取第二条指令的预测表和选择器值
+  val tValue1 = bimodeT.read(histIdx1)
+  val ntValue1 = bimodeNT.read(histIdx1)
+  val choiceValue1 = choice.read(tagIdx1)
 
-  // 读取预测表和选择器的值 - 第二条指令（两种可能的历史）
-  // 假设第一条指令taken
-  val cntT1_taken = bimodeT.read(histIdx1_taken)
-  val cntNT1_taken = bimodeNT.read(histIdx1_taken)
-  // 假设第一条指令not taken
-  val cntT1_notTaken = bimodeT.read(histIdx1_notTaken)
-  val cntNT1_notTaken = bimodeNT.read(histIdx1_notTaken)
+  // 流水线寄存器 - 第二条指令预测器状态
+  val tValue1_reg = RegNext(tValue1)
+  val ntValue1_reg = RegNext(ntValue1)
+  val choiceValue1_reg = RegNext(choiceValue1)
 
-  val sel1 = choice.read(tagIdx1)
-
-  // 进行Bi-Mode预测 - 第一条指令
-  val useNT0 = sel0(counterBits-1)
-  val predBit0 = Mux(useNT0, cntNT0(counterBits-1), cntT0(counterBits-1))
-
-  // 进行Bi-Mode预测 - 第二条指令（两种可能的历史）
-  val useNT1 = sel1(counterBits-1)
-  val predBit1_taken = Mux(useNT1, cntNT1_taken(counterBits-1), cntT1_taken(counterBits-1))
-  val predBit1_notTaken = Mux(useNT1, cntNT1_notTaken(counterBits-1), cntT1_notTaken(counterBits-1))
+  // 预测第二条指令
+  val useNT1 = choiceValue1_reg(counterBits-1)
+  val predBit1 = Mux(useNT1, ntValue1_reg(counterBits-1), tValue1_reg(counterBits-1))
 
   // ---------------------------------------------------------------------------
-  // 3. 最终预测逻辑 - 改进：独立预测两条指令
+  // 4. 最终预测逻辑
   // ---------------------------------------------------------------------------
-  // 计算两条指令的原始预测结果
-  val rawPred0 = Wire(Bool())  // 改进：记录原始预测结果
-  val pred0 = Wire(Bool())     // 最终预测结果
-  val fallThrough0 = Wire(Bool())  // 是否继续执行下一条指令
+  // 第一条指令的预测结果
+  val pred0 = Wire(Bool())
+  val pred0_valid = Wire(Bool())  // 标记第一条指令预测是否有效
 
-  // 设置默认值
-  rawPred0 := false.B
+  // 默认值
   pred0 := false.B
-  fallThrough0 := true.B
+  pred0_valid := false.B
 
   when (btbHit0) {
-    when (!rawEntry0.isConditional) {
+    pred0_valid := true.B
+    when (!btbEntry0_reg.isConditional) {
       // 无条件跳转：总是预测为跳转
-      rawPred0 := true.B
       pred0 := true.B
-      fallThrough0 := false.B
     }.otherwise {
       // 条件分支：根据方向预测器决定
-      rawPred0 := predBit0
       pred0 := predBit0
-      fallThrough0 := !predBit0  // 只有当预测不跳转时才继续执行下一条
     }
-  }.otherwise {
-    // BTB未命中：假设为顺序执行
-    rawPred0 := false.B
-    pred0 := false.B
-    fallThrough0 := true.B
   }
 
-  // 第二条指令的预测 - 改进：独立完成预测，然后根据第一条指令结果选择使用哪个
-  val rawPred1 = Wire(Bool())  // 改进：记录原始预测结果
+  // 第二条指令的预测结果
   val pred1 = Wire(Bool())
-  val fallThrough1 = Wire(Bool())
+  val pred1_valid = Wire(Bool())  // 标记第二条指令预测是否有效
 
-  // 设置默认值
-  rawPred1 := false.B
+  // 默认值
   pred1 := false.B
-  fallThrough1 := true.B
+  pred1_valid := false.B
 
-  // 无论第一条指令预测如何，都完成第二条指令的预测
-  when (btbHit1) {
-    when (!rawEntry1.isConditional) {
+  // 只有当第一条指令预测为不跳转时，才考虑第二条指令
+  when (!pred0 && btbHit1) {
+    pred1_valid := true.B
+    when (!btbEntry1_reg.isConditional) {
       // 无条件跳转：总是预测为跳转
-      rawPred1 := true.B
-      // 最终是否使用这个预测结果，取决于第一条指令
-      pred1 := true.B && fallThrough0
-      fallThrough1 := false.B
+      pred1 := true.B
     }.otherwise {
-      // 条件分支：根据第一条指令的预测结果选择使用哪个历史
-      val predBit1 = Mux(rawPred0, predBit1_taken, predBit1_notTaken)
-      rawPred1 := predBit1
-      // 最终是否使用这个预测结果，取决于第一条指令
-      pred1 := predBit1 && fallThrough0
-      fallThrough1 := !predBit1
+      // 条件分支：根据方向预测器决定
+      pred1 := predBit1
     }
-  }.otherwise {
-    // BTB未命中：假设为顺序执行
-    rawPred1 := false.B
-    pred1 := false.B
-    fallThrough1 := true.B
   }
 
-  // 计算最终跳转地址 - 改进：更明确的优先级处理
+  // 计算最终跳转目标
   val targetPC = Wire(UInt(p.XLEN.W))
   when (pred0) {
     // 第一条指令预测跳转，使用其目标地址
-    targetPC := rawEntry0.target
+    targetPC := btbEntry0_reg.target
   }.elsewhen (pred1) {
     // 第一条不跳转但第二条跳转，使用第二条的目标地址
-    targetPC := rawEntry1.target
+    targetPC := btbEntry1_reg.target
   }.otherwise {
     // 两条指令都不跳转，顺序取下两条指令
     targetPC := io.instr_addr + (instBytes * 2).U
   }
 
-  // BTB命中向量 - 改进：完整记录命中情况
+  // 输出BTB命中和分支预测结果
   val btbHitVec = Wire(Vec(p.CORE_WIDTH, Bool()))
   btbHitVec(0) := btbHit0
-  btbHitVec(1) := btbHit1  // 无条件记录第二条指令的BTB命中情况
+  btbHitVec(1) := btbHit1
 
-  // 分支预测结果向量 - 改进：同时记录原始预测和考虑控制流的最终预测
-  val rawBranchPredVec = Wire(Vec(p.CORE_WIDTH, Bool()))  // 原始预测结果
-  rawBranchPredVec(0) := rawPred0
-  rawBranchPredVec(1) := rawPred1
+  val branchPredVec = Wire(Vec(p.CORE_WIDTH, Bool()))
+  branchPredVec(0) := pred0 && pred0_valid
+  branchPredVec(1) := pred1 && pred1_valid
 
-  val branchPredVec = Wire(Vec(p.CORE_WIDTH, Bool()))  // 最终预测结果
-  branchPredVec(0) := pred0
-  branchPredVec(1) := pred1  // 已经在计算pred1时考虑了fallThrough0
-
-  // 改进：更精确的GHR更新逻辑
+  // 更新推测性GHR
   val nextGHR = Wire(UInt(p.GHR_WIDTH.W))
-
-  // 严格按照程序顺序更新GHR，但考虑双发射的两种情况
   when (pred0) {
-    // 第一条指令预测跳转，GHR移入1位，忽略第二条指令（因为不会执行）
+    // 第一条指令预测跳转，GHR向左移入1
     nextGHR := Cat(ghr(p.GHR_WIDTH-2, 0), 1.U(1.W))
   }.elsewhen (pred1) {
-    // 第一条不跳转(移入0)，第二条跳转(移入1)
+    // 第一条不跳转(0)，第二条跳转(1)
     nextGHR := Cat(ghr(p.GHR_WIDTH-3, 0), 0.U(1.W), 1.U(1.W))
   }.otherwise {
     // 两条指令都不跳转，移入两个0
     nextGHR := Cat(ghr(p.GHR_WIDTH-3, 0), 0.U(1.W), 0.U(1.W))
   }
 
+  // 更新GHR
+  ghr := nextGHR
+
   // 流水线寄存器
   val targetPCReg = RegNext(targetPC)
   val btbHitVecReg = RegNext(btbHitVec)
   val branchPredVecReg = RegNext(branchPredVec)
-  val nextGHRReg = RegNext(nextGHR)
-
-  // 更新推测性GHR
-  ghr := nextGHRReg
 
   // 设置输出
   io.target_PC := targetPCReg
@@ -252,8 +212,9 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
   io.branch_pred := branchPredVecReg
 
   // ---------------------------------------------------------------------------
-  // 4. 更新逻辑：处理ROB提交的分支结果
+  // 5. 更新逻辑：处理ROB提交的分支结果
   // ---------------------------------------------------------------------------
+  // 处理每个提交的指令
   for (i <- 0 until p.CORE_WIDTH) {
     when (io.rob_commitsignal(i).valid) {
       val rc = io.rob_commitsignal(i).bits
@@ -275,31 +236,22 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
         // 获取预测时的GHR快照
         val ghr_snapshot = MuxCase(ghr, Seq(
           (rc.rob_type === ROBType.Branch) -> rc.as_Branch.GHR,
-          // Jump指令没有存储GHR快照，使用当前GHR作为近似值
-          (rc.rob_type === ROBType.Jump) -> ghr  // 简化处理
+          (rc.rob_type === ROBType.Jump) -> ghr  // Jump指令简化处理
         ))
 
-        // 获取BTB命中信息
-        //val btb_hit = MuxCase(false.B, Seq(
-        //(rc.rob_type === ROBType.Branch) -> rc.as_Branch.btb_hit,
-        //(rc.rob_type === ROBType.Jump) -> rc.as_Jump.btb_hit
-        //))
-
-        // 更新BTB - 改进：始终更新BTB
+        // 更新BTB
         val btbIdx = btbIndex(pc)
         val btbtag = btbTag(pc)
 
         val newBtbEntry = Wire(new BTBEntry)
         newBtbEntry.valid := true.B
         newBtbEntry.target := target
-        // 条件分支的isConditional为true，Jump指令的isConditional为false
         newBtbEntry.isConditional := rc.rob_type === ROBType.Branch
         newBtbEntry.tag := btbtag
 
-        // BTB更新策略：对所有分支类型都更新BTB
         btb.write(btbIdx, newBtbEntry)
 
-        // 更新Bi-Mode预测器 - 只对条件分支更新模式预测器
+        // 只对条件分支更新Bi-Mode预测器
         when (rc.rob_type === ROBType.Branch) {
           // 计算与预测时相同的索引
           val histIdx = (pc ^ ghr_snapshot)(log2Ceil(bimodeTableSize)-1, 0)
@@ -317,57 +269,52 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
           val tPred = tValue(counterBits-1)
           val ntPred = ntValue(counterBits-1)
 
-          /*        // 根据实际跳转结果更新对应的预测表(需要修改)
-                    when (usedNT) {
-                      // 如果选择了NT表，则更新NT表
-                      bimodeNT.write(histIdx, satUpdate(ntValue, taken===(0.U)))
-                    }.otherwise {
-                      // 否则更新T表
-                      bimodeT.write(histIdx, satUpdate(tValue, taken===(0.U)))
-                    }
-          */
-          // 根据PDF中的Bi-Mode算法更新选择器
-          // 选择器的更新策略是：当预测正确时，强化当前选择；当预测错误时，减弱当前选择
-          val predUsedTable = Mux(usedNT, ntPred, tPred)  // 获取使用的表的预测结果
-          val predCorrect = predUsedTable === taken        // 判断预测是否正确
+          // 计算预测结果
+          val predUsedTable = Mux(usedNT, ntPred, tPred)
+          val predCorrect = predUsedTable === taken
 
-          // 更新选择器
-          val newChoice = Mux(predCorrect,
-            // 如果预测正确，强化当前选择（如果当前选NT表，则选择器向NT方向移动；如果当前选T表，则选择器向T方向移动）
-            satUpdate(chValue, usedNT),
-            // 如果预测错误，减弱当前选择（如果当前选NT表，则选择器向T方向移动；如果当前选T表，则选择器向NT方向移动）
-            satUpdate(chValue, !usedNT)
+          // 更新选择器 - 修正逻辑
+          val newChoice = Mux(tPred === ntPred,
+            // 如果T表和NT表预测相同，保持选择器不变
+            chValue,
+            Mux(predCorrect,
+              // 如果预测正确，强化当前选择
+              satUpdate(chValue, usedNT),
+              // 如果预测错误，减弱当前选择
+              satUpdate(chValue, !usedNT)
+            )
           )
-
           choice.write(tagIdx, newChoice)
-          // 根据实际跳转结果更新对应的预测表
-          when (newChoice(counterBits-1).asBool) {
-            // 如果以后选择T表，则更新T表
-            bimodeT.write(histIdx, satUpdate(tValue, taken))
-          }.otherwise {
-            // 否则更新NT表
-            bimodeNT.write(histIdx, satUpdate(ntValue, taken))
-          }
+
+          // 更新预测表 - T表总是被训练为预测跳转，NT表总是被训练为预测不跳转
+          bimodeT.write(histIdx, satUpdate(tValue, taken))
+          bimodeNT.write(histIdx, satUpdate(ntValue, !taken))
         }
-        // 如果预测错误，恢复GHR - 对所有分支类型（包括Jump）处理
+
+        // 如果预测错误，恢复GHR
         when (rc.mispred) {
-          // 根据提交的指令位置和实际结果重建GHR
-          val instr_idx = i.U  // 当前指令在提交宽度中的索引
+          // 计算正确的GHR更新
+          // 注意：我们需要考虑提交顺序和指令的实际结果
 
-          // 通过指令提交位置计算需要移位的位数
-          val shift_amt = instr_idx + 1.U
+          // 首先考虑当前指令在提交窗口中的位置
+          val shift_amt = i.U + 1.U
 
-          // 根据实际结果恢复GHR
+          // 计算需要保留的高位和需要插入的低位
+          val high_bits = ghr >> shift_amt
+
+          // 根据实际的跳转结果更新低位
           when (shift_amt >= p.GHR_WIDTH.U) {
-            // 如果移位量超过GHR宽度，则只保留最新的结果
-            ghr := taken.asUInt
+            // 如果移位量超过GHR宽度，则整个GHR都是推测性的
+            ghr := Mux(taken, 1.U, 0.U)
           }.otherwise {
-            // 否则按位置插入实际结果
-            val mask = (1.U << shift_amt).asUInt - 1.U  // 生成位宽为 shift_amt 的掩码
+            // 左移高位，并将实际结果插入最低位
+/*            val mask = (1.U << shift_amt).asUInt - 1.U  // 生成位宽为 shift_amt 的掩码
             val preserved_bits = ghr >> shift_amt
-//            val new_bits = Cat(Fill((shift_amt - 1.U).asUInt.litValue.toInt, 0.U(1.W)), taken.asUInt)
             val new_bits = taken.asUInt & mask    // 保留最低位，高位清零
-            ghr := (preserved_bits << shift_amt).asUInt | new_bits
+            ghr := (preserved_bits << shift_amt).asUInt | new_bits*/
+            val new_ghr = (high_bits << shift_amt).asUInt |
+              Mux(taken, (1.U << (shift_amt - 1.U)), 0.U).asUInt
+            ghr := new_ghr
           }
         }
       }
@@ -377,14 +324,14 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
   // ---------------------------------------------------------------------------
   // 饱和计数器更新函数
   // ---------------------------------------------------------------------------
-  def satUpdate(cur: UInt, taken: Bool): UInt = {
+  def satUpdate(cur: UInt, increment: Bool): UInt = {
     val max_val = ((1 << counterBits) - 1).U
     val min_val = 0.U
 
-    Mux(taken,
-      // 如果跳转: 增加计数器，但不超过最大值
+    Mux(increment,
+      // 如果为真则增加，但不超过最大值
       Mux(cur === max_val, max_val, cur + 1.U),
-      // 如果不跳转: 减少计数器，但不低于最小值
+      // 如果为假则减少，但不低于最小值
       Mux(cur === min_val, min_val, cur - 1.U)
     )
   }
@@ -392,11 +339,11 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
   // 初始化内存
   when ((System.getProperty("RANDOMIZE_MEM_INIT") != null).asBool) {
     for (i <- 0 until bimodeTableSize) {
-      bimodeT(i) := 2.U(counterBits.W) // T表默认初始化为2'b11 (强取)
-      bimodeNT(i) := 2.U(counterBits.W) // NT表默认初始化为2'b10 (弱不取)
+      bimodeT(i) := 2.U(counterBits.W)  // T表初始化为2'b10 (弱预测跳转)
+      bimodeNT(i) := 1.U(counterBits.W) // NT表初始化为2'b01 (弱预测不跳转)
     }
     for (i <- 0 until choiceTableSize) {
-      choice(i) := 2.U(counterBits.W) // 选择器默认为2'b10 (弱选择NT表)
+      choice(i) := 2.U(counterBits.W)   // 选择器初始化为2'b10 (弱选择NT表)
     }
   }
 }
