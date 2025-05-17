@@ -69,6 +69,7 @@ class ld_iq_select_logic(implicit p: Parameters) extends CustomModule{
 
 class issue2ld(implicit p: Parameters) extends CustomModule {
     val io = IO(new Bundle {
+        val flush = Input(Bool())
         val if_valid = Input(Bool()) //指令是否有效
         val ld_ready = Input(Bool())
         val ps_value = Input(UInt(p.XLEN.W)) //操作数1
@@ -77,8 +78,14 @@ class issue2ld(implicit p: Parameters) extends CustomModule {
         //val stpipe_ready = Input(Bool())
     })
     val uop = RegInit(Valid(new LDISSUE_LDPIPE_uop()), 0.U.asTypeOf(Valid(new LDISSUE_LDPIPE_uop())))
-
-    when(io.ld_ready){
+    when(io.flush){
+        uop.valid := false.B
+        uop.bits.instr := 0.U
+        uop.bits.pdst := 0.U
+        uop.bits.ps1_value := 0.U
+        uop.bits.stq_tail := 0.U
+        uop.bits.rob_index := 0.U
+    }.elsewhen(io.ld_ready){
         uop.valid := io.if_valid
         uop.bits.instr := io.dis_issue_uop.instr
         uop.bits.pdst := io.dis_issue_uop.pdst
@@ -251,6 +258,11 @@ class ld_issue_queue(implicit p: Parameters) extends CustomModule {
     }
     issue_to_ld.io.dis_issue_uop := payload(select_index.bits)
     issue_to_ld.io.ps_value := io.prf_value
-    io.load_uop.bits := issue_to_ld.io.load_uop.bits
-    io.load_uop.valid := issue_to_ld.io.load_uop.valid
+    when (flush){
+        io.load_uop.bits := 0.U
+        io.load_uop.valid := false.B
+    }.otherwise{
+        io.load_uop.bits := issue_to_ld.io.load_uop.bits
+        io.load_uop.valid := issue_to_ld.io.load_uop.valid
+    }
 }
