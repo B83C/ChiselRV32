@@ -152,7 +152,7 @@ class exu_iq_select_logic(implicit p: Parameters) extends CustomModule {
 //exu_issue->exu的级间寄存器
 class issue2exu(implicit p: Parameters) extends CustomModule {
     val io = IO(new Bundle {
-        val if_flush = Input(Bool())
+        val flush = Input(Bool())
         val if_valid = Input(Vec(p.CORE_WIDTH, Bool())) //指令是否有效
         val ps1_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数1
         val ps2_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数2
@@ -161,7 +161,7 @@ class issue2exu(implicit p: Parameters) extends CustomModule {
     })
     val uop = Reg(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())))
     for (i <-0 until p.CORE_WIDTH){
-        uop(i).valid := io.if_valid(i) && io.if_flush
+        uop(i).valid := io.if_valid(i) && io.flush
         uop(i).bits.instr := io.dis_issue_uop(i).instr
         uop(i).bits.instr_addr := io.dis_issue_uop(i).instr_addr
         uop(i).bits.instr_type := io.dis_issue_uop(i).instr_type
@@ -216,6 +216,8 @@ class exu_issue_queue(implicit p: Parameters) extends CustomModule {
     io.prf_raddr1 := 0.U.asTypeOf(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W)))
     io.prf_raddr2 := 0.U.asTypeOf(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W)))
 
+    val flush = Wire(Bool())
+    flush := io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
     when(io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred){
         for (i <- 0 until p.EXUISSUE_DEPTH){
             issue_queue(i).busy := false.B
@@ -347,7 +349,7 @@ class exu_issue_queue(implicit p: Parameters) extends CustomModule {
         }
         //发射命令到级间寄存器
         val issue_to_exu = Module(new issue2exu())
-        issue_to_exu.io.if_flush := flush
+        issue_to_exu.io.flush := flush
         for (i <- 0 until 2){
             when (select_index(i).valid){
                 issue_to_exu.io.if_valid(i) := true.B

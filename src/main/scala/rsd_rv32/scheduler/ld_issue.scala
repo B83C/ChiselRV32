@@ -248,6 +248,7 @@ class ld_issue_queue(implicit p: Parameters) extends CustomModule {
     //发射命令到级间寄存器
     val issue_to_ld = Module(new issue2ld())
     issue_to_ld.io.ld_ready := io.load_uop.ready
+    issue_to_ld.io.flush := flush
     when (!flush && select_index.valid){
         issue_to_ld.io.if_valid := true.B
         issue_queue(select_index.bits).busy := false.B
@@ -259,7 +260,7 @@ class ld_issue_queue(implicit p: Parameters) extends CustomModule {
     issue_to_ld.io.dis_issue_uop := payload(select_index.bits)
     issue_to_ld.io.ps_value := io.prf_value
     when (flush){
-        io.load_uop.bits := 0.U
+        io.load_uop.bits := 0.U.asTypeOf(new LDISSUE_LDPIPE_uop())
         io.load_uop.valid := false.B
     }.otherwise{
         io.load_uop.bits := issue_to_ld.io.load_uop.bits
