@@ -11,6 +11,7 @@ class PRF_IO(implicit p: Parameters) extends CustomBundle{
   val bu_wb_uop = Input(Vec(p.BU_NUM, Valid(new BU_WB_uop())))
   val mul_wb_uop = Input(Vec(p.MUL_NUM, Valid(new ALU_WB_uop())))
   val divrem_wb_uop = Input(Vec(p.DIV_NUM, Valid(new ALU_WB_uop())))
+  val ldu_wb_uop = Input(Vec(p.LDU_NUM, Valid(new ALU_WB_uop())))
 
   //exu_issue的读地址与寄存器值
   val exu_issue_r_addr1 = Input(Vec(2, UInt(log2Ceil(p.PRF_DEPTH).W)))
@@ -28,7 +29,7 @@ class PRF_IO(implicit p: Parameters) extends CustomBundle{
 
   //接收Rename Unit的AMT用于更新prf_valid
   val amt = Input(Vec(32,UInt(log2Ceil(p.PRF_DEPTH).W)))
-  val rob_commitsignal = Vec(p.CORE_WIDTH, Valid(new ROBContent()))
+  val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Valid(new ROBContent())))
   //prf_valid信号用于表示哪些寄存器已经就绪
   val prf_valid = Output(Vec(p.PRF_DEPTH, Bool()))
 }
@@ -48,6 +49,7 @@ class PRF_Value(implicit p: Parameters) extends Module {
     val bu_wb_uop = Input(Vec(p.BU_NUM, Valid(new BU_WB_uop())))
     val mul_wb_uop = Input(Vec(p.MUL_NUM, Valid(new ALU_WB_uop())))
     val divrem_wb_uop = Input(Vec(p.DIV_NUM, Valid(new ALU_WB_uop())))
+    val ldu_wb_uop = Input(Vec(p.LDU_NUM, Valid(new ALU_WB_uop())))
 
     //exu_issue的读地址与寄存器值
     val exu_issue_r_addr1 = Input(Vec(2, UInt(log2Ceil(p.PRF_DEPTH).W)))
@@ -69,12 +71,70 @@ class PRF_Value(implicit p: Parameters) extends Module {
 
 class PRF_Valid(implicit p: Parameters) extends Module {
   val io = IO(new Bundle {
+    val alu_wb_uop = Input(Vec(p.ALU_NUM, Valid(new ALU_WB_uop())))
+    val bu_wb_uop = Input(Vec(p.BU_NUM, Valid(new BU_WB_uop())))
+    val mul_wb_uop = Input(Vec(p.MUL_NUM, Valid(new ALU_WB_uop())))
+    val divrem_wb_uop = Input(Vec(p.DIV_NUM, Valid(new ALU_WB_uop())))
+    val ldu_wb_uop = Input(Vec(p.LDU_NUM, Valid(new ALU_WB_uop())))
     //接收Rename Unit的AMT用于更新prf_valid
     val amt = Input(Vec(32,UInt(log2Ceil(p.PRF_DEPTH).W)))
-    val rob_commitsignal = Vec(p.CORE_WIDTH, Valid(new ROBContent()))
+    val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Valid(new ROBContent())))
     //prf_valid信号用于表示哪些寄存器已经就绪
     val prf_valid = Output(Vec(p.PRF_DEPTH, Bool()))
   })
 
   //your code here
+  val prf_valid = RegInit(VecInit((0 until p.PRF_DEPTH).map(i => if(i == 0) true.B else false.B)))
+  io.prf_valid := prf_valid
+
+  val flush = Wire(Bool())
+  flush := io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
+
+
+  //0置1的逻辑
+  when(!flush){
+    for(i <- 0 until p.ALU_NUM){
+      when(io.alu_wb_uop(i).valid){
+        prf_valid(io.alu_wb_uop(i).bits.pdst) := true.B
+      }
+    }
+    for(i <- 0 until p.BU_NUM){
+      when(io.bu_wb_uop(i).valid && !io.bu_wb_uop(i).bits.is_conditional){
+        prf_valid(io.bu_wb_uop(i).bits.pdst) := true.B
+      }
+    }
+    for(i <- 0 until p.MUL_NUM){
+      when(io.mul_wb_uop(i).valid){
+        prf_valid(io.mul_wb_uop(i).bits.pdst) := true.B
+      }
+    }
+    for(i <- 0 until p.DIV_NUM){
+      when(io.divrem_wb_uop(i).valid){
+        prf_valid(io.divrem_wb_uop(i).bits.pdst) := true.B
+      }
+    }
+    for(i <- 0 until p.LDU_NUM){
+      when(io.ldu_wb_uop(i).valid){
+        prf_valid(io.ldu_wb_uop(i).bits.pdst) := true.B
+      }
+    }
+  }
+
+  //1置0的逻辑
+  def hasPd(rob_type : ROBType.Type, rd : UInt) : Bool = {
+    (rob_type === ROBType.Arithmetic || rob_type === ROBType.Jump || rob_type === ROBType.CSR) && (rd =/= 0.U)
+  }
+
+  
+  //flush的逻辑
+  def in_amt() 
+
+  when(flush){
+    for(i <- 0 until 32){
+      prf_valid(io.amt(i)) := 
+    }
+  }
+  for(i <- 0 until p.CORE_WIDTH){
+    
+  }
 }
