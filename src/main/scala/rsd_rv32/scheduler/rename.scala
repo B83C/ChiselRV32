@@ -66,14 +66,26 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
     (instr_type === InstrType.ALU || instr_type === InstrType.Jump || instr_type === InstrType.LD || instr_type === InstrType.CSR || instr_type === InstrType.MUL || instr_type === InstrType.DIV_REM) && (rd =/= 0.U)
   }
 
+  def hasPd(rob_type : ROBType.Type, rd : UInt) : Bool = {
+    (rob_type === ROBType.Arithmetic || rob_type === ROBType.Jump || rob_type === ROBType.CSR) && (rd =/= 0.U)
+  }
+
+  //flush逻辑
   when(flush){
-    head_next := freelist_tail
+    head_next := tail_next
     for(i <- 0 until 32){
       rmt_valid(i) := false.B
     }
     freelist_empty := false.B
+    
+    when(hasPd(io.rob_commitsignal(0).bits.rob_type, io.rob_commitsignal(0).bits.payload(4,0))){
+      amt(io.rob_commitsignal(0).bits.payload(4,0)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1, 5)
+      freelist(freelist_tail) := amt(io.rob_commitsignal(0).bits.payload(4,0))
+      tail_next := Mux(freelist_tail === (p.PRF_DEPTH - 32 - 1).U, 0.U, freelist_tail + 1.U)
+    }
   }
 
+  //向下一级递送uop
   when(!flush){
     switch(valid_bits){
       is("b10".U){
@@ -357,10 +369,8 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
     }
   }
 
-  def hasPd(rob_type : ROBType.Type, rd : UInt) : Bool = {
-    (rob_type === ROBType.Arithmetic || rob_type === ROBType.Jump || rob_type === ROBType.CSR) && (rd =/= 0.U)
-  }
-
+  
+  //非flush时，更新amt、freelist
   when(!flush){
     switch(rob_valid_bits){
       is("b10".U){
@@ -403,7 +413,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
     }
   }
 
-  //freelist_empty的逻辑
+  //非flush时，freelist_empty的逻辑
   when(!flush){
     freelist_empty := Mux(head_next === tail_next, empty_next, false.B)
   }
