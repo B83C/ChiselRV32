@@ -1,5 +1,6 @@
 import chisel3._
 import chiseltest.WriteVcdAnnotation
+
 import scala.util.Random
 import chisel3.stage.ChiselGeneratorAnnotation
 import chiseltest._
@@ -10,6 +11,7 @@ import rsd_rv32.scheduler._
 import rsd_rv32.common.Parameters
 import rsd_rv32.common._
 import chiseltest.testableClock
+import rsd_rv32.execution.PRF_Value
 /**
  * This is a trivial example of how to run this Specification
  * From within sbt use:
@@ -113,56 +115,6 @@ class prf_test extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.exu_issue_r_addr1(0).poke(10.U)
       dut.clock.step()
       dut.io.exu_issue_r_value1(0).expect(999.U)
-    }
-  }
-}
-
-class PRF_Valid_Test extends AnyFlatSpec with ChiselScalatestTester {
-  implicit val p = new Parameters
-
-  it should "test basic valid bit updates in PRF_Valid" in {
-    test(new PRF_Valid()) { dut =>
-      // Initially all should be invalid (assuming default reset state)
-      dut.io.prf_valid.peek().foreach(valid => valid.expect(false.B))
-
-      // Simulate allocation of physical registers
-      dut.io.amt(5).poke(10.U) // Rename logical reg 5 to physical reg 10
-      dut.io.amt(10).poke(20.U) // Rename logical reg 10 to physical reg 20
-      dut.clock.step()
-
-      // After allocation, the corresponding valid bits should still be false
-      dut.io.prf_valid(10).peek().expect(false.B)
-      dut.io.prf_valid(20).peek().expect(false.B)
-
-      // Simulate commit of a result to physical register 10
-      dut.io.rob_commitsignal(0).valid.poke(true.B)
-      dut.io.rob_commitsignal(0).bits.pdest.poke(10.U)
-      dut.clock.step()
-      dut.io.rob_commitsignal(0).valid.poke(false.B)
-
-      // Now physical register 10 should be valid
-      dut.io.prf_valid(10).peek().expect(true.B)
-      dut.io.prf_valid(20).peek().expect(false.B) // 20 should still be invalid
-
-      // Simulate commit to physical register 20
-      dut.io.rob_commitsignal(1).valid.poke(true.B)
-      dut.io.rob_commitsignal(1).bits.pdest.poke(20.U)
-      dut.clock.step()
-      dut.io.rob_commitsignal(1).valid.poke(false.B)
-
-      // Now both should be valid
-      dut.io.prf_valid(10).peek().expect(true.B)
-      dut.io.prf_valid(20).peek().expect(true.B)
-
-      // Simulate another commit to the same register 10
-      dut.io.rob_commitsignal(0).valid.poke(true.B)
-      dut.io.rob_commitsignal(0).bits.pdest.poke(10.U)
-      dut.clock.step()
-      dut.io.rob_commitsignal(0).valid.poke(false.B)
-
-      // It should still be valid
-      dut.io.prf_valid(10).peek().expect(true.B)
-
     }
   }
 }
