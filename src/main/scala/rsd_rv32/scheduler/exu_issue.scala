@@ -159,7 +159,7 @@ class issue2exu(implicit p: Parameters) extends CustomModule {
         val dis_issue_uop = Input(Vec(p.CORE_WIDTH, new DISPATCH_EXUISSUE_uop())) //来自Dispatch的uop
         val execute_uop = Output(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop()))) //发往EXU的uop
     })
-    val uop = Reg(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())))
+    val uop = RegInit(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())), 0.U.asTypeOf(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop()))))
     for (i <-0 until p.CORE_WIDTH){
         uop(i).valid := io.if_valid(i) && io.flush
         uop(i).bits.instr := io.dis_issue_uop(i).instr
@@ -218,7 +218,7 @@ class exu_issue_queue(implicit p: Parameters) extends CustomModule {
 
     val flush = Wire(Bool())
     flush := io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
-    when(io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred){
+    when(flush){
         for (i <- 0 until p.EXUISSUE_DEPTH){
             issue_queue(i).busy := false.B
             issue_queue(i).ready1 := false.B
@@ -320,52 +320,52 @@ class exu_issue_queue(implicit p: Parameters) extends CustomModule {
             }
         }
 
-        //Select Logic
-        val select = Module(new exu_iq_select_logic())
-        val select_index = Wire(Vec(2, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))))
-        select.io.mul_ready := io.mul_ready
-        select.io.div_ready := io.div_ready
-        select.io.issue_queue := issue_queue
-        select_index := select.io.sel_index
-        //读PRF
-        for (i <- 0 until 2){
-            when (select_index(i).valid){
-                io.prf_raddr1(i) := issue_queue(select_index(i).bits).ps1
-                io.prf_raddr2(i) := issue_queue(select_index(i).bits).ps2
-            }.otherwise{
-                io.prf_raddr1(i) := 0.U
-                io.prf_raddr2(i) := 0.U
-            }
-        }
-        //更新IQ Freelist的信号
-        for (i <- 0 until 2){
-            when (select_index(i).valid){
-                io.exu_issued_index(i).valid := true.B
-                io.exu_issued_index(i).bits := select_index(i).bits
-            }.otherwise{
-                io.exu_issued_index(i).valid := false.B
-                io.exu_issued_index(i).bits := 0.U
-            }
-        }
-        //发射命令到级间寄存器
-        val issue_to_exu = Module(new issue2exu())
-        issue_to_exu.io.flush := flush
-        for (i <- 0 until 2){
-            when (select_index(i).valid){
-                issue_to_exu.io.if_valid(i) := true.B
-                issue_queue(select_index(i).bits).busy := false.B
-                issue_queue(select_index(i).bits).ready1 := false.B
-                issue_queue(select_index(i).bits).ready2 := false.B
-            }.otherwise{
-                issue_to_exu.io.if_valid(i) := false.B
-            }
-            issue_to_exu.io.dis_issue_uop(i) := payload(select_index(i).bits)
-            issue_to_exu.io.ps1_value(i) := io.ps1_value(i)
-            issue_to_exu.io.ps2_value(i) := io.ps2_value(i)
-            io.execute_uop(i) := issue_to_exu.io.execute_uop(i)
 
-
+    }
+    //Select Logic
+    val select = Module(new exu_iq_select_logic())
+    val select_index = Wire(Vec(2, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))))
+    select.io.mul_ready := io.mul_ready
+    select.io.div_ready := io.div_ready
+    select.io.issue_queue := issue_queue
+    select_index := select.io.sel_index
+    //读PRF
+    for (i <- 0 until 2){
+        when (select_index(i).valid){
+            io.prf_raddr1(i) := issue_queue(select_index(i).bits).ps1
+            io.prf_raddr2(i) := issue_queue(select_index(i).bits).ps2
+        }.otherwise{
+            io.prf_raddr1(i) := 0.U
+            io.prf_raddr2(i) := 0.U
         }
     }
+    //更新IQ Freelist的信号
+    for (i <- 0 until 2){
+        when (!flush && select_index(i).valid){
+            io.exu_issued_index(i).valid := true.B
+            io.exu_issued_index(i).bits := select_index(i).bits
+        }.otherwise{
+            io.exu_issued_index(i).valid := false.B
+            io.exu_issued_index(i).bits := 0.U
+        }
+    }
+    //发射命令到级间寄存器
+    val issue_to_exu = Module(new issue2exu())
+    issue_to_exu.io.flush := flush
+    for (i <- 0 until 2){
+        when (!flush && select_index(i).valid){
+            issue_to_exu.io.if_valid(i) := true.B
+            issue_queue(select_index(i).bits).busy := false.B
+            issue_queue(select_index(i).bits).ready1 := false.B
+            issue_queue(select_index(i).bits).ready2 := false.B
+        }.otherwise{
+            issue_to_exu.io.if_valid(i) := false.B
+        }
+        issue_to_exu.io.dis_issue_uop(i) := payload(select_index(i).bits)
+        issue_to_exu.io.ps1_value(i) := io.ps1_value(i)
+        issue_to_exu.io.ps2_value(i) := io.ps2_value(i)
+        io.execute_uop(i) := issue_to_exu.io.execute_uop(i)
 
+
+    }
 }
