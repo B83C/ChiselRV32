@@ -52,15 +52,17 @@ class PipelineReg(val width: Int) extends CustomModule {
     val data_out = Output(UInt(width.W))
     val reset = Input(Bool())
   })
-  val reg = withReset(reset){
-    RegInit(0.U(width.W))
-  }
+  val reg = RegInit(0.U(width.W))
 
-  when(io.stall_in) {
+
+  when(io.reset) {
+    reg := 0.U
+  }.elsewhen(!io.reset && io.stall_in) {
     reg := reg
-  }.otherwise {
+  }otherwise{
     reg := io.data_in
   }
+
 
   io.data_out := reg
 }
@@ -110,24 +112,10 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   })
   val need_flush = Wire(Bool())
   need_flush := io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
-  //stage1地址计算
-  val instr = Wire(UInt((p.XLEN - 7).W))
-  val ps1_value = Wire(UInt(p.XLEN.W))
-  val stage1_pipevalid = Wire(Bool())
-
-  instr := io.load_uop.bits.instr
-  ps1_value := io.load_uop.bits.ps1_value
-  stage1_pipevalid := io.load_uop.valid
-
-
-  val imm_temp = instr(24, 13)
-  val stage1_imm = Cat(Fill(20,imm_temp(11)),imm_temp)
-  val stage1_func3 = instr(7, 5)
-
-  val stage1_ldAddr = ps1_value + stage1_imm
+  val stage1_pipevalid = io.load_uop.valid
   val stall = Wire(Bool())
 
-
+  //stage1地址计算
   //stage1-stage2之间的PipelineReg
   val Stage1ToStage2_ldAddr_reg = Module(new PipelineReg(p.XLEN))
   val Stage1ToStage2_func3_reg = Module(new PipelineReg(3))
@@ -136,6 +124,20 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   val Stage1ToStage2_robidx_reg = Module(new PipelineReg(log2Ceil(p.ROB_DEPTH)))
   val Stage1ToStage2_pdst_reg  = Module(new PipelineReg(log2Ceil(p.PRF_DEPTH)))
 
+
+
+  val instr = io.load_uop.bits.instr
+  val ps1_value = io.load_uop.bits.ps1_value
+
+
+  val imm_temp = instr(24, 13)
+  val stage1_imm = Cat(Fill(20,imm_temp(11)),imm_temp)
+  val stage1_func3 = instr(7, 5)
+
+  val stage1_ldAddr = ps1_value + stage1_imm
+
+
+
   Stage1ToStage2_ldAddr_reg.io.data_in := stage1_ldAddr
   Stage1ToStage2_func3_reg.io.data_in := stage1_func3
   Stage1ToStage2_pipevalid_reg.io.data_in := stage1_pipevalid.asUInt
@@ -143,12 +145,13 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   Stage1ToStage2_robidx_reg.io.data_in := io.load_uop.bits.rob_index
   Stage1ToStage2_pdst_reg.io.data_in := io.load_uop.bits.pdst
 
+
   Stage1ToStage2_ldAddr_reg.io.stall_in := stall
   Stage1ToStage2_func3_reg.io.stall_in  := stall
-  Stage1ToStage2_pipevalid_reg.io.stall_in := stall
   Stage1ToStage2_stqtail_reg.io.stall_in := stall
   Stage1ToStage2_robidx_reg.io.stall_in := stall
   Stage1ToStage2_pdst_reg.io.stall_in := stall
+  Stage1ToStage2_pipevalid_reg.io.stall_in := stall
 
   Stage1ToStage2_ldAddr_reg.io.reset := need_flush
   Stage1ToStage2_func3_reg.io.reset := need_flush
@@ -172,7 +175,7 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   io.func3    :=  stage2_func3
   io.stq_tail := stage2_stqtail
 
-  io.addr_search_stq.valid := stage2_pipevalid && (!need_flush)
+  io.addr_search_stq.valid := stage2_pipevalid && (!need_flush) && (!stall)
 
   //STQ forwarding传回的结果
   val stage2_data_bitvalid = io.data_out_stq.bit_valid
@@ -188,9 +191,11 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
     //我们期望的bitvalid值，与stq传出的bitvalid值进行比较，决定后续是否需要向Abter发起访存请求
 
   //只有当发起请求，但请求尚未被RRArbiter接收的时候发生stall
-  stall := false.B
+
   when(!io.ldReq.ready && io.ldReq.valid){
     stall := true.B
+  }.otherwise{
+    stall := false.B
   }
 
   //向RRArbiter发起写入申请
@@ -200,6 +205,8 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   io.ldReq.bits.write_en := false.B
   io.ldReq.valid := stage2_pipevalid && (!need_flush) && (!expected)
 
+  printf(p"addr=${Hexadecimal(stage2_ldAddr)} data=${Hexadecimal(stage2_data_out_stq)} bitvalid=${Hexadecimal(stage2_data_bitvalid)}\n")
+  printf(p"ldReq.valid=${Binary(io.ldReq.valid)} stall=${Binary(stall)}\n")
   io.load_uop.ready := (!need_flush) && (!stall)
 
 
@@ -262,6 +269,7 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
     }
   }
 
+  printf(p"finaldata=${Hexadecimal(final_data)}\n")
 //stage3-stage4的PipelineReg
   val Stage3ToStage4_data_reg = Module(new PipelineReg(p.XLEN))
   val Stage3ToStage4_pdst_reg = Module(new PipelineReg(log2Ceil(p.PRF_DEPTH)))
@@ -291,7 +299,9 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   io.ldu_wb_uop.bits.pdst := Stage3ToStage4_pdst_reg.io.data_out
   io.ldu_wb_uop.bits.pdst_value := Stage3ToStage4_data_reg.io.data_out
 
-  
+  printf(p"valid=${Binary(io.ldu_wb_uop.valid)} robidx=${Hexadecimal(io.ldu_wb_uop.bits.rob_index)}\npdst=${Hexadecimal(io.ldu_wb_uop.bits.pdst)} pdst_value=${Hexadecimal(io.ldu_wb_uop.bits.pdst_value)}\n" )
+  printf(p"needflush=${Binary(need_flush)}")
+  printf(p"\n")
 }
 
 
@@ -547,19 +557,17 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
   }
 
 
-  val SearchAddr = Wire(UInt(p.XLEN.W))
-  val data_res = Wire(UInt(p.XLEN.W))
-  val data_bit_valid = Wire(UInt(p.XLEN.W))
+
+
 
 
   //暂存在forwarding过程中的部分变量
+  val SearchAddr = Wire(UInt(p.XLEN.W))
   val byteSearched = WireDefault(Vec(4, Vec(p.STQ_DEPTH,Bool())), 0.U.asTypeOf(Vec(4, Vec(p.STQ_DEPTH,Bool()))))
   val found_data = WireDefault(Vec(4,UInt(8.W)), 0.U.asTypeOf(Vec(4,UInt(8.W))))
   val found_data_bytevalid = WireDefault(Vec(4,Bool()), 0.U.asTypeOf(Vec(4,Bool())))
 
   SearchAddr := io.addr_search_stq.bits
-  data_res := 0.U
-  data_bit_valid := 0.U
   //我们最后forwarding的结果，高位未填充的时候都是0
 
 
@@ -628,6 +636,8 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
   io.searched_data.func3 := io.ld_func3
   io.searched_data.bit_valid := found_data_bitvalid
 
+//  printf(p"founddata=${Hexadecimal(io.searched_data.data)} bitvalid=${Hexadecimal(io.searched_data.bit_valid)}\n")
+//  printf(p"\n")
 
 }
 //LSU的模块定义，目前只完成了IO接口的定义，内部逻辑还未完成

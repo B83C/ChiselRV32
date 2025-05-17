@@ -5,6 +5,7 @@ import chiseltest.WriteVcdAnnotation
 
 import scala.util.Random
 import chisel3.stage.ChiselGeneratorAnnotation
+import chisel3.util._
 import chiseltest._
 import firrtl.options.TargetDirAnnotation
 import org.scalatest.freespec.AnyFreeSpec
@@ -13,7 +14,7 @@ import rsd_rv32.scheduler._
 import rsd_rv32.common.Parameters
 import rsd_rv32.common._
 import chiseltest.testableClock
-import rsd_rv32.execution.{LSU, StoreQueue}
+import rsd_rv32.execution.{LSU, LoadPipeline, StoreQueue}
 /**
  * This is a trivial example of how to run this Specification
  * From within sbt use:
@@ -28,9 +29,9 @@ import rsd_rv32.execution.{LSU, StoreQueue}
 
 class lsu_test extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = Parameters()
-  "Loadpipeline" should "write and forward store data correctly" in {
-    test(new StoreQueue()) { c =>
-
+  "Loadpipeline" should "correctly handle signed and unsigned loads" in {
+    test(new LoadPipeline()) { c =>
+//      test for STQ
 //      c.io.st_cnt.poke(2.U)
 //      c.clock.step(1)
 //
@@ -86,7 +87,7 @@ class lsu_test extends AnyFlatSpec with ChiselScalatestTester {
 //      c.io.rob_commitsignal(0).bits.mispred.poke(true.B)
 //      c.io.rob_commitsignal(0).valid.poke(true.B)
 //      c.clock.step(1)
-
+//
 //      c.io.addr_search_stq.valid.poke(true.B)
 //      c.io.addr_search_stq.bits.poke("h100D".U)
 //      c.io.ld_func3.poke(0.U)
@@ -153,8 +154,51 @@ class lsu_test extends AnyFlatSpec with ChiselScalatestTester {
 //
 //      c.io.stqReq.ready.poke(false.B)
 //      c.clock.step(1)
+      def makeinstr(imm : Int,func3 : Int): UInt = {
+        val rs1    = BigInt("001", 16)   // 5 bits
+        val rd     = BigInt("002", 16)   // 5 bits
+        val instrBigInt = (BigInt(imm) << (5 + 3 + 5)) | (rs1 << (3 + 5)) | (BigInt(func3) << 5) | rd
 
-        c.io
+        instrBigInt.U(25.W) // 总宽度 = 12+5+3+5 = 25 bits
+    }
+
+
+
+      c.io.load_uop.bits.instr.poke(makeinstr(4,1))
+      c.io.load_uop.bits.pdst.poke(1.U)
+      c.io.load_uop.bits.ps1_value.poke("h1008".U)
+      c.io.load_uop.bits.rob_index.poke(2.U)
+      c.io.load_uop.bits.stq_tail.poke(4.U)
+      c.io.load_uop.valid.poke(true.B)
+      c.clock.step(1)
+
+      c.io.load_uop.bits.instr.poke(makeinstr(1,5))
+      c.io.load_uop.bits.pdst.poke(3.U)
+      c.io.load_uop.bits.ps1_value.poke("h1001".U)
+      c.io.load_uop.bits.rob_index.poke(3.U)
+      c.io.load_uop.bits.stq_tail.poke(4.U)
+      c.io.data_out_stq.data.poke("h0820".U)
+      c.io.data_out_stq.bit_valid.poke("hFFFF".U)
+      c.clock.step(1)
+
+      c.io.data_out_stq.data.poke("h0020".U)
+      c.io.data_out_stq.bit_valid.poke("h00FF".U)
+      c.io.load_uop.valid.poke(false.B)
+      c.io.ldReq.ready.poke(false.B)
+      c.clock.step(1)
+
+      c.io.ldReq.ready.poke(true.B)
+      c.io.data_out_mem.poke("h0700".U)
+      c.clock.step(1)
+
+      c.io.ldReq.ready.poke(false.B)
+      c.clock.step(2)
+
+      c.io.rob_commitsignal(0).valid.poke(true.B)
+      c.io.rob_commitsignal(0).bits.mispred.poke(true.B)
+      c.clock.step(2)
+
+
     }
   }
 
