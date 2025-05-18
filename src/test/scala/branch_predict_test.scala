@@ -163,7 +163,67 @@ class branch_predict_test extends AnyFlatSpec with ChiselScalatestTester {
       println("pass!")
     }
   }
+  "BranchPredictorUnit" should "correctly handle dual-issue with two branch instructions" in {
+    test(new BranchPredictorUnit()) { c =>
+      // First, set up entries in the BTB for two consecutive addresses
+      // Branch 1 at address 0x1000
+      c.io.rob_commitsignal(0).valid.poke(true.B)
+      c.io.rob_commitsignal(0).bits.instr_addr.poke("h00001000".U)
+      c.io.rob_commitsignal(0).bits.rob_type.poke(ROBType.Branch)
+      c.io.rob_commitsignal(0).bits.payload.poke("h0_00003000_0_1".U) // Target: 0x3000
+      c.io.rob_commitsignal(0).bits.mispred.poke(false.B)
+
+      // Branch 2 at address 0x1004 (assuming 4-byte instructions)
+      c.io.rob_commitsignal(1).valid.poke(true.B)
+      c.io.rob_commitsignal(1).bits.instr_addr.poke("h00001004".U)
+      c.io.rob_commitsignal(1).bits.rob_type.poke(ROBType.Branch)
+      c.io.rob_commitsignal(1).bits.payload.poke("h0_00004000_0_1".U) // Target: 0x4000
+      c.io.rob_commitsignal(1).bits.mispred.poke(false.B)
+
+      c.clock.step()
+
+      // Clear commit signals
+      c.io.rob_commitsignal(0).valid.poke(false.B)
+      c.io.rob_commitsignal(1).valid.poke(false.B)
+      c.clock.step()
+
+      // Test case 1: Both branches initially predict not-taken
+      // Train the predictors to not take either branch
+      c.io.rob_commitsignal(0).valid.poke(true.B)
+      c.io.rob_commitsignal(0).bits.instr_addr.poke("h00001000".U)
+      c.io.rob_commitsignal(0).bits.rob_type.poke(ROBType.Branch)
+      c.io.rob_commitsignal(0).bits.payload.poke("h1_00003000_0_2".U) // T direction
+      c.io.rob_commitsignal(0).bits.mispred.poke(false.B)
+
+      c.io.rob_commitsignal(1).valid.poke(true.B)
+      c.io.rob_commitsignal(1).bits.instr_addr.poke("h00001004".U)
+      c.io.rob_commitsignal(1).bits.rob_type.poke(ROBType.Branch)
+      c.io.rob_commitsignal(1).bits.payload.poke("h1_00004000_0_2".U) // T direction
+      c.io.rob_commitsignal(1).bits.mispred.poke(false.B)
+
+      c.clock.step(3) // Multiple steps to strengthen prediction
+
+      // Clear commit signals
+      c.io.rob_commitsignal(0).valid.poke(false.B)
+      c.io.rob_commitsignal(1).valid.poke(false.B)
+      c.clock.step()
+
+      // Now test dual-issue prediction with both branches
+      c.io.instr_addr.poke("h00001000".U)
+      c.clock.step()
+
+      // Expected: Both predict not-taken, next PC is sequential (0x1008)
+      println(s"Case 1 - Target PC: 0x${c.io.target_PC.peek().litValue.toString(16)}")
+      c.io.btb_hit(0).expect(true.B) // BTB should hit for first instruction
+      c.io.btb_hit(1).expect(true.B) // BTB should hit for second instruction
+      c.io.branch_pred(0).expect(true.B) // First branch predicts taken
+      c.io.branch_pred(1).expect(false.B) // Second branch predicts not-taken
+    }
+  }
+
 }
+
+
 object Driver extends App {
   // 定义隐式参数实例（可自定义参数值）
   implicit val p: Parameters = Parameters()
@@ -172,5 +232,3 @@ object Driver extends App {
   )
   println("Verilog  已生成")
 }
-
-
