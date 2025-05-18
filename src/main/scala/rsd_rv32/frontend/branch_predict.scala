@@ -301,10 +301,6 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
             ghr := Mux(taken, 1.U, 0.U)
           }.otherwise {
             // 左移高位，并将实际结果插入最低位
-/*            val mask = (1.U << shift_amt).asUInt - 1.U  // 生成位宽为 shift_amt 的掩码
-            val preserved_bits = ghr >> shift_amt
-            val new_bits = taken.asUInt & mask    // 保留最低位，高位清零
-            ghr := (preserved_bits << shift_amt).asUInt | new_bits*/
             val new_ghr = (high_bits << shift_amt).asUInt |
               Mux(taken, (1.U << (shift_amt - 1.U)), 0.U).asUInt
             ghr := new_ghr
