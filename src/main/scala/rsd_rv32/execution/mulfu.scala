@@ -5,6 +5,13 @@ import chisel3.util._
 
 import rsd_rv32.common._
 
+class MULFU(implicit p: Parameters) extends FunctionalUnit {
+  override def supportedInstrTypes = Set(InstrType.MUL)
+  val out = IO(Valid(new ALU_WB_uop()))
+
+  val multiplier = Module(new PipelinedBoothMultiplier)
+}
+
 class MULTop(implicit p: Parameters) extends Module {
     val io = IO(new Bundle {
       // 来自前端的请求
@@ -68,21 +75,6 @@ class MULTop(implicit p: Parameters) extends Module {
 
   // 忙信号
   io.busy := alu_fu.io.busy
-}
-
-class BRIO(implicit p: Parameters) extends Bundle {
-  // 输入操作数
-  val rs1 = Input(UInt(p.XLEN.W))      // 寄存器rs1值
-  val rs2 = Input(UInt(p.XLEN.W))      // 寄存器rs2值
-  val pc = Input(UInt(p.XLEN.W))       // 当前指令PC
-  val imm = Input(UInt(p.XLEN.W))      // 符号扩展后的偏移量
-  val fn = Input(UInt(4.W))            // 分支操作码（见下方常量）
-
-  // 输出结果
-  val branchTaken = Output(Bool())     // 是否跳转
-  val targetPC = Output(UInt(p.XLEN.W)) // 跳转目标地址
-  val pcPlus4 = Output(UInt(p.XLEN.W)) // PC+4（用于JAL/JALR写回）
-  val cmp_out = Output(Bool())
 }
 
 /*class MULFU(implicit p: Parameters) extends FunctionalUnit() {
