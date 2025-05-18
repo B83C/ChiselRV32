@@ -2,10 +2,105 @@ package rsd_rv32.execution
 
 import chisel3._
 import chisel3.util._
-
+import rsd_rv32.common.Utils.immExtract
 import rsd_rv32.common._
 
-  //Branch顶层模块
+
+//功能单元的抽象类，定义了底层模块端口
+class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
+  override def supportedInstrTypes = Set(InstrType.Branch, InstrType.Jump)
+  val out = Valid(new BU_WB_uop())
+  val br = Module(new BR())
+
+  /* 分支预测结果输出接口
+  val branch_info = Valid(new Bundle {
+    val taken = Bool()
+    val target = UInt(p.XLEN.W)
+  })
+
+   */
+
+  // 从uop中提取控制信号
+  val fu_signals = io.uop.bits.fu_signals
+  val instr_type = io.uop.bits.instr_type
+
+  // 指令类型判断
+  val is_conditional = instr_type === InstrType.Branch
+  val is_jal = instr_type === InstrType.Jump &&
+    (fu_signals.opr1_sel === OprSel.PC)
+  val is_jalr = instr_type === InstrType.Jump &&
+    (fu_signals.opr1_sel === OprSel.REG)
+
+  def Sel(sel: OprSel.Type, reg: UInt,is_jal: Boolean = false, is_jalr: Boolean = false) = {
+    MuxLookup(sel, 0.U)(Seq(
+      OprSel.IMM -> Mux(is_jalr.asBool, immExtract(Cat(io.uop.bits.instr, 0.U(7.W)), IType.I), Mux(is_jal.asBool,immExtract(Cat(io.uop.bits.instr, 0.U(7.W)), IType.J),immExtract(Cat(io.uop.bits.instr, 0.U(7.W)), IType.B))),
+      OprSel.REG -> reg,
+      OprSel.PC -> io.uop.bits.instr_addr,
+      OprSel.Z -> 0.U,
+    ))
+  }
+  // 目标地址计算
+  val pc = Sel(OprSel.PC, 0.U)  // 获取当前PC值
+
+  // 获取各类立即数（通过Sel函数）
+  val imm_j = Sel(OprSel.IMM, 0.U, is_jal = true)    // J-type立即数
+  val imm_i = Sel(OprSel.IMM, 0.U, is_jalr = true)   // I-type立即数
+  val imm_b = Sel(OprSel.IMM, 0.U)                   // B-type立即数（默认）
+
+  // 目标地址计算（使用Sel获取的操作数）
+  val jal_target = pc + imm_j
+  val jalr_target = (rs1 + imm_i) & ~1.U(p.XLEN.W)  // 清除最低位
+  val branch_target = pc + imm_b
+
+  val actual_target = MuxCase(0.U, Seq(
+    is_jal  -> jal_target,
+    is_jalr -> jalr_target,
+    is_conditional -> branch_target
+  ))
+
+
+
+  // 获取比较操作数（通过Sel函数）
+  val rs1 = Sel(OprSel.REG, io.uop.bits.ps1_value)
+  val rs2 = Sel(OprSel.REG, io.uop.bits.ps2_value)
+
+
+  // 分支方向判断
+  val actual_direction = Mux(is_conditional, br.io.cmp_out, true.B)
+
+  // 返回地址计算
+  val return_addr = pc + 4.U
+
+  // 预测错误判断
+  val mispred = is_conditional &&
+    (actual_direction =/= io.uop.bits.branch_pred.taken ||
+      (actual_direction && actual_target =/= io.uop.bits.target_PC))
+
+  val data_out = Wire(new BU_WB_uop())
+
+  data_out.instr := io.uop.bits.instr
+  data_out.is_conditional := io.uop.bits.instr_type === InstrType.Branch
+
+  // ROB写回信息
+  data_out.rob_index := io.uop.bits.rob_index
+  data_out.mispred := mispred // 来自之前计算的预测错误信号
+  data_out.target_PC := actual_target // 计算出的实际目标地址
+  data_out.branch_direction := actual_direction // 实际分支方向
+
+  // PRF写回信息（JAL/JALR需要）
+  data_out.pdst := io.uop.bits.pdst
+  data_out.pdst_value := return_addr // PC+4（JAL/JALR的返回地址）
+
+  // 输出连接
+  out.valid := io.uop.valid
+  out.bits := data_out
+  io.uop.ready := true.B // BranchFU通常单周期完成
+
+
+}
+
+
+  /*Branch顶层模块
   class BRTop(implicit p: Parameters) extends Module {
     val io = IO(new Bundle {
       // 来自前端的请求
@@ -59,6 +154,8 @@ import rsd_rv32.common._
 
   }
 
+   */
+
 class BRIO(implicit p: Parameters) extends Bundle {
   // 输入操作数
   val rs1 = Input(UInt(p.XLEN.W))      // 寄存器rs1值
@@ -95,42 +192,3 @@ class BR(implicit p: Parameters) extends Module with BRConsts {
   )
 
 }
-
-//功能单元的抽象类，定义了底层模块端口
-class BranchFU(implicit p: Parameters) extends FunctionalUnit() {
-  val internal_alu = Module(new ALU())
-  val br_signals = io.req.bits.uop.fu_signals.asTypeOf(new BranchSignals)
-
-  // 操作数选择
-  internal_alu.io.in1 := MuxLookup(br_signals.opr1_sel, 0.U)(Seq(
-    0.U -> io.req.bits.rs1,
-    1.U -> io.req.bits.uop.imm,
-    2.U -> io.req.bits.uop.instr_addr,
-    3.U -> 0.U
-  ))
-
-  internal_alu.io.in2 := MuxLookup(br_signals.opr2_sel, 0.U)(Seq(
-    0.U -> io.req.bits.rs2,
-    1.U -> io.req.bits.uop.imm,
-    2.U -> io.req.bits.uop.instr_addr,
-    3.U -> 0.U
-  ))
-
-  internal_alu.io.fn := br_signals.br_fn
-
-  val data_out = Wire(new ExuDataOut())
-  data_out.uop := io.req.bits.uop
-  data_out.data := io.req.bits.uop.instr_addr + Mux(br_signals.is_jalr, io.req.bits.rs1, io.req.bits.uop.imm)
-
-  // 分支判断
-  val taken = internal_alu.io.cmp_out && io.req.valid
-
-  io.out.valid := io.req.valid
-  io.out.bits := data_out
-  io.branch_info.get.taken := taken
-  io.branch_info.get.target := Mux(br_signals.is_jalr,
-    (io.req.bits.rs1 + io.req.bits.uop.imm) & ~1.U,
-    io.req.bits.uop.instr_addr + io.req.bits.uop.imm)
-  io.busy := false.B
-}
-
