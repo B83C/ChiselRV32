@@ -7,9 +7,10 @@ import rsd_rv32.common._
 
 
 //功能单元的抽象类，定义了底层模块端口
-class BranchFU(implicit p: Parameters) extends FunctionalUnit() {
+class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
   override def supportedInstrTypes = Set(InstrType.Branch, InstrType.Jump)
   val out = Valid(new BU_WB_uop())
+  val br = Module(new BR())
 
   /* 分支预测结果输出接口
   val branch_info = Valid(new Bundle {
@@ -40,7 +41,6 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() {
   }
   // 目标地址计算
   val pc = Sel(OprSel.PC, 0.U)  // 获取当前PC值
-  val rs1 = Sel(OprSel.REG, io.uop.bits.ps1_value) // 获取rs1值
 
   // 获取各类立即数（通过Sel函数）
   val imm_j = Sel(OprSel.IMM, 0.U, is_jal = true)    // J-type立即数
@@ -58,8 +58,15 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() {
     is_conditional -> branch_target
   ))
 
+
+
+  // 获取比较操作数（通过Sel函数）
+  val rs1 = Sel(OprSel.REG, io.uop.bits.ps1_value)
+  val rs2 = Sel(OprSel.REG, io.uop.bits.ps2_value)
+
+
   // 分支方向判断
-  val actual_direction = Mux(is_conditional, branch_taken, true.B)
+  val actual_direction = Mux(is_conditional, br.io.cmp_out, true.B)
 
   // 返回地址计算
   val return_addr = pc + 4.U
@@ -71,10 +78,7 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() {
 
   val data_out = Wire(new BU_WB_uop())
 
-  // 指令信息（用于调试和异常处理）
   data_out.instr := io.uop.bits.instr
-
-  // 分支类型标识
   data_out.is_conditional := io.uop.bits.instr_type === InstrType.Branch
 
   // ROB写回信息
@@ -88,7 +92,7 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() {
   data_out.pdst_value := return_addr // PC+4（JAL/JALR的返回地址）
 
   // 输出连接
-  out.valid := io.uop.valid && !io.uop.bits.kill
+  out.valid := io.uop.valid
   out.bits := data_out
   io.uop.ready := true.B // BranchFU通常单周期完成
 
@@ -96,7 +100,7 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() {
 }
 
 
-  //Branch顶层模块
+  /*Branch顶层模块
   class BRTop(implicit p: Parameters) extends Module {
     val io = IO(new Bundle {
       // 来自前端的请求
@@ -149,6 +153,8 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() {
     io.busy := br_fu.io.busy
 
   }
+
+   */
 
 class BRIO(implicit p: Parameters) extends Bundle {
   // 输入操作数
