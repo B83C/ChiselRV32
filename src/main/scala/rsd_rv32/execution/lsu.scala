@@ -89,8 +89,13 @@ class LSUArbiter(implicit p: Parameters) extends CustomModule {
   arb.io.out.ready  := true.B//MEM总是准备好接收数据
 
   io.isStore := arb.io.out.bits.write_en && io.memOut.valid//将arbiter的输出信号连接到存储器的请求信号
-  
+
+//  printf(p"storeready=${Binary(io.stqReq.ready)} loadready=${Binary(io.ldReq.ready)}\n")
+//  printf(p"outdata${Hexadecimal(io.memOut.bits.data)}\n")
+//  printf(p"isStore=${Binary(io.isStore)}\n\n")
+
 }
+
 
 //LSU的加载管线模块，用于处理加载指令的执行
 class LoadPipeline(implicit p: Parameters) extends CustomModule {
@@ -205,8 +210,8 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   io.ldReq.bits.write_en := false.B
   io.ldReq.valid := stage2_pipevalid && (!need_flush) && (!expected)
 
-  printf(p"addr=${Hexadecimal(stage2_ldAddr)} data=${Hexadecimal(stage2_data_out_stq)} bitvalid=${Hexadecimal(stage2_data_bitvalid)}\n")
-  printf(p"ldReq.valid=${Binary(io.ldReq.valid)} stall=${Binary(stall)}\n")
+//  printf(p"addr=${Hexadecimal(stage2_ldAddr)} data=${Hexadecimal(stage2_data_out_stq)} bitvalid=${Hexadecimal(stage2_data_bitvalid)}\n")
+//  printf(p"ldReq.valid=${Binary(io.ldReq.valid)} stall=${Binary(stall)}\n")
   io.load_uop.ready := (!need_flush) && (!stall)
 
 
@@ -269,7 +274,7 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
     }
   }
 
-  printf(p"finaldata=${Hexadecimal(final_data)}\n")
+//  printf(p"finaldata=${Hexadecimal(final_data)}\n")
 //stage3-stage4的PipelineReg
   val Stage3ToStage4_data_reg = Module(new PipelineReg(p.XLEN))
   val Stage3ToStage4_pdst_reg = Module(new PipelineReg(log2Ceil(p.PRF_DEPTH)))
@@ -299,21 +304,21 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   io.ldu_wb_uop.bits.pdst := Stage3ToStage4_pdst_reg.io.data_out
   io.ldu_wb_uop.bits.pdst_value := Stage3ToStage4_data_reg.io.data_out
 
-  printf(p"valid=${Binary(io.ldu_wb_uop.valid)} robidx=${Hexadecimal(io.ldu_wb_uop.bits.rob_index)}\npdst=${Hexadecimal(io.ldu_wb_uop.bits.pdst)} pdst_value=${Hexadecimal(io.ldu_wb_uop.bits.pdst_value)}\n" )
-  printf(p"needflush=${Binary(need_flush)}")
-  printf(p"\n")
+//  printf(p"valid=${Binary(io.ldu_wb_uop.valid)} robidx=${Hexadecimal(io.ldu_wb_uop.bits.rob_index)}\npdst=${Hexadecimal(io.ldu_wb_uop.bits.pdst)} pdst_value=${Hexadecimal(io.ldu_wb_uop.bits.pdst_value)}\n" )
+//  printf(p"needflush=${Binary(need_flush)}")
+//  printf(p"\n")
 }
 
 
 class StorePipeline(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
     val store_uop = Flipped(Valid(new STISSUE_STPIPE_uop()))//存储指令的uop
-    val stu_wb_uop = Valid((new STPIPE_WB_uop()))//存储完成的信号,wb to ROB
+    val stu_wb_uop = Valid(new STPIPE_WB_uop())//存储完成的信号,wb to ROB
 
-    val data_into_stq = UInt(p.XLEN.W)//需要写入stq的数据
+    val data_into_stq = Output(UInt(p.XLEN.W))//需要写入stq的数据
     val dataAddr_into_stq = Valid(UInt(p.XLEN.W))//需要写入stq的地址
-    val func3 = UInt(3.W)//fun3信号
-    val stq_index = UInt(log2Ceil(p.STQ_DEPTH).W)//需要写入stq的索引
+    val func3 = Output(UInt(3.W))//fun3信号
+    val stq_index = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//需要写入stq的索引
 
     val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
   })
@@ -374,6 +379,8 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
   val stage2_func3 = Stage1ToStage2_func3_reg.io.data_out
 
 
+
+
   //为1的时候表示需要进行flush，即将传入stq的全部数取0
 
   io.data_into_stq     := stage2_data 
@@ -389,7 +396,10 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
   io.stu_wb_uop.valid  := Stage1ToStage2_valid_reg.io.data_out.asBool && (!need_flush)
   //仅当st_issue_uop传入有效且不需要flush时wb rob的uop才有效
   io.stu_wb_uop.bits.rob_index := Stage1ToStage2_robidx_reg.io.data_out
-
+//  printf(p"data=${Hexadecimal(stage2_data)} addr=${Hexadecimal(stage2_addr)}\n")
+//  printf(p"stqidx=${Hexadecimal(io.stq_index)} func3=${Hexadecimal(io.func3)}\n")
+//  printf(p"needflush=${Binary(need_flush)}\n")
+//  printf(p"valid=${Binary(io.stu_wb_uop.valid)} robidx=${Hexadecimal(io.stu_wb_uop.bits.rob_index)}\n\n")
 }
 //stq模块
 
