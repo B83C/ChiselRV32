@@ -53,11 +53,9 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
 
   // BTB表存储
   val btb = Mem(btbSize, new BTBEntry)
-
   // 计算索引和标签
   def btbIndex(pc: UInt): UInt = pc(log2Ceil(btbSize) + log2Ceil(instBytes) - 1, log2Ceil(instBytes))
   def btbTag(pc: UInt): UInt = pc(p.XLEN-1, log2Ceil(instBytes) + log2Ceil(btbSize))
-
   // 双发射下访问连续两条指令的地址
   val pc0 = io.instr_addr            // 第一条指令PC
   val pc1 = io.instr_addr + instBytes.U  // 第二条指令PC
@@ -67,17 +65,9 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
   val btbTag0 = btbTag(pc0)
   val btbIdx1 = btbIndex(pc1)
   val btbTag1 = btbTag(pc1)
-
   // 读取两条指令对应的BTB表项
   val btbEntry0 = btb.read(btbIdx0)
   val btbEntry1 = btb.read(btbIdx1)
-/*
-  // 流水线寄存器 - 记录BTB查询结果
-  val btbEntry0_reg = RegNext(btbEntry0)
-  val btbEntry1_reg = RegNext(btbEntry1)
-  val btbTag0_reg = RegNext(btbTag0)
-  val btbTag1_reg = RegNext(btbTag1)
-*/
   // 判断BTB是否命中
   val btbHit0 = btbEntry0.valid && btbEntry0.tag === btbTag0
   val btbHit1 = btbEntry1.valid && btbEntry1.tag === btbTag1
@@ -93,24 +83,13 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
   // 3. Bi-Mode BHT 部分
   // ---------------------------------------------------------------------------
   // T/NT表和选择器
-  /*val bimodeT = Mem(bimodeTableSize, UInt(counterBits.W))
-  val bimodeNT = Mem(bimodeTableSize, UInt(counterBits.W))
-  val choice = Mem(choiceTableSize, UInt(counterBits.W))
-*/
   // 计算预测索引 - 第一条指令
   val histIdx0 = (pc0 ^ ghr)(log2Ceil(bimodeTableSize)-1, 0)
   val tagIdx0 = pc0(log2Ceil(choiceTableSize)-1, 0)
-
   // 读取预测表和选择器的值
   val tValue0 = bimodeT.read(histIdx0)
   val ntValue0 = bimodeNT.read(histIdx0)
   val choiceValue0 = choice.read(tagIdx0)
-/*
-  // 流水线寄存器 - 预测器状态
-  val tValue0_reg = RegNext(tValue0)
-  val ntValue0_reg = RegNext(ntValue0)
-  val choiceValue0_reg = RegNext(choiceValue0)
-*/
   // 预测第一条指令
   val useNT0 = choiceValue0(counterBits-1)
   val predBit0 = Mux(useNT0, tValue0(counterBits-1), ntValue0(counterBits-1))
@@ -123,16 +102,9 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
   val tValue1 = bimodeT.read(histIdx1)
   val ntValue1 = bimodeNT.read(histIdx1)
   val choiceValue1 = choice.read(tagIdx1)
-/*
-  // 流水线寄存器 - 第二条指令预测器状态
-  val tValue1_reg = RegNext(tValue1)
-  val ntValue1_reg = RegNext(ntValue1)
-  val choiceValue1_reg = RegNext(choiceValue1)
-*/
   // 预测第二条指令
   val useNT1 = choiceValue1(counterBits-1)
   val predBit1 = Mux(useNT1, tValue1(counterBits-1), ntValue1(counterBits-1))
-
   // ---------------------------------------------------------------------------
   // 4. 最终预测逻辑
   // ---------------------------------------------------------------------------
@@ -291,10 +263,8 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
           // 计算正确的GHR更新
           // 首先考虑当前指令在提交窗口中的位置
           val shift_amt = i.U + 1.U
-
           // 计算需要保留的高位和需要插入的低位
           val high_bits = ghr >> shift_amt
-
           // 根据实际的跳转结果更新低位
           when (shift_amt >= p.GHR_WIDTH.U) {
             // 如果移位量超过GHR宽度，则整个GHR都是推测性的
