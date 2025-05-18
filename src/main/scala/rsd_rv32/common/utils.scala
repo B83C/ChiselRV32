@@ -12,7 +12,7 @@ package object Utils {
 
   def immExtract(instr: UInt, instr_type: IType.Type) : UInt = {
     import IType._
-    instr match {
+    instr_type match {
       case I => instr(31,20)
       case S => Cat(instr(31,25),instr(11,7))
       case B => Cat(instr(31), instr(7), instr(30, 25), instr(11, 8), 0.U(1.W))
