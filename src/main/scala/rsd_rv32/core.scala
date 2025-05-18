@@ -24,7 +24,7 @@ class Core(implicit p: Parameters) extends CustomModule {
   fetch.io.instr := mem.io.mem_id
 
   val branch_predictor = Module(new BranchPredictorUnit())
-  (branch_prodictor.io: Data).waiveAll :<>= (fetch.io: Data).waiveAll 
+  (branch_predictor.io: Data).waiveAll :<>= (fetch.io: Data).waiveAll
 
   val decode = Module(new DecodeUnit())
   (decode.io: Data).waiveAll :<>= (fetch.io: Data).waiveAll 

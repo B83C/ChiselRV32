@@ -211,7 +211,7 @@ class BoothMultiplier extends Module {
   val shiftCounter = RegInit(0.U(8.W)) // Shift counter
   val busy = (multiplierReg =/= 0.U(33.W) && shiftCounter < 16.U(8.W))
 
-  when(io.in.start && ~busy) {
+  when(io.in.start && (~busy).asBool) {
     resultReg := 0.U(64.W)
     shiftCounter := 0.U(8.W)
     multiplicandReg := io.in.num_1.asTypeOf(SInt(64.W)).asUInt // Signed extend to 64 bit
@@ -306,11 +306,11 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
       when(!boothMul.io.out.busy) {
         // 根据乘法类型选择结果
         val fullResult = boothMul.io.out.result
-        resultReg := MuxLookup(mulTypeReg, fullResult(31, 0))( Seq(
-          0.U -> fullResult(31, 0),  // MUL: 取低32位
-          1.U -> fullResult(63, 32),  // MULH: 取高32位(有符号×有符号)
-          2.U -> fullResult(63, 32),  // MULHSU: 取高32位(有符号×无符号)
-          3.U -> fullResult(63, 32)   // MULHU: 取高32位(无符号×无符号)
+        resultReg := MuxCase(fullResult(31, 0), Seq(
+          is_mul    -> fullResult(31, 0),   // MUL: 取低32位
+          is_mulh   -> fullResult(63, 32),  // MULH: 取高32位(有符号×有符号)
+          is_mulhsu -> fullResult(63, 32),   // MULHSU: 取高32位(有符号×无符号)
+          is_mulhu  -> fullResult(63, 32)    // MULHU: 取高32位(无符号×无符号)
         ))
         state := s_done
       }

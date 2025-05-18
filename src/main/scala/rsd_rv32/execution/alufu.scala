@@ -72,14 +72,6 @@ class ALU(implicit p: Parameters) extends Module with ALUConsts {
       ALU_SLL  -> (io.in1 << shamt),
       ALU_SRL  -> (io.in1 >> shamt),
       ALU_SRA  -> (io.in1.asSInt >> shamt).asUInt,
-
-      ALU_ADDI -> (io.in1 + io.in2),
-      ALU_ANDI -> (io.in1 & io.in2),
-      ALU_ORI  -> (io.in1 | io.in2),
-      ALU_XORI -> (io.in1 ^ io.in2),
-      ALU_SLLI -> (io.in1 << shamt),
-      ALU_SRLI -> (io.in1 >> shamt),
-      ALU_SRAI -> (io.in1.asSInt >> shamt).asUInt
     )
   )
 }
