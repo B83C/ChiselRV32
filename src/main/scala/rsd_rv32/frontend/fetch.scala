@@ -97,13 +97,12 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
 
 
         //考虑valid bits限制
-    when (uop_vec(0).valid && !(uop_vec(1).valid)){
+    when (!uop_vec(0).valid && uop_vec(1).valid) {
+        uop_vec(0) := uop_vec(1)
         uop_vec(1).valid := false.B
-    }
-    when(!uop_vec(0).valid){
-        uop_vec(0).valid := false.B
-        uop_vec(1).valid := false.B
-    }
+        uop_vec(1).bits := 0.U.asTypeOf(new IF_ID_uop())
+}
+ 
 
     
 
