@@ -162,5 +162,22 @@ class ld_issue_test extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.load_uop.valid.expect(0.U)
     }
   }
+  "ld_issue" should "deal with store and load correctly" in {
+    test(new ld_issue_queue()) { dut =>
+      for (i <- 0 until p.STISSUE_DEPTH) {
+        dut.io.st_issue_unbusy(i).poke(1.U)
+      }
+      dut.io.st_issue_uop(0).valid.poke(1.U)
+      dut.io.st_issue_uop(0).bits.iq_index.poke(1.U)
+      dut.io.rob_uop(0).valid.poke(1.U)
+      dut.io.rob_uop(0).bits.instr_type.poke(InstrType.ST)
+      dut.io.ld_issue_uop(0).valid.poke(1.U)
+      dut.clock.step()
+      dut.io.ld_issue_uop(0).valid.poke(0.U)
+      dut.io.st_issue_uop(0).valid.poke(0.U)
+      dut.io.rob_uop(0).valid.poke(0.U)
+      dut.clock.step(2)
+    }
+  }
 }
 

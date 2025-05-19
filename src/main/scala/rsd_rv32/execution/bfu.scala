@@ -192,4 +192,3 @@ class BR(implicit p: Parameters) extends Module with BRConsts {
   )
 
 }
-
