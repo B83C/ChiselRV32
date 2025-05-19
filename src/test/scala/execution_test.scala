@@ -19,15 +19,15 @@ class ALUTest extends AnyFlatSpec with ChiselScalatestTester {
   // ALU操作码定义(与ALUConsts保持一致)
   object ALUOp {
     val ADD    = 0.U(4.W)
-    val SUB    = 0.U(4.W)
-    val SLL    = 1.U(4.W)
-    val SLT    = 2.U(4.W)
-    val SLTU   = 3.U(4.W)
-    val XOR    = 4.U(4.W)
-    val SRL    = 5.U(4.W)
-    val SRA    = 5.U(4.W)
-    val OR     = 6.U(4.W)
-    val AND    = 7.U(4.W)
+    val SUB    = 1.U(4.W)
+    val SLL    = 2.U(4.W)
+    val SLT    = 3.U(4.W)
+    val SLTU   = 4.U(4.W)
+    val XOR    = 5.U(4.W)
+    val SRL    = 6.U(4.W)
+    val SRA    = 7.U(4.W)
+    val OR     = 8.U(4.W)
+    val AND    = 9.U(4.W)
   }
 
   "ALU" should "correctly perform arithmetic operations" in {
