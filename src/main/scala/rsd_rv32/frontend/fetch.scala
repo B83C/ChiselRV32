@@ -76,7 +76,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     
     
     //构造uop向量
-    val uop_vec_raw = Wire(Vec(2, Valid(new IF_ID_uop())))
+    val uop_vec = Wire(Vec(2, Valid(new IF_ID_uop())))
     for (i <-0 until 2 ){
         val uop = Wire(new IF_ID_uop())
         val current_pc = pc_delayed + (i.U << 2)
@@ -96,13 +96,11 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     }
 
 
-        uop_vec(0) := uop_vec_raw(0)
-        uop_vec(1) := uop_vec_raw(1)
         //考虑valid bits限制
-    when (uop_vec_raw(0).valid && !(uop_vec_raw(1).valid)){
+    when (uop_vec(0).valid && !(uop_vec(1).valid)){
         uop_vec(1).valid := false.B
     }
-    when(!uop_vec_raw(0)){
+    when(!uop_vec(0)){
         uop_vec(0).valid := false.B
         uop_vec(1).valid := false.B
     }
