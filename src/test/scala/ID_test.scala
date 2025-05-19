@@ -5,11 +5,12 @@ import rsd_rv32.common._
 import rsd_rv32.frontend.BranchPredictorUnit
 
 class DecodeUnitTest extends AnyFlatSpec with ChiselScalatestTester {
-
+  
   "Decoder" should "correctly decode instructions" in {
     test(new DecodeUnit).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
       val instr = "h00410113".U                 // addi x2, x2, 4
       val addr = 0x1000.U
+      implicit val p = Parameters()
 
       c.io.rename_ready.poke(true.B)
       for (i <- 0 until p.CORE_WIDTH) {
@@ -47,6 +48,7 @@ class DecodeUnitTest extends AnyFlatSpec with ChiselScalatestTester {
   "Decoder" should "flush when needed" in {
     test(new DecodeUnit).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
       val instr = "h00000013".U // NOP (ADDI x0, x0, 0)
+      implicit val p = Parameters()
 
       c.io.rename_ready.poke(true.B)
 
