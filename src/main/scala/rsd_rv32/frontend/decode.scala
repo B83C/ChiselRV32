@@ -175,18 +175,6 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
 //    val rs2 = instr(24,20)
 //    // val funct7(31,25)
 //
-//    //读取可能的立即数
-//    val immI = instr(31,20)
-//    val immS = Cat(instr(31,25),instr(11,7))
-//    val immB = Cat(instr(31), instr(7), instr(30, 25), instr(11, 8), 0.U(1.W))
-//    val immU = Cat(instr(31, 12), 0.U(12.W))
-//    val immJ = Cat(instr(31), instr(19,12), instr(20), instr(30,21), 0.U(1.W))
-//
-//    //后续要使用的立即数
-//    val //immExt = Wire(UInt(p.XLEN.W))
-//    //immExt := 0.U
-//
-//
 //    val instr_type = Wire(InstrType())
 //    instr_type := InstrType.R
 //
