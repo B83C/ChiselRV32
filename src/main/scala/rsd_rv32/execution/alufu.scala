@@ -10,7 +10,7 @@ import Utils._
 class ALUFU(implicit p: Parameters) extends FunctionalUnit() with ALUConsts  {
   override def supportedInstrTypes = Set(InstrType.ALU)
   // 为了配合上一级的uop，输出按FU区分
-  val out = Valid(new ALU_WB_uop())
+  val out = IO(Valid(new ALU_WB_uop()))
   
   val internal_alu = Module(new ALU())
   val fu_signals = io.uop.bits.fu_signals
