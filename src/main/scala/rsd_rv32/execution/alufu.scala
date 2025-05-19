@@ -60,7 +60,13 @@ class ALUFU(implicit p: Parameters) extends FunctionalUnit() with ALUConsts  {
 
   val data_out = Wire(new ALU_WB_uop())
   data_out.pdst := io.uop.bits.pdst
-  data_out.pdst_value := internal_alu.io.out
+  when (is_LUI){
+    data_out.pdst_value := (io.uop.bits.instr(24, 5) << 12.U)
+  }.elsewhen(is_AUIPC){
+    data_out.pdst_value := io.uop.bits.instr_addr + (io.uop.bits.instr(24, 5) << 12.U)
+  }.otherwise{
+    data_out.pdst_value := internal_alu.io.out
+  }
   data_out.rob_index := io.uop.bits.rob_index
   data_out.instr := io.uop.bits.instr
 
