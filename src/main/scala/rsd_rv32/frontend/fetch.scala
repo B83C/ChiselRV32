@@ -100,7 +100,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     when (uop_vec(0).valid && !(uop_vec(1).valid)){
         uop_vec(1).valid := false.B
     }
-    when(!uop_vec(0)){
+    when(!uop_vec(0).valid){
         uop_vec(0).valid := false.B
         uop_vec(1).valid := false.B
     }
