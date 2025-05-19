@@ -18,16 +18,16 @@ class ALUTest extends AnyFlatSpec with ChiselScalatestTester {
 
   // ALU操作码定义(与ALUConsts保持一致)
   object ALUOp {
-    val ADD = 0.U
-    val SUB = 1.U
-    val AND = 2.U
-    val OR = 3.U
-    val XOR = 4.U
-    val SLT = 5.U
-    val SLTU = 6.U
-    val SLL = 7.U
-    val SRL = 8.U
-    val SRA = 9.U
+    val ADD    = 0.U(4.W)
+    val SUB    = 0.U(4.W)
+    val SLL    = 1.U(4.W)
+    val SLT    = 2.U(4.W)
+    val SLTU   = 3.U(4.W)
+    val XOR    = 4.U(4.W)
+    val SRL    = 5.U(4.W)
+    val SRA    = 5.U(4.W)
+    val OR     = 6.U(4.W)
+    val AND    = 7.U(4.W)
   }
 
   "ALU" should "correctly perform arithmetic operations" in {
@@ -136,7 +136,7 @@ class ALUTest extends AnyFlatSpec with ChiselScalatestTester {
     }
   }
 
-  /*"ALFU" should "correctly handle register operations" in {
+ /* "ALFU" should "correctly handle register operations" in {
     test(new ALUFU) { dut =>
       // 准备ADD指令
       dut.io.uop.bits.ps1_value.poke(5.U)
@@ -173,5 +173,5 @@ class ALUTest extends AnyFlatSpec with ChiselScalatestTester {
     }
   }
 
-   */
+  */
 }
