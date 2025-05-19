@@ -4,6 +4,8 @@ import chisel13._
 import chisel13.util._
 import rsd_rv32.common._
 
+
+
 class Fetch_IO(implicit p: Parameters) extends CustomBundle {
     // with MEM
     val instr_addr = Output(UInt(p.XLEN.W)) //当前IFU的PC值
@@ -93,19 +95,14 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         uop_vec(i) := uop
     }
 
-    //考虑valid bits限制
-    when (uop_vec_raw(0).valid && uop_vec_raw(1).valid){
+
         uop_vec(0) := uop_vec_raw(0)
         uop_vec(1) := uop_vec_raw(1)
-    }
+        //考虑valid bits限制
     when (uop_vec_raw(0).valid && !(uop_vec_raw(1).valid)){
-        uop_vec(0) := uop_vec_raw(0)
-        uop_vec(1) := uop_vec_raw(1)
         uop_vec(1).valid := false.B
     }
     when(!uop_vec_raw(0)){
-        uop_vec(0) := uop_vec_raw(0)
-        uop_vec(1) := uop_vec_raw(1)
         uop_vec(0).valid := false.B
         uop_vec(1).valid := false.B
     }
@@ -113,12 +110,12 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     
 
     //存入寄存器给ID
-    val IF_ID_uop_reg = Reg(Vec(2, Valid(new IF_ID_uop())))
+    val IF_ID_Stage_reg = Reg(Vec(2, Valid(new IF_ID_uop())))
     
     for (i <- 0 until 2) {
-        IF_ID_uop_reg(i).valid := uop_vec(i).valid
-        IF_ID_uop_reg(i).bits := uop_vec(i).bits
-        io.id_uop(i) := IF_ID_uop_reg(i)
+        IF_ID_Stage_reg(i).valid := uop_vec(i).valid
+        IF_ID_Stage_reg(i).bits := uop_vec(i).bits
+        io.id_uop(i) := IF_ID_Stage_reg(i)
   }
 
     
