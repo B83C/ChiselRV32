@@ -47,7 +47,7 @@ class DecodeUnitTest extends AnyFlatSpec with ChiselScalatestTester {
   //测试flush
   "Decoder" should "flush when needed" in {
     test(new DecodeUnit).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
-      val instr = "h00000013".U // NOP (ADDI x0, x0, 0)
+      val instr = "h00410113".U           // addi x2, x2, 4
       implicit val p = Parameters()
 
       c.io.rename_ready.poke(true.B)
@@ -62,7 +62,7 @@ class DecodeUnitTest extends AnyFlatSpec with ChiselScalatestTester {
         c.io.id_uop(i).bits.btb_hit.poke(false.B)
       }
 
-      // 模拟分支预测错误
+      // 分支预测错误
       c.io.rob_commitsignal(0).valid.poke(true.B)
       c.io.rob_commitsignal(0).bits.mispred.poke(true.B)
 
