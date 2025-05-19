@@ -93,19 +93,14 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         uop_vec(i) := uop
     }
 
-    //考虑valid bits限制
-    when (uop_vec_raw(0).valid && uop_vec_raw(1).valid){
+
         uop_vec(0) := uop_vec_raw(0)
         uop_vec(1) := uop_vec_raw(1)
-    }
+        //考虑valid bits限制
     when (uop_vec_raw(0).valid && !(uop_vec_raw(1).valid)){
-        uop_vec(0) := uop_vec_raw(0)
-        uop_vec(1) := uop_vec_raw(1)
         uop_vec(1).valid := false.B
     }
     when(!uop_vec_raw(0)){
-        uop_vec(0) := uop_vec_raw(0)
-        uop_vec(1) := uop_vec_raw(1)
         uop_vec(0).valid := false.B
         uop_vec(1).valid := false.B
     }
