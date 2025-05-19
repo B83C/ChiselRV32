@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 
 import rsd_rv32.common._
+import Utils._
 
 class Divider extends Module {
   val io = IO(new Bundle {

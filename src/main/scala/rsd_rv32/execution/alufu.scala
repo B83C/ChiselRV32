@@ -7,7 +7,7 @@ import rsd_rv32.common._
 import Utils._
 
 //功能单元的抽象类，定义了底层模块端口
-class ALUFU(implicit p: Parameters) extends FunctionalUnit() {
+class ALUFU(implicit p: Parameters) extends FunctionalUnit() with ALUConsts  {
   override def supportedInstrTypes = Set(InstrType.ALU)
   // 为了配合上一级的uop，输出按FU区分
   val out = Valid(new ALU_WB_uop())
@@ -29,11 +29,36 @@ class ALUFU(implicit p: Parameters) extends FunctionalUnit() {
 
   internal_alu.io.in1 := Sel(fu_signals.opr1_sel, io.uop.bits.ps1_value)
   internal_alu.io.in2 := Sel(fu_signals.opr2_sel, io.uop.bits.ps2_value)
-  
-  //TODO: Fix the alu fn 
-  // internal_alu.io.fn := alu_signals.alu_fn
 
-  val data_out = Wire(new ALU_WB_uop())  // 改为使用新的ALU_WB_uop
+  // 替换TODO部分的代码
+  internal_alu.io.fn := MuxLookup(io.uop.bits.instr(6, 0), ALU_ADD)(Seq(
+    // 立即数指令 (I-type)
+    "b0010011".U -> MuxLookup(io.uop.bits.instr(14, 12), ALU_ADD)(Seq(
+      "b000".U -> ALU_ADD,  // ADDI
+      "b001".U -> ALU_SLL,  // SLLI
+      "b010".U -> ALU_SLT,  // SLTI
+      "b011".U -> ALU_SLTU, // SLTIU
+      "b100".U -> ALU_XOR,  // XORI
+      "b101".U -> Mux(io.uop.bits.instr(30), ALU_SRA, ALU_SRL), // SRAI/SRLI
+      "b110".U -> ALU_OR,   // ORI
+      "b111".U -> ALU_AND   // ANDI
+    )),
+    // 寄存器指令 (R-type)
+    "b0110011".U -> MuxLookup(io.uop.bits.instr(14, 12), ALU_ADD)(Seq(
+      "b000".U -> Mux(io.uop.bits.instr(30), ALU_SUB, ALU_ADD), // SUB/ADD
+      "b001".U -> ALU_SLL,  // SLL
+      "b010".U -> ALU_SLT,  // SLT
+      "b011".U -> ALU_SLTU, // SLTU
+      "b100".U -> ALU_XOR,  // XOR
+      "b101".U -> Mux(io.uop.bits.instr(30), ALU_SRA, ALU_SRL), // SRA/SRL
+      "b110".U -> ALU_OR,   // OR
+      "b111".U -> ALU_AND   // AND
+    )),
+  ))
+  //TODO: Fix the alu fn 
+
+
+  val data_out = Wire(new ALU_WB_uop())
   data_out.pdst := io.uop.bits.pdst
   data_out.pdst_value := internal_alu.io.out
   data_out.rob_index := io.uop.bits.rob_index
@@ -69,8 +94,8 @@ class ALU(implicit p: Parameters) extends Module with ALUConsts {
       ALU_XOR  -> (io.in1 ^ io.in2),
       ALU_SLT  -> (io.in1.asSInt < io.in2.asSInt).asUInt,
       ALU_SLTU -> (io.in1 < io.in2),
-      ALU_SLL  -> (io.in1 << shamt),
-      ALU_SRL  -> (io.in1 >> shamt),
+      ALU_SLL  -> (io.in1 << shamt).asUInt,
+      ALU_SRL  -> (io.in1 >> shamt).asUInt,
       ALU_SRA  -> (io.in1.asSInt >> shamt).asUInt,
     )
   )
