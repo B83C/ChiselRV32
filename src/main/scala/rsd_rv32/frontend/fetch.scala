@@ -1,7 +1,7 @@
 package rsd_rv32.frontend
 
-import chisel13._
-import chisel13.util._
+import chisel3._
+import chisel3.util._
 import rsd_rv32.common._
 
 
