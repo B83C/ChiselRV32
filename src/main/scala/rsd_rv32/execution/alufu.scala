@@ -30,7 +30,6 @@ class ALUFU(implicit p: Parameters) extends FunctionalUnit() with ALUConsts  {
   internal_alu.io.in1 := Sel(fu_signals.opr1_sel, io.uop.bits.ps1_value)
   internal_alu.io.in2 := Sel(fu_signals.opr2_sel, io.uop.bits.ps2_value)
 
-  // 替换TODO部分的代码
   internal_alu.io.fn := MuxLookup(io.uop.bits.instr(6, 0), ALU_ADD)(Seq(
     // 立即数指令 (I-type)
     "b0010011".U -> MuxLookup(io.uop.bits.instr(14, 12), ALU_ADD)(Seq(
@@ -55,7 +54,6 @@ class ALUFU(implicit p: Parameters) extends FunctionalUnit() with ALUConsts  {
       "b111".U -> ALU_AND   // AND
     )),
   ))
-  //TODO: Fix the alu fn 
 
 
   val data_out = Wire(new ALU_WB_uop())

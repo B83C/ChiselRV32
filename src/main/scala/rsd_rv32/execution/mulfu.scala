@@ -93,8 +93,8 @@ class BoothMultiplier extends Module {
         "b000".U -> 0.U(64.W),
         "b001".U -> multiplicandReg,
         "b010".U -> multiplicandReg,
-        "b011".U -> (multiplicandReg << 1.U),
-        "b100".U -> (-(multiplicandReg << 1.U)),
+        "b011".U -> (multiplicandReg << 1.U).asUInt,
+        "b100".U -> (-(multiplicandReg << 1.U).asUInt),
         "b101".U -> (-multiplicandReg),
         "b110".U -> (-multiplicandReg),
         "b111".U -> 0.U(64.W)
