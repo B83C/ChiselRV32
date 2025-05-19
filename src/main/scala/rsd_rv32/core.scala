@@ -16,15 +16,15 @@ class Core(implicit p: Parameters) extends CustomModule {
   })
 
   val mem_depth = 1 << 10
-  val mem = Module(new mem(mem_depth.W, p.CORE_WIDTH))
+  val mem = Module(new mem(mem_depth, p.CORE_WIDTH))
   val fetch = Module(new FetchUnit())
 
   mem.io.reset := io.rst
-  mem.io.if_mem.instrAddr := fetch.io.instr_addr
+  mem.io.if_mem.instAddr := fetch.io.instr_addr
   fetch.io.instr := mem.io.mem_id
 
   val branch_predictor = Module(new BranchPredictorUnit())
-  (branch_prodictor.io: Data).waiveAll :<>= (fetch.io: Data).waiveAll 
+  (branch_predictor.io: Data).waiveAll :<>= (fetch.io: Data).waiveAll
 
   val decode = Module(new DecodeUnit())
   (decode.io: Data).waiveAll :<>= (fetch.io: Data).waiveAll 

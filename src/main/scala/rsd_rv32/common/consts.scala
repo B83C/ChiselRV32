@@ -137,15 +137,6 @@ trait ALUConsts {
   val ALU_SLT    = 8.U(4.W)  // 有符号比较
   val ALU_SLTU   = 9.U(4.W)  // 无符号比较
 
-  // 立即数操作
-  val ALU_ADDI   = 10.U(4.W)
-  val ALU_ANDI   = 11.U(4.W)
-  val ALU_ORI    = 12.U(4.W)
-  val ALU_XORI   = 13.U(4.W)
-  val ALU_SLLI   = 14.U(4.W)
-  val ALU_SRLI   = 15.U(4.W)
-  val ALU_SRAI   = 16.U(4.W)
-
 }
 trait BRConsts {
   // 分支类型编码
