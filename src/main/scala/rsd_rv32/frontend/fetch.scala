@@ -62,13 +62,13 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     val btb_hit_delayed = RegNext(io.btb_hit)
     val GHR_delayed = RegNext(io.GHR)
     val branch_pred_delayed = RegNext(io.branch_pred)
-    val target_pc_delayed = RegNext(io.target_PC)
+    val target_PC_delayed = RegNext(io.target_PC)
 
 
 
     
     //生成两条给ID的uop
-    val uop_vec = Wire(Vec(2, new IF_ID_uop()))
+    val uop_vec = Wire(Vec(2, Valid(new IF_ID_uop())))
     val btb_hit_vec = io.btb_hit
     val hit_11 = (btb_hit_delayed === "b11".U)        //如果出现11
 
@@ -76,10 +76,10 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     
     
     //构造uop向量
-    val uop_vec = Wire(Vec(2, Valid(new IF_ID_uop())))
+
     for (i <-0 until 2 ){
         val uop = Wire(new IF_ID_uop())
-        val current_pc = pc_delayed + (i.U << 2)
+        val current_pc = PC_delayed + (i.U << 2)
         uop.instr := io.instr(i)
         uop.instr_addr := current_pc
         uop.target_PC := target_PC_delayed
