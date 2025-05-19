@@ -8,7 +8,7 @@ class DecodeUnitTest extends AnyFlatSpec with ChiselScalatestTester {
   
   "Decoder" should "correctly decode instructions" in {
     test(new DecodeUnit).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
-      val instr = "h00410113".U                 // addi x2, x2, 4
+      val instr = "b00000000010000010000000100010011".U(32.W)  // addi x2, x2, 4
       val addr = 0x1000.U
       implicit val p = Parameters()
 
@@ -47,7 +47,7 @@ class DecodeUnitTest extends AnyFlatSpec with ChiselScalatestTester {
   //测试flush
   "Decoder" should "flush when needed" in {
     test(new DecodeUnit).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
-      val instr = "h00410113".U           // addi x2, x2, 4
+      val instr = "b00000000010000010000000100010011".U(32.W)  // addi x2, x2, 4
       implicit val p = Parameters()
 
       c.io.rename_ready.poke(true.B)
