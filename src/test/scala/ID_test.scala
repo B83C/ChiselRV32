@@ -2,7 +2,7 @@ import chisel3._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 import rsd_rv32.common._
-import rsd_rv32.frontend.BranchPredictorUnit
+import rsd_rv32.frontend.decode
 
 class DecodeUnitTest extends AnyFlatSpec with ChiselScalatestTester {
   
