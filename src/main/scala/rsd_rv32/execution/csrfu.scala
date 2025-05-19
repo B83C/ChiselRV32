@@ -5,72 +5,111 @@ import chisel3.util._
 
 import rsd_rv32.common._
 
-abstract class MmapDevice(addrBase: UInt, length_in_word: UInt) extends Module {
-  val io = IO(new Bundle {
+import chisel3.experimental.hierarchy.{Definition, Instance, instantiable, public}
+
+@instantiable 
+class MmapDevice(addrBase: UInt, length_in_word: UInt) extends Module {
+  @public val io = IO(new Bundle {
+    val reset = Input(Bool())
     val addr  = Input(UInt(12.W))    // 12‑bit address as defined in RISCV manual
     val wdata = Input(Valid(UInt(32.W)))    // write data (ignored here)
+    val wmask = Input(UInt(32.W))    // write data (ignored here)
     val ren   = Input(Bool())        // read enable
     val rdata = Output(UInt(32.W))   // read data
     val ready = Output(Bool())       // ready/valid response
   })
 
-  def read(offset: UInt): UInt
-  def write(offset: UInt, data: UInt): Unit
+  // def read(offset: UInt): UInt
+  // def write(offset: UInt, data: UInt): Unit
 
   val offset = io.addr - addrBase
-  val hit = io.addr > addrBase && offset < (length_in_word << 2) //hardcoded
-  io.ready := hit 
-  io.rdata := Mux(hit && io.ren, read(offset), 0.U)
-  when(hit && io.wdata.valid)  {
-    write(offset, io.wdata.bits)
-  }
+  val hit = io.addr >= addrBase && offset < (length_in_word << 2) //hardcoded
 }
 
+@instantiable 
 class McycleDevice(addrBase: UInt) extends MmapDevice(addrBase, 2.U) {
   val cycle = RegInit(0.U(64.W))
-  cycle := cycle + 1.U
 
-  override def read(offset: UInt): UInt = {
+  when(!io.reset) {
+    cycle := cycle + 1.U
+  }.otherwise {
+    cycle := 0.U
+  }
+
+  io.ready := hit 
+  io.rdata := Mux(hit && io.ren,
     MuxLookup(offset, 0.U)(Seq(
       0.U -> cycle(31, 0),
       4.U -> cycle(63, 32)
     ))
-  }
+    , 0.U)
 
-  override def write(offset: UInt, wdata: UInt): Unit = {
+  val wmask = io.wmask
+  val wmask_n = ~wmask
+
+  when(hit && io.wdata.valid) {
     switch (offset) {
       is (0.U) {
-        cycle(31, 0) := wdata
+        printf(cf"Writing ${io.wdata.bits}%b & ${wmask}%b to lower bits of clock\n")
+        cycle := Cat(cycle(63, 32), (io.wdata.bits & wmask) | (cycle(31, 0) & wmask_n))
       }
       is (4.U) {
-        cycle(63, 32) := wdata
+        printf(cf"Writing ${io.wdata.bits}%b & ${wmask}%b to higher bits of clock\n")
+        cycle := Cat((io.wdata.bits & wmask) | (cycle(63, 32) & wmask_n), cycle(31,0))
       }
     }
   }
+
+  when(hit) {
+    printf(cf"Reading clock ${cycle}%b\n")
+  }
+
+  // override def read(offset: UInt): UInt = {
+  //   MuxLookup(offset, 0.U)(Seq(
+  //     0.U -> cycle(31, 0),
+  //     4.U -> cycle(63, 32)
+  //   ))
+  // }
+
+  // override def write(offset: UInt, wdata: UInt): Unit = {
+  // }
 }
 
+@instantiable 
 class MtimeDevice(addrBase: UInt) extends McycleDevice(addrBase) 
 
+class CSRFU_Default(implicit p: Parameters) extends CSRFU(Seq(
+  Definition(new McycleDevice(p.CSR_MCYCLE_ADDR.U)),
+  Definition(new MtimeDevice(p.CSR_MTIME_ADDR.U))
+))
 
-class CSRFU(implicit p: Parameters) extends FunctionalUnit with CSRConsts {
+class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extends FunctionalUnit with CSRConsts {
   override def supportedInstrTypes = Set(InstrType.CSR)
 
-  val out = Valid(new ALU_WB_uop())
+  val out = IO(Valid(new ALU_WB_uop()))
+  //TODO
+  io.uop.ready := true.B
+
   val uop = io.uop.bits
+  uop := DontCare
+  (out.bits: Data).waiveAll :<>= (uop: Data).waiveAll
 
-  val mcycle = Module(new McycleDevice(0xEEF.U))
-  val mtime  = Module(new MtimeDevice(0xEAF.U))
+  // val mcycle = Module(new McycleDevice(p.CSR_MCYCLE_ADDR.U))
+  // val mtime  = Module(new MtimeDevice(p.CSR_MTIME_ADDR.U))
 
-  val all_devices = Seq(mcycle, mtime)
+  val all_devices = devices.map(m => Instance(m))
 
-  val addr  = Wire(UInt(p.XLEN.W))
+  val addr  = WireInit(0.U(p.XLEN.W))
   val wdata  = Wire(Valid(UInt(p.XLEN.W)))
+  val wmask  = WireInit(0.U(p.XLEN.W))
   val ren  = Wire(Bool())
 
   all_devices.foreach { dev =>
     dev.io.addr  := addr
     dev.io.wdata := wdata
     dev.io.ren   := ren 
+    dev.io.wmask   := wmask
+    dev.io.reset := io.reset //TODO should be replaced by mispred
   }
 
   val rdata = VecInit(all_devices.map(_.io.rdata))
@@ -81,22 +120,59 @@ class CSRFU(implicit p: Parameters) extends FunctionalUnit with CSRConsts {
   val instr = Cat(uop.instr, 0.U(7.W))
   val func3 = instr(14, 12)
   val csr = instr(31, 20)
+  // val rd = instr(11, 7)
+  val rs1 = instr(19, 15)
 
   wdata.valid := false.B
+  wdata.bits := DontCare
   ren := false.B
 
+  // TODO: Not sure yet
+  out.bits := DontCare
   out.bits.rob_index := uop.rob_index
   out.valid := false.B
 
-  switch(func3) {
-    is(CSRRW) {
-      ren := true.B
-      wdata.bits := uop.ps1_value
-      wdata.valid := true.B
-      addr := csr
-      out.bits.pdst := uop.pdst
-      out.bits.pdst_value := first_ready_rdata
-      out.valid := true.B
-    }
+  //Works for both immediate and non-immediate versions
+  val should_input = rs1 =/= 0.U
+  val should_output = uop.pdst =/= 0.U
+
+  def opr_is(check: UInt) : Bool = {
+    func3 === check
   }
+
+  // val rs1_is_imm = Seq(CSRRWI, CSRRSI, CSRRSI).contains(func3).B
+  val rs1_is_imm = uop.fu_signals.opr1_sel === OprSel.IMM // TODO: This is more appropriate
+  val write_value = Mux(rs1_is_imm, rs1, uop.ps1_value)
+
+  when(io.uop.valid) {
+    when(opr_is(CSRRW)) {
+      printf(cf"CSRRW instr detected csr ${csr}%x immediate ${rs1_is_imm} rs1 ${rs1}, first_ready_rdata ${first_ready_rdata}\n")
+      //Util function for assembling and disassembling instruction
+      // import Instr._
+      // val decoded = disassemble(uop.instr, InstrType.CSR)
+      // println(decoded)
+      wdata.bits := write_value
+      wdata.valid := true.B
+      wmask := ~0.U(32.W)
+      addr := csr
+
+      // TODO: We have come to the concensus to use pdst 0 as the 0 mapping? Not sure
+      ren := should_output
+      out.bits.pdst := RegEnable(uop.pdst, should_output)
+      out.bits.pdst_value := RegEnable(first_ready_rdata, should_output)
+      out.valid := RegNext(should_output)
+    }.elsewhen(opr_is(CSRRS) || opr_is(CSRRC)) {
+      printf(cf"CSRRS(C) instr detected csr ${csr}%x valid ${should_input} mask ${uop.ps1_value}%b should_input ${should_input}\n")
+      wdata.bits := Mux(opr_is(CSRRC), 0.U, ~0.U(32.W))
+      wdata.valid := should_input
+      wmask := write_value
+      addr := csr
+
+      ren := true.B
+      out.bits.pdst := RegNext(uop.pdst)
+      out.bits.pdst_value := RegNext(first_ready_rdata)
+      out.valid := RegNext(should_output)
+    }   
+  }
+
 }

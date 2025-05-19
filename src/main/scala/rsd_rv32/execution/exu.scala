@@ -10,6 +10,8 @@ import rsd_rv32.frontend._
 class EXUIO(fu_num: UInt)(implicit p: Parameters) extends Bundle{
   //来自exu_issue queue的输入
   val execute_uop = Flipped(Vec(fu_num, Valid(new EXUISSUE_EXU_uop)))
+  
+  val serialised_uop = Flipped(Valid(new EXUISSUE_EXU_uop))
 
   // val readys = Output(Vec(fu_num, Bool()))
 
@@ -30,6 +32,8 @@ class EXUIO(fu_num: UInt)(implicit p: Parameters) extends Bundle{
   val bu_wb_uop = Vec(p.BU_NUM, Valid(new BU_WB_uop()))
   val mul_wb_uop = Vec(p.MUL_NUM, Valid(new ALU_WB_uop()))
   val divrem_wb_uop = Vec(p.DIV_NUM, Valid(new ALU_WB_uop()))
+  
+  val serialised_wb_uop = Valid(new ALU_WB_uop())
 }
 
 //把exu的各个fu封装起来的顶层模块
@@ -38,10 +42,12 @@ class EXU(implicit p: Parameters) extends Module {
   val bu = Seq.fill(p.BU_NUM)(Module(new BranchFU))
   val mul = Seq.fill(p.MUL_NUM)(Module(new MULFU))
   val div = Seq.fill(p.DIV_NUM)(Module(new DIVFU))
-  val csru = Seq.fill(p.CSRU_NUM)(Module(new CSRFU))
 
-  val fus = (alu ++ bu ++ mul ++ div ++ csru)
+  val fus = (alu ++ bu ++ mul ++ div)
   val io = IO(new EXUIO(fus.length.asUInt))
+  fus.foreach { fu => 
+    (fu.io: Data).waiveAll :<>= (io: Data).waiveAll
+  }
   
   // io.readys := VecInit((alu ++ bu ++ mul ++ div ++ csru).map(!_.io.uop.ready))
   //TODO 改成readys
@@ -54,4 +60,12 @@ class EXU(implicit p: Parameters) extends Module {
   io.bu_wb_uop := VecInit(bu.map(_.out))
   io.mul_wb_uop := VecInit(mul.map(_.out))
   io.divrem_wb_uop := VecInit(div.map(_.out))
+
+
+  val csru = Module(new CSRFU_Default)
+  //Serialised uop
+  csru.uop := io.serialised_uop
+  //TODO
+  // csru.reset := 
+  io.serialised_wb_uop := csru.out
 }

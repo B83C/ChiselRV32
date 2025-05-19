@@ -36,7 +36,7 @@ package object Utils {
 object Instr {
   // R-type: funct7 | rs2 | rs1 | funct3 | rd | opcode
 
-  def R(funct7: UInt, rs2: UInt, rs1: UInt, funct3: UInt, rd: UInt, opcode: UInt): UInt = {
+  def R(funct7: UInt = 0.U, rs2: UInt = 0.U, rs1: UInt = 0.U, funct3: UInt = 0.U, rd: UInt = 0.U, opcode: UInt = 0.U): UInt = {
     val value =
       ((funct7.litValue & 0x7fL) << 25) |
       ((rs2.litValue   & 0x1fL) << 20) |
@@ -48,7 +48,7 @@ object Instr {
     value.U(32.W)
   }
 
-  def I(imm: UInt, rs1: UInt, funct3: UInt, rd: UInt, opcode: UInt): UInt = {
+  def I(imm: UInt = 0.U, rs1: UInt = 0.U, funct3: UInt = 0.U, rd: UInt = 0.U, opcode: UInt = 0.U): UInt = {
     val value =
       ((imm.litValue     & 0xfffL) << 20) |
       ((rs1.litValue     & 0x1fL)  << 15) |
@@ -59,7 +59,7 @@ object Instr {
     value.U(32.W)
   }
 
-  def S(imm: UInt, rs2: UInt, rs1: UInt, funct3: UInt, opcode: UInt): UInt = {
+  def S(imm: UInt = 0.U, rs2: UInt = 0.U, rs1: UInt = 0.U, funct3: UInt = 0.U, opcode: UInt = 0.U): UInt = {
     val immVal = imm.litValue & 0xfffL
     val immHi = (immVal >> 5) & 0x7fL
     val immLo = immVal & 0x1fL
@@ -75,7 +75,7 @@ object Instr {
     value.U(32.W)
   }
 
-  def B(imm: UInt, rs2: UInt, rs1: UInt, funct3: UInt, opcode: UInt): UInt = {
+  def B(imm: UInt = 0.U, rs2: UInt = 0.U, rs1: UInt = 0.U, funct3: UInt = 0.U, opcode: UInt = 0.U): UInt = {
     val immVal = imm.litValue & 0x1fffL // 13-bit signed immediate
 
     val bit12 = (immVal >> 12) & 0x1L
@@ -96,7 +96,7 @@ object Instr {
     value.U(32.W)
   }
 
-  def U(imm: UInt, rd: UInt, opcode: UInt): UInt = {
+  def U(imm: UInt = 0.U, rd: UInt = 0.U, opcode: UInt = 0.U): UInt = {
     val value =
       ((imm.litValue     & 0xfffff000L)) | // already aligned
       ((rd.litValue      & 0x1fL) << 7 ) |
@@ -105,7 +105,7 @@ object Instr {
     value.U(32.W)
   }
 
-  def J(imm: UInt, rd: UInt, opcode: UInt): UInt = {
+  def J(imm: UInt = 0.U, rd: UInt = 0.U, opcode: UInt = 0.U): UInt = {
     val immVal = imm.litValue & 0xfffffL // 20-bit signed immediate
 
     val bit20 = (immVal >> 20) & 0x1L

@@ -11,5 +11,6 @@ abstract class FunctionalUnit(
   def supportedInstrTypes: Set[InstrType.Type]
   val io = IO(new Bundle {
     val uop = Flipped(Decoupled(new EXUISSUE_EXU_uop()))
+    val reset = Input(Bool())
   })
 }

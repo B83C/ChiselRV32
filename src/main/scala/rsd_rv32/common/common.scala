@@ -32,6 +32,9 @@ case class Parameters(
   LDISSUE_DEPTH: Int = 16,
   STISSUE_DEPTH: Int = 16,
   EXU_Fj_CNT_MAX: Int = 10, //一个执行单元所包含的FU最多的数量
+
+  CSR_MTIME_ADDR: Int = 0xEEF,
+  CSR_MCYCLE_ADDR: Int = 0xEEF,
 )
 
 object IType extends Enumeration {
