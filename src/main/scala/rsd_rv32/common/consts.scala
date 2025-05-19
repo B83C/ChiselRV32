@@ -126,16 +126,14 @@ trait ScalarOpConstants
 trait ALUConsts {
   val ALU_ADD    = 0.U(4.W)
   val ALU_SUB    = 1.U(4.W)
-  val ALU_AND    = 2.U(4.W)
-  val ALU_OR     = 3.U(4.W)
-  val ALU_XOR    = 4.U(4.W)
-  val ALU_SLL    = 5.U(4.W)  // 逻辑左移
-  val ALU_SRL    = 6.U(4.W)  // 逻辑右移
-  val ALU_SRA    = 7.U(4.W)  // 算术右移
-
-  // 比较操作
-  val ALU_SLT    = 8.U(4.W)  // 有符号比较
-  val ALU_SLTU   = 9.U(4.W)  // 无符号比较
+  val ALU_SLL    = 2.U(4.W)
+  val ALU_SLT    = 3.U(4.W)
+  val ALU_SLTU   = 4.U(4.W)
+  val ALU_XOR    = 5.U(4.W)
+  val ALU_SRL    = 6.U(4.W)
+  val ALU_SRA    = 7.U(4.W)
+  val ALU_OR     = 8.U(4.W)
+  val ALU_AND    = 9.U(4.W)
 
 }
 trait BRConsts {
