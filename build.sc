@@ -21,6 +21,7 @@ object `rsd_rv32` extends SbtModule { m =>
     "-deprecation",
     "-feature",
     "-Xcheckinit",
+    "-Ymacro-annotations",
   )
   override def ivyDeps = Agg(
     ivy"org.chipsalliance::chisel:6.6.0",
