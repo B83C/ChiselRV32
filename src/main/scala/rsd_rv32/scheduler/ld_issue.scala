@@ -39,7 +39,7 @@ class ld_issue_IO(implicit p: Parameters) extends CustomBundle {
     val st_issued_index = Flipped(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)))
     //发往ROB的uop与发往st_issue的uop，用于处理dispatch一周期内发射一条st一条ld的情况
     val rob_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop())))
-    val st_issue_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new DISPATCH_STISSUE_uop()))
+    val st_issue_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new DISPATCH_STISSUE_uop())))
 
     //测试接口
     val queue = Output(Vec(p.LDISSUE_DEPTH, new ld_issue_content()))
