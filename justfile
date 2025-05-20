@@ -1,7 +1,10 @@
 MILL := './mill'
 
 fetchMill: 
-	@[ -e {{MILL}} ] || curl -L https://repo1.maven.org/maven2/com/lihaoyi/mill-dist/0.12.9/mill -o {{MILL}} && chmod +x {{MILL}}
+	@[ -e {{MILL}} ] || curl -L https://repo1.maven.org/maven2/com/lihaoyi/mill-dist/0.12.11/mill -o {{MILL}} && chmod +x {{MILL}}
+
+run class="Core": fetchMill
+	@{{MILL}} _.runMain {{class}}
 
 test unittest="_.test": fetchMill
 	@{{MILL}} {{unittest}}

@@ -127,26 +127,30 @@ class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extend
   wdata.bits := DontCare
   ren := false.B
 
+  val should_input = rs1 =/= 0.U
+  val should_output = uop.pdst =/= 0.U || !(opr_is(CSRRW) || opr_is(CSRRWI))
+
   // TODO: Not sure yet
   out.bits := DontCare
   out.bits.rob_index := uop.rob_index
-  out.valid := false.B
+  out.valid := RegNext(should_output)
+  out.bits.pdst := RegEnable(uop.pdst, should_output)
+  out.bits.pdst_value := RegEnable(first_ready_rdata, should_output)
+  ren := should_output
 
   //Works for both immediate and non-immediate versions
-  val should_input = rs1 =/= 0.U
-  val should_output = uop.pdst =/= 0.U
 
   def opr_is(check: UInt) : Bool = {
     func3 === check
   }
 
-  // val rs1_is_imm = Seq(CSRRWI, CSRRSI, CSRRSI).contains(func3).B
-  val rs1_is_imm = uop.fu_signals.opr1_sel === OprSel.IMM // TODO: This is more appropriate
+  val rs1_is_imm = (opr_is(CSRRWI) || opr_is(CSRRSI) || opr_is(CSRRSI))
+  // val rs1_is_imm = uop.fu_signals.opr1_sel === OprSel.IMM // TODO: This is more appropriate
   val write_value = Mux(rs1_is_imm, rs1, uop.ps1_value)
 
   when(io.uop.valid) {
-    when(opr_is(CSRRW)) {
-      printf(cf"CSRRW instr detected csr ${csr}%x immediate ${rs1_is_imm} rs1 ${rs1}, first_ready_rdata ${first_ready_rdata}\n")
+    when(opr_is(CSRRW) || opr_is(CSRRWI)) {
+      printf(cf"CSRRW instr detected csr ${csr}%x immediate ${rs1_is_imm} rs1 ${rs1} is_imm ${rs1_is_imm} write_value ${write_value}, first_ready_rdata ${first_ready_rdata}\n")
       //Util function for assembling and disassembling instruction
       // import Instr._
       // val decoded = disassemble(uop.instr, InstrType.CSR)
@@ -155,23 +159,12 @@ class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extend
       wdata.valid := true.B
       wmask := ~0.U(32.W)
       addr := csr
-
-      // TODO: We have come to the concensus to use pdst 0 as the 0 mapping? Not sure
-      ren := should_output
-      out.bits.pdst := RegEnable(uop.pdst, should_output)
-      out.bits.pdst_value := RegEnable(first_ready_rdata, should_output)
-      out.valid := RegNext(should_output)
-    }.elsewhen(opr_is(CSRRS) || opr_is(CSRRC)) {
+    }.elsewhen(opr_is(CSRRS) || opr_is(CSRRSI) || opr_is(CSRRC) || opr_is(CSRRCI)) {
       printf(cf"CSRRS(C) instr detected csr ${csr}%x valid ${should_input} mask ${uop.ps1_value}%b should_input ${should_input}\n")
       wdata.bits := Mux(opr_is(CSRRC), 0.U, ~0.U(32.W))
       wdata.valid := should_input
       wmask := write_value
       addr := csr
-
-      ren := true.B
-      out.bits.pdst := RegNext(uop.pdst)
-      out.bits.pdst_value := RegNext(first_ready_rdata)
-      out.valid := RegNext(should_output)
     }   
   }
 
