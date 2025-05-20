@@ -293,7 +293,7 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
           // 首先考虑当前指令在提交窗口中的位置
           val shift_amt = i.U + 1.U
           // 计算需要保留的高位和需要插入的低位
-          val high_bits = ghr >> shift_amt
+          val high_bits = nextGHR >> shift_amt
           // 根据实际的跳转结果更新低位
           when (shift_amt >= p.GHR_WIDTH.U) {
             // 如果移位量超过GHR宽度，则整个GHR都是推测性的
@@ -301,7 +301,7 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
           }.otherwise {
             // 左移高位，并将实际结果插入最低位
             val new_ghr = (high_bits << shift_amt).asUInt |
-              Mux(taken, (1.U << (shift_amt - 1.U)), 0.U).asUInt
+              Mux(taken, 0.U, (1.U << (shift_amt - 1.U))).asUInt
             ghr := new_ghr
           }
         }
