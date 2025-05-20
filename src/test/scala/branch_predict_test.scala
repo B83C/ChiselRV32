@@ -62,7 +62,7 @@ class branch_predict_test extends AnyFlatSpec with ChiselScalatestTester {
       robContent.as_Branch.target_PC.poke("h00002000".U)
       robContent.as_Branch.branch_direction.poke(BranchPred.T)
       robContent.as_Branch.GHR.poke(3.U)*/
-      c.io.rob_commitsignal(0).bits.payload.poke("h0_00002000_0_3".U)
+      c.io.rob_commitsignal(0).bits.payload.poke("h0_00002000_0_6".U)
       c.io.rob_commitsignal(0).bits.mispred.poke(false.B)
 
       c.clock.step()
@@ -70,7 +70,6 @@ class branch_predict_test extends AnyFlatSpec with ChiselScalatestTester {
       // 取消提交信号
       c.io.rob_commitsignal(0).valid.poke(false.B)
       c.clock.step()
-
       // 测试预测
       c.io.instr_addr.poke("h0000abcd".U)
       c.clock.step()
@@ -80,7 +79,6 @@ class branch_predict_test extends AnyFlatSpec with ChiselScalatestTester {
       c.io.btb_hit(0).expect(true.B)
       c.io.branch_pred(0).expect(true.B)
       c.io.target_PC.expect("h00002000".U)
-
       println("pass!")
     }
   }
@@ -109,7 +107,7 @@ class branch_predict_test extends AnyFlatSpec with ChiselScalatestTester {
 
       // 测试重置后的状态
       println(s"Current GHR: ${c.io.GHR.peek().litValue}")
-      c.io.GHR.expect(3.U)
+      c.io.GHR.expect(1.U)
 
       // 测试同一地址的预测
       c.io.instr_addr.poke("h0000abcd".U)
@@ -171,7 +169,7 @@ class branch_predict_test extends AnyFlatSpec with ChiselScalatestTester {
       c.io.rob_commitsignal(0).bits.instr_addr.poke("h00001000".U)
       c.io.rob_commitsignal(0).bits.rob_type.poke(ROBType.Branch)
       c.io.rob_commitsignal(0).bits.payload.poke("h0_00003000_0_1".U) // Target: 0x3000
-      c.io.rob_commitsignal(0).bits.mispred.poke(false.B)
+      c.io.rob_commitsignal(0).bits.mispred.poke(true.B)
 
       // Branch 2 at address 0x1004 (assuming 4-byte instructions)
       c.io.rob_commitsignal(1).valid.poke(true.B)
@@ -218,10 +216,13 @@ class branch_predict_test extends AnyFlatSpec with ChiselScalatestTester {
       c.io.btb_hit(1).expect(true.B) // BTB should hit for second instruction
       c.io.branch_pred(0).expect(true.B) // First branch predicts taken
       c.io.branch_pred(1).expect(false.B) // Second branch predicts not-taken
+      c.io.target_PC.expect("h00003000".U)
+      c.clock.step()
     }
   }
 
 }
+
 
 
 object Driver extends App {
