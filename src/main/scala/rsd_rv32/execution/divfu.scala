@@ -31,7 +31,7 @@ class Divider extends Module {
     r_divisor  := io.divisor
     r_quotient := 0.U
   }.elsewhen(r_counter =/= 0.U) {
-    val diff = r_dividend - Cat(r_divisor, 0.U(31.W))  // 除数左移
+    val diff = r_dividend - (r_divisor << (r_counter - 1.U)).asUInt
 
     when(!diff(63)) {  // 检查是否无借位
       r_dividend := diff
@@ -48,31 +48,6 @@ class Divider extends Module {
   io.remainder := r_dividend(31, 0)  // 取低32位作为余数
 }
 
-/*
-class DividerTop extends Module {
-  val io = IO(new Bundle {
-    val valid     = Input (UInt(1.W))
-    val dividend  = Input (UInt(16.W))
-    val divisor   = Input (UInt(16.W))
-    val quotient  = Output(UInt(16.W))
-    val remainder = Output(UInt(16.W))
-  })
-
-  val div = Module(new Divider())
-
-  // Map switches to the ALU input ports
-  // div.io.fn := io.sw(1, 0)
-  div.io.valid    := io.valid
-  div.io.dividend := io.dividend
-  div.io.divisor  := io.divisor
-
-  // And the result to the LEDs (with 0 extension)
-  io.quotient  := div.io.quotient
-  io.remainder := div.io.remainder
-}
-
- */
-
 
 class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   override def supportedInstrTypes = Set(InstrType.DIV_REM)
@@ -88,8 +63,10 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   val resultReg = RegInit(0.U(p.XLEN.W))
   val op1Reg = RegInit(0.S(p.XLEN.W))
   val op2Reg = RegInit(0.S(p.XLEN.W))
+
   //val divTypeReg = RegInit(0.U(2.W))
   val uopReg = RegInit(0.U.asTypeOf(new EXUISSUE_EXU_uop()))
+
 
   // 操作数选择逻辑
   def Sel(sel: OprSel.Type, reg: UInt) = {
@@ -112,14 +89,20 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   divider.io.valid := false.B
   divider.io.dividend := 1.U
   divider.io.divisor := 1.U
+
+  val quotient_sign = RegInit(false.B)
+  val remainder_sign = RegInit(false.B)
   // 状态机转换
   switch(state) {
     is(s_idle) {
       when(io.uop.valid && (io.uop.bits.instr_type === InstrType.DIV_REM)) {
         // 锁存操作数、操作类型和uop信息
-        op1Reg := Sel(io.uop.bits.fu_signals.opr1_sel, io.uop.bits.ps1_value).asSInt
-        op2Reg := Sel(io.uop.bits.fu_signals.opr2_sel, io.uop.bits.ps2_value).asSInt
-//        divTypeReg := func3(1, 0) // 只取低2位
+        val op1 = Sel(io.uop.bits.fu_signals.opr1_sel, io.uop.bits.ps1_value).asSInt
+        val op2 = Sel(io.uop.bits.fu_signals.opr2_sel, io.uop.bits.ps2_value).asSInt
+
+        // 仍然更新寄存器用于后续状态
+        op1Reg := op1
+        op2Reg := op2
         uopReg := io.uop.bits
 //
         // 设置除法器输入（根据不同类型处理符号扩展）
@@ -129,29 +112,31 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
 
 //        state := s_busy
         val dividend = Mux(is_div || is_rem,
-          Mux(op1Reg === Int.MinValue.S, Int.MinValue.S.abs.asUInt, op1Reg.abs.asUInt),
-          op1Reg.asUInt)
+          Mux(op1 === Int.MinValue.S, Int.MinValue.S.abs.asUInt, op1.abs.asUInt),
+          op1.asUInt)
 
         val divisor = Mux(is_div || is_rem,
-          Mux(op2Reg === Int.MinValue.S, Int.MinValue.S.abs.asUInt, op2Reg.abs.asUInt),
-          op2Reg.asUInt)
+          Mux(op2 === Int.MinValue.S, Int.MinValue.S.abs.asUInt, op2.abs.asUInt),
+          op2.asUInt)
 
+        quotient_sign := (op1 < 0.S) =/= (op2 < 0.S)
+        remainder_sign := op1 < 0.S
         divider.io.valid := true.B
         divider.io.dividend := dividend
         divider.io.divisor := divisor
 
         // 处理除零和溢出情况
-        when(op2Reg === 0.S) {
+        when(op2 === 0.S) {
           // 除零处理
           resultReg := Mux(is_div || is_divu,
             "hffffffff".U,  // 商为全1
-            op1Reg.asUInt)   // 余数为被除数
+            op1.asUInt)   // 余数为被除数
           state := s_done
-        }.elsewhen(is_div && (op1Reg === Int.MinValue.S) && (op2Reg === -1.S)) {
+        }.elsewhen(is_div && (op1 === Int.MinValue.S) && (op2 === -1.S)) {
           // 有符号除法溢出处理
           resultReg := Mux(is_div,
             Int.MinValue.S.asUInt,  // -2^31
-            op1Reg.asUInt + op2Reg.asUInt) // 余数
+            op1.asUInt + op2.asUInt) // 余数
           state := s_done
         }.otherwise {
           // 正常除法
@@ -170,14 +155,18 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
         val raw_remainder = divider.io.remainder
 
         // 处理有符号结果的符号位
-        val quotient_sign = (op1Reg < 0.S) =/= (op2Reg < 0.S)
-        val remainder_sign = op1Reg < 0.S
 
-        val final_quotient = Mux(is_div && quotient_sign,
-          (-raw_quotient.asSInt).asUInt,
+
+        val final_quotient = Mux(is_div,
+          Mux(quotient_sign,
+            (-raw_quotient.asSInt).asUInt,
+            raw_quotient),
           raw_quotient)
-        val final_remainder = Mux(is_rem && remainder_sign,
-          (-raw_remainder.asSInt).asUInt,
+
+        val final_remainder = Mux(is_rem,
+          Mux(remainder_sign,
+            (-raw_remainder.asSInt).asUInt,
+            raw_remainder),
           raw_remainder)
 
         // 选择最终结果
