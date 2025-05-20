@@ -181,7 +181,36 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
     nextGHR := Cat(ghr(p.GHR_WIDTH-3, 0), 0.U(1.W), 0.U(1.W))
   }
   // 更新GHR
+  ghr := nextGHRval nextGHR = Wire(UInt(p.GHR_WIDTH.W))
+  when (pred0) {
+    when(btbEntry0.isConditional){
+      nextGHR := Cat(ghr(p.GHR_WIDTH-2, 0), 1.U(1.W))
+    }.otherwise {
+      nextGHR := ghr
+    }
+  }.elsewhen (pred1) {
+    when(btbEntry0.isConditional&&btbEntry1.isConditional){
+      nextGHR := Cat(ghr(p.GHR_WIDTH-3, 0), 0.U(1.W),1.U(1.W))
+    }.elsewhen(!btbEntry0.isConditional&&btbEntry1.isConditional){
+      nextGHR := Cat(ghr(p.GHR_WIDTH-2, 0), 1.U(1.W))
+    }.elsewhen(btbEntry0.isConditional&&(!btbEntry1.isConditional)){
+      nextGHR := Cat(ghr(p.GHR_WIDTH-2, 0), 0.U(1.W))
+    }.otherwise{
+      nextGHR := ghr
+    }
+  }.otherwise {
+    // 两条指令都不跳转
+    when(btbEntry0.isConditional&&btbEntry1.isConditional){
+      nextGHR := Cat(ghr(p.GHR_WIDTH-3, 0), 0.U(1.W),0.U(1.W))
+    }.elsewhen(btbEntry0.isConditional^btbEntry1.isConditional){
+      nextGHR := Cat(ghr(p.GHR_WIDTH-2, 0), 0.U(1.W))
+    }.otherwise{
+      nextGHR := ghr
+    }
+  }
+  // 更新GHR
   ghr := nextGHR
+  
   // 设置输出
   io.target_PC := targetPC
   io.btb_hit := btbHitVec
