@@ -1,15 +1,15 @@
+
 import chisel3._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 import rsd_rv32.common._
 import rsd_rv32.frontend._
-
 class DecodeUnitTest extends AnyFlatSpec with ChiselScalatestTester {
-  
+
   implicit val p: Parameters = new Parameters
-  
+
   "Decoder" should "correctly decode instructions" in {
-    test(new DecodeUnit).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
+    test(new DecodeUnit()(p)).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
       val instr = "b00000000010000010000000100010011".U(32.W)  // addi x2, x2, 4
       val addr = 0x1000.U
       implicit val p = Parameters()
@@ -48,7 +48,7 @@ class DecodeUnitTest extends AnyFlatSpec with ChiselScalatestTester {
 
   //测试flush
   "Decoder" should "flush when needed" in {
-    test(new DecodeUnit).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
+    test(new DecodeUnit()(p)).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
       val instr = "b00000000010000010000000100010011".U(32.W)  // addi x2, x2, 4
       implicit val p = Parameters()
 

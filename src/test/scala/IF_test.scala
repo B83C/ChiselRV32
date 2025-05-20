@@ -16,10 +16,13 @@ class FetchUnitTest extends AnyFlatSpec with ChiselScalatestTester {
       c.io.target_PC.poke(0.U)
       c.io.GHR.poke(0.U)
 
-      c.clock.step()
-
       c.io.instr(0).poke("b00000000000000000000000000010011".U) // addi x0, x0, 0
       c.io.instr(1).poke("b00000000000000000000000000010011".U)
+
+
+
+
+      c.clock.step()
       c.clock.step()
 
       c.io.id_uop(0).valid.expect(true.B, "uop 0 应该是true")
@@ -38,11 +41,14 @@ class FetchUnitTest extends AnyFlatSpec with ChiselScalatestTester {
       c.io.target_PC.poke(0.U)
       c.io.GHR.poke(0.U)
 
+      c.io.instr(0).poke("b00000000000000000000000000010011".U)
+      c.io.instr(1).poke("b00000000000000000000000000010011".U)
+
+
+
       c.clock.step()
 
 
-      c.io.instr(0).poke("b00000000000000000000000000010011".U)
-      c.io.instr(1).poke("b00000000000000000000000000010011".U)
       c.clock.step()
 
 
@@ -51,3 +57,4 @@ class FetchUnitTest extends AnyFlatSpec with ChiselScalatestTester {
     }
   }
 }
+
