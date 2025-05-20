@@ -3,11 +3,17 @@ import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import chisel3.util._
-
 import rsd_rv32.common._
 import rsd_rv32.scheduler._
 import rsd_rv32.execution._
 
+
+import chisel3._
+import chiseltest._
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import rsd_rv32.common._
+import rsd_rv32.common.Parameters
 
 
 //ALU的测试，都跑通了
@@ -285,7 +291,7 @@ class MULFUTest extends AnyFlatSpec with ChiselScalatestTester {
 
  */
 }
-class DIVFUTest extends AnyFlatSpec with ChiselScalatestTester {
+class DIVFUTest extends AnyFlatSpec with ChiselScalatestTester with Matchers {
   implicit val p = Parameters()
 
   // 除法指令类型定义 (与RISC-V func3编码一致)
@@ -299,19 +305,82 @@ class DIVFUTest extends AnyFlatSpec with ChiselScalatestTester {
 
   "DIVFU" should "correctly perform signed division (DIV)" in {
     test(new DIVFU) { dut =>
-      // 构造指令
-      dut.io.uop.bits.instr.poke("b0000001_00010_00001_100_00000".U)
-      dut.io.uop.bits.instr_type.poke(InstrType.DIV_REM)
+//      // 构造指令
+//      dut.io.uop.bits.instr.poke("b0000001_00010_00001_100_00000".U)
+//      dut.io.uop.bits.instr_type.poke(InstrType.DIV_REM)
+//
+//      // 测试1: 10 / 3 = 3
+//      dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
+//      dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
+//      dut.io.uop.bits.ps1_value.poke(100.U)
+//      dut.io.uop.bits.ps2_value.poke(7.U)
+//      dut.io.uop.valid.poke(true.B)
+//       //等待结果 ready
+//      var cycles = 0
+//      while (!dut.out.valid.peek().litToBoolean && cycles < 100) {
+//        dut.clock.step()
+//        cycles += 1
+//      }
+////      dut.clock.step()
+//      dut.out.valid.expect(true.B)
+//      dut.out.bits.pdst_value.expect(14.U)
+//
+//      dut.clock.step()
+//      dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
+//      dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
+//      dut.io.uop.bits.ps1_value.poke(10.U)
+//      dut.io.uop.bits.ps2_value.poke(7.U)
+//      dut.io.uop.valid.poke(true.B)
+//      //等待结果 ready
+//      cycles = 0
+//      while (!dut.out.valid.peek().litToBoolean && cycles < 100) {
+//        dut.clock.step()
+//        cycles += 1
+//      }
+//      //      dut.clock.step()
+//      dut.out.valid.expect(true.B)
+//      dut.out.bits.pdst_value.expect(1.U)
 
-      // 测试1: 10 / 3 = 3
-      dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
-      dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
-      dut.io.uop.bits.ps1_value.poke(10.U)
-      dut.io.uop.bits.ps2_value.poke(3.U)
-      dut.io.uop.valid.poke(true.B)
-      dut.clock.step()
-      dut.out.valid.expect(true.B)
-      dut.out.bits.pdst_value.expect(3.U)
+      def stepDivider(dividend: Int, divisor: Int): (Int) = {
+        require(divisor != 0, "Divisor must not be zero")
+
+        // 构造指令
+        dut.io.uop.bits.instr.poke("b0000001_00010_00001_100_00000".U)
+        dut.io.uop.bits.instr_type.poke(InstrType.DIV_REM)
+
+        // 测试1: 10 / 3 = 3
+        dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
+        dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
+        dut.io.uop.bits.ps1_value.poke(dividend.U)
+        dut.io.uop.bits.ps2_value.poke(divisor.U)
+        dut.io.uop.valid.poke(true.B)
+        //等待结果 ready
+        var cycles = 0
+        while (!dut.out.valid.peek().litToBoolean && cycles < 100) {
+          dut.clock.step()
+          cycles += 1
+        }
+        val quotient  = dut.out.bits.pdst_value.peek().litValue
+        (quotient.toInt)
+      }
+
+      val testCases = Seq(
+        (10, 3),   // 正常除法
+        (15, 5),
+        (100, 7),
+        (255, 1),
+        (256, 16),
+        (0, 5),    // 被除数为0
+        (12345, 123), // 大数
+        (1073741824, 33554430)
+      )
+
+      for ((a, b) <- testCases) {
+        val q = stepDivider(a, b)
+        println(s"$a / $b = $q")
+        q shouldEqual (a / b)
+        dut.clock.step()
+      }
 
 //      // 测试2: -10 / 3 = -3
 //      dut.io.uop.bits.ps1_value.poke((-10).S)
