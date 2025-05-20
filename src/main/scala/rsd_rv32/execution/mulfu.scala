@@ -5,52 +5,6 @@ import chisel3.util._
 
 import rsd_rv32.common._
 import Utils._
-// class MULTop(implicit p: Parameters) extends Module {
-//     val io = IO(new Bundle {
-//       // 来自前端的请求
-//       val req = Flipped(Valid(new Bundle {
-//         val rs1 = UInt(p.XLEN.W)
-//         val rs2 = UInt(p.XLEN.W)
-//         val uop = new EXUISSUE_EXU_uop()
-//       })
-
-//       // 写回端口
-//       val wb = Valid(new ALU_WB_uop())
-
-//       // 旁路接口
-//       val bypass = Output(new Bundle {
-//         val valid = Bool()
-//         val data = UInt(p.XLEN.W)
-//         val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
-//       })
-
-//       // 控制信号
-//       val flush = Input(Bool())
-//       val busy = Output(Bool())
-//     })
-
-//     // 实例化流水线乘法器
-//     val mul_fu = Module(new PipelinedBoothMultiplier())
-
-//     // 连接输入
-//     mul_fu.io.execute_uop(0).valid := io.req.valid
-//     mul_fu.io.execute_uop(0).bits := io.req.bits.uop
-//     mul_fu.io.execute_uop(0).bits.ps1_value := io.req.bits.rs1
-//     mul_fu.io.execute_uop(0).bits.ps2_value := io.req.bits.rs2
-//     mul_fu.io.flush := io.flush
-
-//     // 连接输出到写回端口
-//     io.wb.valid := mul_fu.io.mul_wb_uop(0).valid
-//     io.wb.bits := mul_fu.io.mul_wb_uop(0).bits
-
-//     // 旁路接口
-//     io.bypass.valid := mul_fu.io.mul_wb_uop(0).valid
-//     io.bypass.data := mul_fu.io.mul_wb_uop(0).bits.pdst_value
-//     io.bypass.pdst := mul_fu.io.mul_wb_uop(0).bits.pdst
-
-//     // 忙信号
-//     io.busy := mul_fu.io.mul_ready === false.B
-
 
 //Github上的乘法器bundle定义
 class ArithBundle extends Bundle {
@@ -119,6 +73,7 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
 
   val out = Valid(new ALU_WB_uop())
   val boothMul = Module(new BoothMultiplier())
+  val flush = Input(Bool())
 
   // 状态定义
   val s_idle :: s_busy :: s_done :: Nil = Enum(3)
@@ -173,7 +128,9 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
     }
     is(s_busy) {
       boothMul.io.in.start := false.B
-      when(!boothMul.io.out.busy) {
+      when(flush) {
+        state := s_idle  // 被冲刷时返回空闲状态
+      }.elsewhen(!boothMul.io.out.busy) {
         // 根据乘法类型选择结果
         val fullResult = boothMul.io.out.result
         resultReg := MuxCase(fullResult(31, 0), Seq(
@@ -196,10 +153,10 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   data_out.pdst_value := resultReg
   data_out.rob_index := io.uop.bits.rob_index
 
-  out.valid := (state === s_done)
+  out.valid := (state === s_done)&& !flush
   out.bits := data_out
 
   // 流控制
-  io.uop.ready := (state === s_idle)
+  io.uop.ready := (state === s_idle)&& !flush
 
 }
