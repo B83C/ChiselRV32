@@ -10,7 +10,11 @@ class Dispatcher_IO(implicit p:Parameters) extends CustomBundle {
   // with Rename
   val dis_uop = Flipped(Decoupled(Vec(p.CORE_WIDTH, Flipped(Valid(new RENAME_DISPATCH_uop()))))) //来自rename单元的uop
   
-  val rob_uop = Decoupled(Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop()))) //发往ROB的uop
+  val rob_uop = Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop())) //发往ROB的uop
+  
+  val rob_full = Input(Bool())
+  val rob_head = Input(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB头指针
+  val rob_tail = Input(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
   
   val serialised_uop = Valid(new DISPATCH_EXUISSUE_uop()) // 只有在顺序执行模式下才有效
   
@@ -37,7 +41,6 @@ class Dispatcher_IO(implicit p:Parameters) extends CustomBundle {
 // ooo_mode (Out of order) 表示乱序执行状态
 // pre_ino_mode (In order) 表示顺序执行状态(且等待rob清空)
 // ino_mode (In order) 表示顺序执行状态
-// ooo_mode_r (Out of order) 表示顺序执行状态
 object DispatchState extends ChiselEnum {
   val ooo_mode, pre_ino_mode, ino_mode = Value
 }
@@ -52,15 +55,19 @@ class DispatchUnit(implicit p: Parameters) extends CustomModule {
   val state = RegInit(ooo_mode)
   
   //函数定义见common/utils.scala
-  val should_kill = reset || isMispredicted(io.rob_commitsignal(0))
-  // TODO
-  val rob_empty = false.B
+  val should_kill = io.reset || isMispredicted(io.rob_commitsignal(0))
+  val rob_empty = (io.rob_head === io.rob_tail) && !io.rob_full
+  // 对于wrap around的情况不影响
+  val rob_tail_advance = io.rob_tail + p.CORE_WIDTH.U
+  val wrapped_around = rob_tail_advance < io.rob_tail
+  val rob_ready = (Mux(io.rob_head > io.rob_tail || wrapped_around, io.rob_head >= io.rob_tail_advance, io.rob_tail_advance > io.rob_head)) && !io.rob_full
 
   // Special Instruction - Serialised mode
-  val is_csr = VecInit(io.rob_uop.bits.map(x => x.bits.instr_type === InstrType.CSR)).asUInt
+  val is_csr = VecInit(io.rob_uop.map(x => x.bits.instr_type === InstrType.CSR)).asUInt
   // val ooo_mask = 
   val serialise_mask = Reg(UInt(p.CORE_WIDTH.W)) // All 1's by default
   val still_has_csr = (serialise_mask & is_csr) =/= 0.U
+  serialise_mask := ~0.U(p.CORE_WIDTH.W)
   
   def sig_mask(value: UInt) : UInt = {
     val mid = PriorityEncoderOH(is_csr) - 1.U
@@ -73,59 +80,65 @@ class DispatchUnit(implicit p: Parameters) extends CustomModule {
   val serialise_mask_mb = PriorityEncoderOH(serialise_mask) 
   val serialise_fire = serialise_mask_mb & is_csr 
   val serialise_fire_next = (serialise_mask_mb << 1) & is_csr 
-  val selected_serialising_uop = Mux1H(serialise_fire.asBools, io.dis_uop.bits) //TODO Reverse because Mux1H is not Big endian whereas previous data are all big endian
-  val serialised_uop_w = RegEnable(Wire(new DISPATCH_EXUISSUE_uop()), serialise_fire =/= 0.U)
-  (serialised_uop_w: Data).waiveAll :<>= (selected_serialising_uop.bits: Data).waiveAll
+  val selected_serialising_uop = Mux1H(serialise_fire.asBools, io.dis_uop.bits) 
+  val serialised_uop_w = Reg(new DISPATCH_EXUISSUE_uop())
+  when(serialise_fire =/= 0.U) {
+    (serialised_uop_w: Data).waiveAll :<>= (selected_serialising_uop.bits: Data).waiveAll
+  } 
   io.serialised_uop.bits := serialised_uop_w
   io.serialised_uop.valid := (rob_empty) && (serialise_fire =/= 0.U)
       
   //TODO: Hack
-  val is_st = (VecInit(io.rob_uop.bits.map(_.bits.instr_type === InstrType.ST)).asUInt & ooo_mask)
-  val is_ld = (VecInit(io.rob_uop.bits.map(_.bits.instr_type === InstrType.LD)).asUInt & ooo_mask)
+  val is_st = (VecInit(io.rob_uop.map(_.bits.instr_type === InstrType.ST)).asUInt & ooo_mask)
+  val is_ld = (VecInit(io.rob_uop.map(_.bits.instr_type === InstrType.LD)).asUInt & ooo_mask)
   val is_ex = (~(is_st | is_ld)) & ooo_mask
 
   val exu_issue_depth_bits = log2Ceil(p.EXUISSUE_DEPTH)
   val ld_issue_depth_bits = log2Ceil(p.LDISSUE_DEPTH)
   val st_issue_depth_bits = log2Ceil(p.STISSUE_DEPTH)
   //为了解决单周期iq条目释放数量的不确定行，对不同通道设立一个独立的freelist，使两者地址域不交叠
-  val exu_freelist = (0 until p.CORE_WIDTH)
-    .map{idx => Module(new FreeList(
-      UInt(exu_issue_depth_bits.W),
-      p.EXUISSUE_DEPTH / p.CORE_WIDTH,
-      i => (i * p.CORE_WIDTH + idx).U(exu_issue_depth_bits.W)
-    ))}
-  
-  val ld_freelist = Module(new FreeList(
-    UInt(ld_issue_depth_bits.W),
-    p.LDISSUE_DEPTH,
-    i => i.U(ld_issue_depth_bits.W)))
-  val st_freelist = Module(new FreeList(
-    UInt(st_issue_depth_bits.W),
-    p.STISSUE_DEPTH,
-    i => i.U(st_issue_depth_bits.W)))
+  // Write back length is determined by issue width, not entirely core_width
+  val exu_freelist = Module(new FreeListCam(p.EXUISSUE_DEPTH, p.CORE_WIDTH, p.CORE_WIDTH)) 
+  val ld_freelist = Module(new FreeListCam(p.LDISSUE_DEPTH, p.CORE_WIDTH, 1)) 
+  val st_freelist = Module(new FreeListCam(p.STISSUE_DEPTH, p.CORE_WIDTH, 1)) 
 
-  val input_ready = io.rob_uop.ready &&
+  val input_ready = Wire(Bool())
+  
+  exu_freelist.io.enq_request := io.exu_issued_id
+  ld_freelist.io.enq_request := VecInit(io.ld_issued_index)
+  st_freelist.io.enq_request := VecInit(io.st_issued_index)
+  
+  (exu_freelist.io.deq_request zip is_ex.asBools).foreach{ case(dq, v) =>
+    dq.ready := v
+  }  
+  (ld_freelist.io.deq_request  zip is_ld.asBools).foreach{ case(dq, v) =>
+    dq.ready := v
+  } 
+  (st_freelist.io.deq_request  zip is_st.asBools).foreach{ case(dq, v) =>
+    dq.ready := v
+  } 
+  
+  // Ready fields should be ready when it is not valid, or when it is a valid instruction and freelist is ready
+  val ex_ready = (exu_freelist.io.deq_request zip is_ex.asBools).map{ case(dq, v) =>
+    (dq.valid) || !v
+  }  
+  val ld_ready = (ld_freelist.io.deq_request  zip is_ld.asBools).map{ case(dq, v) =>
+    (dq.valid) || !v
+  } 
+  val st_ready = (st_freelist.io.deq_request  zip is_st.asBools).map{ case(dq, v) =>
+    (dq.valid) || !v
+  } 
+
+  exu_freelist.io.squeeze := should_kill
+  ld_freelist.io.squeeze := should_kill
+  st_freelist.io.squeeze := should_kill
+
+  input_ready := !rob_ready &&
      !io.stq_full &&
-     exu_freelist.map(fl => fl.io.deq_request.valid).reduce(_ && _) &&
-     ld_freelist.io.deq_request.valid &&
-     st_freelist.io.deq_request.valid &&
+     ex_ready.reduce(_ && _)
+     ld_ready.reduce(_ && _)
+     st_ready.reduce(_ && _)
      !still_has_csr
-     
-  exu_freelist.zip(io.exu_issued_id).zip(is_ex.asBools).foreach { case ((fl, id), v) =>
-    fl.io.enq_request.bits := id.bits
-    fl.io.enq_request.valid := id.valid
-    fl.io.deq_request.ready := input_ready && v
-  }
-  Seq(ld_freelist).zip(Seq(io.ld_issued_index)).zip(is_ld.asBools).foreach { case ((fl, id), v) =>
-    fl.io.enq_request.bits := id.bits
-    fl.io.enq_request.valid := id.valid
-    fl.io.deq_request.ready := input_ready && v
-  }
-  Seq(st_freelist).zip(Seq(io.st_issued_index)).zip(is_st.asBools).foreach { case ((fl, id), v) =>
-    fl.io.enq_request.bits := id.bits
-    fl.io.enq_request.valid := id.valid
-    fl.io.deq_request.ready := input_ready && v
-  }
   
   //TODO: Should be something else? Or is it sufficient
   io.dis_uop.ready := input_ready && !should_kill
@@ -137,40 +150,48 @@ class DispatchUnit(implicit p: Parameters) extends CustomModule {
 
   io.st_cnt := Mux(should_kill, 0.U, PopCount(is_st.asBools))
    
-  io.rob_uop.valid := RegNext(input_ready)
-  io.rob_uop.bits := RegEnable(VecInit(io.dis_uop.bits.map{c =>
+  // 
+  val rob_uop_valid = RegNext(input_ready)
+  io.rob_uop := RegEnable(VecInit(io.dis_uop.bits.map{c =>
     val out = Wire(Valid(new DISPATCH_ROB_uop()))
-    out.valid := c.valid
+    out.valid := c.valid && rob_uop_valid
     (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
+    out.bits.rd := c.bits.instr(11, 7)
     out
   }), input_ready)
+
+  val rob_indicies = (0 until p.CORE_WIDTH).map{ i => io.rob_tail + i.U}
   
   io.exu_issue_uop.valid := RegNext(input_ready && ex_valid)
-  io.exu_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_ex.asBools).zip(exu_freelist).map{case ((c, v), fl) =>
+  io.exu_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_ex.asBools).zip(exu_freelist.io.deq_request).zip(rob_indicies).map{case (((c, v), fl), rob_ind) =>
     val out = Wire(Valid(new DISPATCH_EXUISSUE_uop()))
-    out.valid := c.valid &&  v
+    out.valid := c.valid && v && fl.valid
     (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
-    out.bits.iq_index := fl.io.deq_request.bits
+    //TODO: This is not that appropriate
+    out.bits.iq_index := fl.bits
+    out.bits.rob_index := rob_ind
     out
   }), input_ready && ex_valid)
   
   io.ld_issue_uop.valid := RegNext(input_ready && ld_valid)
-  io.ld_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_ld.asBools).zip(Seq(ld_freelist)).map{case ((c, v), fl) =>
+  io.ld_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_ld.asBools).zip(ld_freelist.io.deq_request).zip(rob_indicies).map{case (((c, v), fl), rob_ind) =>
     val out = Wire(Valid(new DISPATCH_LDISSUE_uop()))
-    out.valid := c.valid &&  v
+    out.valid := c.valid &&  v && fl.valid
     (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
-    out.bits.iq_index := fl.io.deq_request.bits
+    out.bits.iq_index := fl.bits
     out.bits.stq_tail := io.stq_tail //TODO: Check on its validity
+    out.bits.rob_index := rob_ind
     out
   }), input_ready && ld_valid)
   
   io.st_issue_uop.valid := RegNext(input_ready && st_valid)
-  io.st_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_st.asBools).zip(Seq(st_freelist)).map{case ((c, v), fl) =>
+  io.st_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_st.asBools).zip(st_freelist.io.deq_request).zip(rob_indicies).map{case (((c, v), fl), rob_ind) =>
     val out = Wire(Valid(new DISPATCH_STISSUE_uop()))
 
-    out.valid := c.valid &&  v
+    out.valid := c.valid &&  v && fl.valid
     (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
-    out.bits.iq_index := fl.io.deq_request.bits
+    out.bits.iq_index := fl.bits
+    out.bits.rob_index := rob_ind
     out.bits.stq_index := io.stq_head //TODO: Check on its validity
     out
   }), input_ready && st_valid)

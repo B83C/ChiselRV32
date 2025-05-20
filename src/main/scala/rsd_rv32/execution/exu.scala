@@ -7,7 +7,7 @@ import rsd_rv32.common._
 
 import rsd_rv32.frontend._
 
-class EXUIO(fu_num: UInt)(implicit p: Parameters) extends Bundle{
+class EXUIO(fu_num: Int)(implicit p: Parameters) extends Bundle{
   //来自exu_issue queue的输入
   val execute_uop = Flipped(Vec(fu_num, Valid(new EXUISSUE_EXU_uop)))
   
@@ -44,7 +44,7 @@ class EXU(implicit p: Parameters) extends Module {
   val div = Seq.fill(p.DIV_NUM)(Module(new DIVFU))
 
   val fus = (alu ++ bu ++ mul ++ div)
-  val io = IO(new EXUIO(fus.length.asUInt))
+  val io = IO(new EXUIO(fus.length))
   fus.foreach { fu => 
     (fu.io: Data).waiveAll :<>= (io: Data).waiveAll
   }
@@ -53,7 +53,7 @@ class EXU(implicit p: Parameters) extends Module {
   //TODO 改成readys
   io.mul_ready  := VecInit((mul).map(_.io.uop.ready)).asUInt.orR
   io.div_ready  := VecInit((div).map(_.io.uop.ready)).asUInt.orR
-  def get_readys_instr_type: Seq[InstrType] = fus.map(_.supportedInstrTypes())
+  def get_readys_instr_type: Set[InstrType.Type] = fus.map(_.supportedInstrTypes).reduce(_ ++ _)
 
   // io.wb_uop := VecInit(fus.map(_.io.out))
   io.alu_wb_uop := VecInit((alu).map(_.out))
