@@ -12,7 +12,7 @@ class execution_test {
 
 }
 
-
+//ALU的测试，都跑通了
 class ALUTest extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = Parameters()
 
@@ -104,11 +104,11 @@ class ALUTest extends AnyFlatSpec with ChiselScalatestTester {
     })
   }
 
-  "ALFU" should "correctly handle LUI instruction" in {
-    test(new ALUFU {
+  "ALUFU" should "correctly handle LUI instruction" in {
+    test(new ALUFU) {
       dut =>
       // 准备LUI指令(u型立即数)
-      val luiInstr = "b00000000000000000000_10101_0110111".U // lui x10, 0x10101
+      val luiInstr = "b0000000000001010100000000".U(25.W)
       dut.io.uop.bits.instr.poke(luiInstr)
       dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.IMM)
       dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.Z)
@@ -116,34 +116,44 @@ class ALUTest extends AnyFlatSpec with ChiselScalatestTester {
 
       // 检查输出
       dut.clock.step()
-      dut.out.bits.pdst_value.expect("h10101000".U)
-    })
+      dut.out.bits.pdst_value.expect("h000A8000".U)
+    }
   }
+
 
   "ALFU" should "correctly handle AUIPC instruction" in {
     test(new ALUFU) { dut =>
-      // 准备AUIPC指令(u型立即数)
-      val auipcInstr = "b00000000000000000000_10101_0010111".U // auipc x10, 0x10101
+      val auipcInstr = "b0000000000010101000000000".U(25.W) // imm=0x10101 (20位)
       dut.io.uop.bits.instr.poke(auipcInstr)
-      dut.io.uop.bits.instr_addr.poke("h1000_0000".U)
+      dut.io.uop.bits.instr_addr.poke("h10000000".U)
+
+      // 设置操作数选择
       dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.PC)
       dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.IMM)
       dut.io.uop.valid.poke(true.B)
 
+      // 计算预期结果（Scala侧）
+      val immBits = auipcInstr(24,5)  // 提取高20位立即数
+      val immValue = (immBits.litValue.toLong << 12)  // U型立即数左移12位
+      val pcValue = 0x10000000L
+      val expected = (pcValue + immValue).U  // 转换为Chisel的UInt
+
       // 检查输出(PC + imm)
       dut.clock.step()
-      dut.out.bits.pdst_value.expect("h1000_0000".U + "h10101000".U)
+      dut.out.bits.pdst_value.expect(expected)
     }
   }
 
- /* "ALFU" should "correctly handle register operations" in {
+
+"ALFU" should "correctly handle register operations" in {
     test(new ALUFU) { dut =>
       // 准备ADD指令
+      val addInstr = "b0000000000100000100000011".U(25.W)
+      dut.io.uop.bits.instr.poke(addInstr)
       dut.io.uop.bits.ps1_value.poke(5.U)
       dut.io.uop.bits.ps2_value.poke(3.U)
       dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
       dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
-      dut.io.uop.bits.fu_signals.alu_fn.poke(ALUOp.ADD)
       dut.io.uop.valid.poke(true.B)
 
       // 检查输出
@@ -152,26 +162,29 @@ class ALUTest extends AnyFlatSpec with ChiselScalatestTester {
     }
   }
 
-  "ALFU" should "handle back-to-back operations" in {
+"ALFU" should "handle back-to-back operations" in {
     test(new ALUFU) { dut =>
       // 第一个操作: ADD
+      val addInstr = "b0000000000100000100000011".U(25.W)
+      dut.io.uop.bits.instr.poke(addInstr)
       dut.io.uop.bits.ps1_value.poke(10.U)
       dut.io.uop.bits.ps2_value.poke(5.U)
       dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
       dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
-      dut.io.uop.bits.fu_signals.alu_fn.poke(ALUOp.ADD)
       dut.io.uop.valid.poke(true.B)
       dut.clock.step()
       dut.out.bits.pdst_value.expect(15.U)
 
       // 第二个操作: SUB
+      val subInstr = "b0100000000100000100000100".U(25.W)
+      dut.io.uop.bits.instr.poke(subInstr)
       dut.io.uop.bits.ps1_value.poke(10.U)
       dut.io.uop.bits.ps2_value.poke(5.U)
-      dut.io.uop.bits.alu_fn.poke(ALUOp.SUB)
       dut.clock.step()
       dut.out.bits.pdst_value.expect(5.U)
     }
+
+
   }
 
-  */
 }
