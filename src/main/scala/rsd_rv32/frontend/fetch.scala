@@ -32,11 +32,12 @@ class Fetch_IO(implicit p: Parameters) extends CustomBundle {
 class FetchUnit(implicit p: Parameters) extends CustomModule {
     val io = IO(new Fetch_IO())
 
-    val pc_reg = RegInit(0.UInt(p.XLEN.W))        //存储当前PC
+    val pc_reg = RegInit(0.U(p.XLEN.W))        //存储当前PC
     val pc_next = Wire(UInt(p.XLEN.W))            //下一个PC
     val pc_aligned = Wire(UInt(p.XLEN.W))         //对齐后的当前PC
 
-    pc_aligned := pc_reg & ~((p.CORE_WIDTH.U << 2) - 1.U)
+    pc_aligned := pc_reg & 0xFFFFFFF8.U
+
     val pc_next_default = pc_aligned + (p.CORE_WIDTH.U <<2)
     
     //需不需要flush
@@ -58,6 +59,8 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     io.instr_addr := pc_reg
 
     //为对齐时序而延迟一周期的内容
+    val instr_delayed = RegNext(io.instr)
+    val rob_flush_valid_delayed = RegNext(rob_flush_valid)
     val PC_delayed = RegNext(pc_aligned)
     val btb_hit_delayed = RegNext(io.btb_hit)
     val GHR_delayed = RegNext(io.GHR)
@@ -70,7 +73,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     //生成两条给ID的uop
     val uop_vec = Wire(Vec(2, Valid(new IF_ID_uop())))
     val btb_hit_vec = io.btb_hit
-    val hit_11 = (btb_hit_delayed === "b11".U)        //如果出现11
+    val hit_11 = (btb_hit_delayed(0) && btb_hit_delayed(1))        //如果出现11
 
 
     
@@ -80,19 +83,19 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     for (i <-0 until 2 ){
         val uop = Wire(new IF_ID_uop())
         val current_pc = PC_delayed + (i.U << 2)
-        uop.instr := io.instr(i)
+        uop.instr := instr_delayed(i)
         uop.instr_addr := current_pc
         uop.target_PC := target_PC_delayed
         uop.GHR := GHR_delayed
         uop.branch_pred := Mux(branch_pred_delayed, BranchPred.T, BranchPred.NT)
         uop.btb_hit := Mux(btb_hit_delayed(i), BTBHit.H, BTBHit.NH)
 
-        val is_valid =  (!rob_flush_valid) && io.id_ready &&
+        val is_valid =  (!rob_flush_valid_delayed) && io.id_ready &&
                         (!(btb_hit_delayed(i) && branch_pred_delayed)) &&
-                        !(hit_11 && i == 1)
+                        !(hit_11 && (i == 1).B)
         
-        uop.valid := is_valid
-        uop_vec(i) := uop
+        uop_vec(i).valid := is_valid
+        uop_vec(i).bits := uop
     }
 
 
