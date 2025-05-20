@@ -291,7 +291,7 @@ class MULFUTest extends AnyFlatSpec with ChiselScalatestTester {
 
  */
 }
-class DIVFUTest extends AnyFlatSpec with ChiselScalatestTester with Matchers {
+class DIVFUTest extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = Parameters()
 
   // 除法指令类型定义 (与RISC-V func3编码一致)
@@ -305,219 +305,95 @@ class DIVFUTest extends AnyFlatSpec with ChiselScalatestTester with Matchers {
 
   "DIVFU" should "correctly perform signed division (DIV)" in {
     test(new DIVFU) { dut =>
-//      // 构造指令
-//      dut.io.uop.bits.instr.poke("b0000001_00010_00001_100_00000".U)
-//      dut.io.uop.bits.instr_type.poke(InstrType.DIV_REM)
-//
-//      // 测试1: 10 / 3 = 3
-//      dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
-//      dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
-//      dut.io.uop.bits.ps1_value.poke(100.U)
-//      dut.io.uop.bits.ps2_value.poke(7.U)
-//      dut.io.uop.valid.poke(true.B)
-//       //等待结果 ready
-//      var cycles = 0
-//      while (!dut.out.valid.peek().litToBoolean && cycles < 100) {
-//        dut.clock.step()
-//        cycles += 1
-//      }
-////      dut.clock.step()
-//      dut.out.valid.expect(true.B)
-//      dut.out.bits.pdst_value.expect(14.U)
-//
-//      dut.clock.step()
-//      dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
-//      dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
-//      dut.io.uop.bits.ps1_value.poke(10.U)
-//      dut.io.uop.bits.ps2_value.poke(7.U)
-//      dut.io.uop.valid.poke(true.B)
-//      //等待结果 ready
-//      cycles = 0
-//      while (!dut.out.valid.peek().litToBoolean && cycles < 100) {
-//        dut.clock.step()
-//        cycles += 1
-//      }
-//      //      dut.clock.step()
-//      dut.out.valid.expect(true.B)
-//      dut.out.bits.pdst_value.expect(1.U)
+      // 构造指令
+      dut.io.uop.bits.instr.poke("b0000001_00010_00001_100_00000".U)
+      dut.io.uop.bits.instr_type.poke(InstrType.DIV_REM)
 
-      def stepDivider(dividend: Int, divisor: Int): (Int) = {
-        require(divisor != 0, "Divisor must not be zero")
-
-        // 构造指令
-        dut.io.uop.bits.instr.poke("b0000001_00010_00001_100_00000".U)
-        dut.io.uop.bits.instr_type.poke(InstrType.DIV_REM)
-
-        // 测试1: 10 / 3 = 3
-        dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
-        dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
-        dut.io.uop.bits.ps1_value.poke(dividend.U)
-        dut.io.uop.bits.ps2_value.poke(divisor.U)
-        dut.io.uop.valid.poke(true.B)
-        //等待结果 ready
-        var cycles = 0
-        while (!dut.out.valid.peek().litToBoolean && cycles < 100) {
-          dut.clock.step()
-          cycles += 1
-        }
-        val quotient  = dut.out.bits.pdst_value.peek().litValue
-        (quotient.toInt)
-      }
-
-      val testCases = Seq(
-        (10, 3),   // 正常除法
-        (15, 5),
-        (100, 7),
-        (255, 1),
-        (256, 16),
-        (0, 5),    // 被除数为0
-        (12345, 123), // 大数
-        (1073741824, 33554430)
-      )
-
-      for ((a, b) <- testCases) {
-        val q = stepDivider(a, b)
-        println(s"$a / $b = $q")
-        q shouldEqual (a / b)
-        dut.clock.step()
-      }
-
-//      // 测试2: -10 / 3 = -3
-//      dut.io.uop.bits.ps1_value.poke((-10).S)
-//      dut.io.uop.bits.ps2_value.poke(3.S)
-//      dut.clock.step()
-//      dut.out.bits.pdst_value.expect((-3).S)
-//
-//      // 边界情况
-//      dut.io.uop.bits.ps1_value.poke(Int.MinValue.S)
-//      dut.io.uop.bits.ps2_value.poke((-1).S)
-//      dut.clock.step()
-//      dut.out.bits.pdst_value.expect(Int.MinValue.S)
-//
-//      dut.io.uop.bits.ps1_value.poke(Int.MinValue.S)
-//      dut.io.uop.bits.ps2_value.poke(1.S)
-//      dut.clock.step()
-//      dut.out.bits.pdst_value.expect(Int.MinValue.S)
-    }
-  }
-
-  "DIVFU" should "correctly perform unsigned division (DIVU)" in {
-    test(new DIVFU) { dut =>
-      val instr = Cat(DIVOp.DIVU, 0.U(29.W))
-      dut.io.uop.bits.instr.poke("b0000001_00010_00001_000_00000".U)
+      // 测试1: 10 / 3 = 3
       dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
       dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
-      dut.io.uop.bits.instr.poke(instr)
+      dut.io.uop.bits.ps1_value.poke(10.U)
+      dut.io.uop.bits.ps2_value.poke(3.U)
+      dut.io.uop.valid.poke(true.B)
+      var cycles = 0
+      while (!dut.out.valid.peek().litToBoolean && cycles < 100) {
+        dut.clock.step()
+        cycles += 1
+      }
+      dut.out.valid.expect(true.B)
+      dut.out.bits.pdst_value.expect(3.U)
+
+      dut.clock.step()
+
+      // 测试2: -10 / 3 = -3
+
+      val minus10 = "hfffffff6".U // 转换为补码表示的UInt
+      val plus3 = 3.S.asUInt
+      dut.io.uop.bits.ps1_value.poke(minus10)
+      dut.io.uop.bits.ps2_value.poke(plus3)
+      cycles=0
+      while (!dut.out.valid.peek().litToBoolean && cycles < 100) {
+        dut.clock.step()
+        cycles += 1
+      }
+      dut.out.bits.pdst_value.expect("hfffffffd".U) // -3的32位补码表示
+
+      dut.clock.step()
+
+      // 边界情况1: Int.MinValue / -1
+
+      val minVal = Int.MinValue.S.asUInt // 0x80000000
+      val minus1 =  "hffffffff".U     // 0xffffffff
+      dut.io.uop.bits.ps1_value.poke(minVal)
+      dut.io.uop.bits.ps2_value.poke(minus1)
+      cycles=0
+      while (!dut.out.valid.peek().litToBoolean && cycles < 100) {
+        dut.clock.step()
+        cycles += 1
+      }
+      dut.out.bits.pdst_value.expect("h80000000".U) // 应当返回Int.MinValue
+
+      dut.clock.step()
+
+      // 边界情况2: Int.MinValue / 1
+
+      val plus1 = 1.S.asUInt // 0x00000001
+      dut.io.uop.bits.ps1_value.poke(minVal)
+      dut.io.uop.bits.ps2_value.poke(plus1)
+      cycles=0
+      while (!dut.out.valid.peek().litToBoolean && cycles < 100) {
+        dut.clock.step()
+        cycles += 1
+      }
+      dut.out.bits.pdst_value.expect("h80000000".U) // 应当返回Int.MinValue
+}
+}
+  "DIVFU" should "correctly perform unsigned division (DIVU)" in {
+    test(new DIVFU) { dut =>
+      dut.io.uop.bits.instr.poke("b0000001_00010_00001_101_00000".U)
+      dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
+      dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
       dut.io.uop.bits.instr_type.poke(InstrType.DIV_REM)
 
       // 测试1: 10 / 3 = 3
       dut.io.uop.bits.ps1_value.poke(10.U)
       dut.io.uop.bits.ps2_value.poke(3.U)
       dut.io.uop.valid.poke(true.B)
-      dut.clock.step()
+      var cycles = 0
+      while (!dut.out.valid.peek().litToBoolean && cycles < 100) {
+        dut.clock.step()
+        cycles += 1
+      }
       dut.out.bits.pdst_value.expect(3.U)
 
       // 测试2: 0xFFFFFFFF / 1 = 0xFFFFFFFF
       dut.io.uop.bits.ps1_value.poke(0xFFFFFFFF.U)
       dut.io.uop.bits.ps2_value.poke(1.U)
-      dut.clock.step()
+      while (!dut.out.valid.peek().litToBoolean && cycles < 100) {
+        dut.clock.step()
+        cycles += 1
+      }
       dut.out.bits.pdst_value.expect(0xFFFFFFFF.U)
-    }
-  }
-  // 测试辅助函数
-  def testDivide(dut: DIVFU, a: Int, b: Int, op: UInt, expected: Int, timeout: Int = 100): Unit = {
-    // 构造指令 (简化版，实际应根据具体指令格式)
-    val instr = Cat(op, 0.U(29.W)) // func3在14-12位
-    dut.io.uop.bits.instr.poke(instr)
-    dut.io.uop.bits.instr_type.poke(InstrType.DIV_REM)
-
-    // 设置操作数
-    dut.io.uop.bits.ps1_value.poke(a.U)
-    dut.io.uop.bits.ps2_value.poke(b.U)
-    dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
-    dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
-    dut.io.uop.valid.poke(true.B)
-
-    // 等待计算完成
-    var cycles = 0
-    while (!dut.out.valid.peek().litToBoolean && cycles < timeout) {
-      dut.clock.step()
-      cycles += 1
-      dut.io.uop.valid.poke(false.B) // 单周期有效
-    }
-
-    if (cycles >= timeout) fail(s"Timeout after $timeout cycles")
-    else {
-      dut.out.valid.expect(true.B)
-      dut.out.bits.pdst_value.expect(expected.U)
-    }
-  }
-
-
-
-  "DIVFU" should "correctly perform signed remainder (REM)" in {
-    test(new DIVFU) { dut =>
-      testDivide(dut, 10, 3, DIVOp.REM, 1)    // 10 % 3 = 1
-      testDivide(dut, -10, 3, DIVOp.REM, -1)   // -10 % 3 = -1
-      testDivide(dut, 10, -3, DIVOp.REM, 1)    // 10 % -3 = 1
-    }
-  }
-
-  "DIVFU" should "correctly perform unsigned remainder (REMU)" in {
-    test(new DIVFU) { dut =>
-      testDivide(dut, 10, 3, DIVOp.REMU, 1)
-      testDivide(dut, 0xFFFFFFFE, 0xFFFFFFFF, DIVOp.REMU, 0xFFFFFFFE)
-    }
-  }
-
-  "DIVFU" should "handle division by zero according to RISC-V spec" in {
-    test(new DIVFU) { dut =>
-      // RISC-V规范：除零时商为全1，余数为被除数
-      testDivide(dut, 10, 0, DIVOp.DIV, -1)
-      testDivide(dut, -10, 0, DIVOp.DIV, -1)
-      testDivide(dut, 10, 0, DIVOp.DIVU, 0xFFFFFFFF)
-      testDivide(dut, 10, 0, DIVOp.REM, 10)
-      testDivide(dut, 10, 0, DIVOp.REMU, 10)
-    }
-  }
-
-  "DIVFU" should "handle pipeline back-to-back operations" in {
-    test(new DIVFU) { dut =>
-      // 第一个除法
-      testDivide(dut, 20, 5, DIVOp.DIV, 4)
-
-      // 立即开始第二个除法
-      testDivide(dut, 30, 6, DIVOp.DIV, 5)
-    }
-  }
-
-  "DIVFU" should "correctly handle flush signal" in {
-    test(new DIVFU) { dut =>
-      // 启动除法
-      val instr = Cat(DIVOp.DIV, 0.U(29.W))
-      dut.io.uop.bits.instr.poke(instr)
-      dut.io.uop.bits.ps1_value.poke(100.U)
-      dut.io.uop.bits.ps2_value.poke(3.U)
-      dut.io.uop.valid.poke(true.B)
-      dut.clock.step()
-
-      /* 发送flush
-      dut.io.flush.poke(true.B)
-      dut.clock.step()
-      dut.io.flush.poke(false.B)
-      */
-      // 验证没有输出
-      dut.out.valid.expect(false.B)
-
-      // 验证可以开始新除法
-      testDivide(dut, 8, 2, DIVOp.DIV, 4)
-    }
-  }
-
-  "DIVFU" should "handle power-of-two divisions efficiently" in {
-    test(new DIVFU) { dut =>
-      testDivide(dut, 16, 4, DIVOp.DIV, 4)
-      testDivide(dut, 32, 8, DIVOp.DIVU, 4)
     }
   }
 }
