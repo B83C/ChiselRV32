@@ -173,16 +173,15 @@ class ld_issue_test extends AnyFlatSpec with ChiselScalatestTester {
         dut.io.st_issue_unbusy(i).poke(1.U)
       }
       dut.io.st_issue_uop.valid.poke(1.U)
-      dut.io.rob_uop.valid.poke(1.U)
       dut.io.st_issue_uop.bits(0).valid.poke(1.U)
       dut.io.st_issue_uop.bits(0).bits.iq_index.poke(1.U)
-      dut.io.rob_uop.bits(0).valid.poke(1.U)
-      dut.io.rob_uop.bits(0).bits.instr_type.poke(InstrType.ST)
+      dut.io.rob_uop(0).valid.poke(1.U)
+      dut.io.rob_uop(0).bits.instr_type.poke(InstrType.ST)
       dut.io.ld_issue_uop.bits(0).valid.poke(1.U)
       dut.clock.step()
       dut.io.ld_issue_uop.bits(0).valid.poke(0.U)
       dut.io.st_issue_uop.bits(0).valid.poke(0.U)
-      dut.io.rob_uop.bits(0).valid.poke(0.U)
+      dut.io.rob_uop(0).valid.poke(0.U)
       dut.clock.step(2)
     }
   }

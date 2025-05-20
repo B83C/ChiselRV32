@@ -38,7 +38,7 @@ class ld_issue_IO(implicit p: Parameters) extends CustomBundle {
     val st_issue_unbusy = Input(Vec(p.STISSUE_DEPTH, Bool()))
     val st_issued_index = Flipped(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)))
     //发往ROB的uop与发往st_issue的uop，用于处理dispatch一周期内发射一条st一条ld的情况
-    val rob_uop = Flipped(Valid(Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop()))))
+    val rob_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop())))
     val st_issue_uop = Flipped(Valid(Vec(p.CORE_WIDTH, Valid(new DISPATCH_STISSUE_uop()))))
 
     //测试接口
@@ -116,7 +116,7 @@ class ld_issue_queue(implicit p: Parameters) extends CustomModule {
     //用于生成ready矩阵
     for (i <- 0 until p.STISSUE_DEPTH){
         //考虑同周期内发射的较年长的store命令的作用
-        when (io.rob_uop.valid && io.rob_uop.bits(0).valid && io.rob_uop.bits(0).bits.instr_type === InstrType.ST && i.U === io.st_issue_uop.bits(0).bits.iq_index){
+        when (io.rob_uop(0).valid && io.rob_uop(0).bits.instr_type === InstrType.ST && i.U === io.st_issue_uop.bits(0).bits.iq_index){
             st_queue_state(i) := false.B
         }.otherwise{
             st_queue_state(i) := io.st_issue_unbusy(i) || io.st_issued_index.valid && io.st_issued_index.bits === i.U
