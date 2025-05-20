@@ -5,7 +5,7 @@ import chisel3.util._
 import rsd_rv32.common._
 
 
-
+// 两个输出: instr_addr, id_uop 
 class Fetch_IO(implicit p: Parameters) extends CustomBundle {
     // with MEM
     val instr_addr = Output(UInt(p.XLEN.W)) //当前IFU的PC值
@@ -32,13 +32,13 @@ class Fetch_IO(implicit p: Parameters) extends CustomBundle {
 class FetchUnit(implicit p: Parameters) extends CustomModule {
     val io = IO(new Fetch_IO())
 
-    val pc_reg = RegInit(0.UInt(p.XLEN.W))        //存储当前PC
+    val pc_reg = RegInit(p.ENTRY_PC.U(p.XLEN.W))        //存储当前PC
     val pc_next = Wire(UInt(p.XLEN.W))            //下一个PC
     val pc_aligned = Wire(UInt(p.XLEN.W))         //对齐后的当前PC
 
     pc_aligned := pc_reg & ~((p.CORE_WIDTH.U << 2) - 1.U)
     val pc_next_default = pc_aligned + (p.CORE_WIDTH.U <<2)
-    
+
     //需不需要flush
     val rob_flush_valid = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
     val rob_flush_pc = io.rob_commitsignal(0).bits.instr_addr
@@ -66,57 +66,56 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
 
 
 
-    
+
     //生成两条给ID的uop
     val uop_vec = Wire(Vec(2, Valid(new IF_ID_uop())))
     val btb_hit_vec = io.btb_hit
-    val hit_11 = (btb_hit_delayed === "b11".U)        //如果出现11
+    val hit_11 = (btb_hit_delayed === VecInit("b11".U.asBools))        //如果出现11
 
 
-    
-    
+
+
     //构造uop向量
 
     for (i <-0 until 2 ){
-        val uop = Wire(new IF_ID_uop())
+        val uop = Wire(Valid(new IF_ID_uop()))
         val current_pc = PC_delayed + (i.U << 2)
-        uop.instr := io.instr(i)
-        uop.instr_addr := current_pc
-        uop.target_PC := target_PC_delayed
-        uop.GHR := GHR_delayed
-        uop.branch_pred := Mux(branch_pred_delayed, BranchPred.T, BranchPred.NT)
-        uop.btb_hit := Mux(btb_hit_delayed(i), BTBHit.H, BTBHit.NH)
+        uop.bits.instr := io.instr(i)
+        uop.bits.instr_addr := current_pc
+        uop.bits.target_PC := target_PC_delayed
+        uop.bits.GHR := GHR_delayed
+        uop.bits.branch_pred := Mux(branch_pred_delayed, BranchPred.T, BranchPred.NT)
+        uop.bits.btb_hit := Mux(btb_hit_delayed(i), BTBHit.H, BTBHit.NH)
 
         val is_valid =  (!rob_flush_valid) && io.id_ready &&
                         (!(btb_hit_delayed(i) && branch_pred_delayed)) &&
-                        !(hit_11 && i == 1)
-        
+                        !(hit_11 && (i == 1).B)
+
         uop.valid := is_valid
         uop_vec(i) := uop
     }
 
 
         //考虑valid bits限制
-    when (!uop_vec(0).valid && uop_vec(1).valid) {
-        uop_vec(0) := uop_vec(1)
-        uop_vec(1).valid := false.B
-        uop_vec(1).bits := 0.U.asTypeOf(new IF_ID_uop())
-}
- 
+    // when (!uop_vec(0).valid && uop_vec(1).valid) {
+    //     uop_vec(0) := uop_vec(1)
+    //     uop_vec(1).valid := false.B
+    //     uop_vec(1).bits := 0.U.asTypeOf(new IF_ID_uop())
+    // }
 
-    
+
+
 
     //存入寄存器给ID
     val IF_ID_Stage_reg = Reg(Vec(2, Valid(new IF_ID_uop())))
-    
+
     for (i <- 0 until 2) {
         IF_ID_Stage_reg(i).valid := uop_vec(i).valid
         IF_ID_Stage_reg(i).bits := uop_vec(i).bits
         io.id_uop(i) := IF_ID_Stage_reg(i)
-  }
+    }
 
-    
-    
-    
-    
+    when(io.id_ready) {
+        printf(cf"Got instruction ${io.instr}\n")
+    }
 }

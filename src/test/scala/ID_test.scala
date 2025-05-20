@@ -2,9 +2,11 @@ import chisel3._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 import rsd_rv32.common._
-import rsd_rv32.frontend.decode
+import rsd_rv32.frontend._
 
 class DecodeUnitTest extends AnyFlatSpec with ChiselScalatestTester {
+  
+  implicit val p: Parameters = new Parameters
   
   "Decoder" should "correctly decode instructions" in {
     test(new DecodeUnit).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
@@ -19,8 +21,8 @@ class DecodeUnitTest extends AnyFlatSpec with ChiselScalatestTester {
         c.io.id_uop(i).bits.instr_addr.poke(addr)
         c.io.id_uop(i).bits.target_PC.poke(0.U)
         c.io.id_uop(i).bits.GHR.poke(0.U)
-        c.io.id_uop(i).bits.branch_pred.poke(false.B)
-        c.io.id_uop(i).bits.btb_hit.poke(false.B)
+        c.io.id_uop(i).bits.branch_pred.poke(BranchPred.NT)
+        c.io.id_uop(i).bits.btb_hit.poke(BTBHit.NH)
       }
 
       // 先不考虑flush
@@ -34,9 +36,9 @@ class DecodeUnitTest extends AnyFlatSpec with ChiselScalatestTester {
       for (i <- 0 until p.CORE_WIDTH) {
         c.io.rename_uop(i).valid.expect(true.B)
         c.io.rename_uop(i).bits.instr.expect(instr(31, 7))
-        c.io.rename_uop(i).bits.instr_type.expect(InstrType.ALU.U)
-        c.io.rename_uop(i).bits.fu_signals.opr1_sel.expect(OprSel.REG.U)
-        c.io.rename_uop(i).bits.fu_signals.opr2_sel.expect(OprSel.IMM.U)
+        c.io.rename_uop(i).bits.instr_type.expect(InstrType.ALU)
+        c.io.rename_uop(i).bits.fu_signals.opr1_sel.expect(OprSel.REG)
+        c.io.rename_uop(i).bits.fu_signals.opr2_sel.expect(OprSel.IMM)
       }
     }
   }
@@ -58,8 +60,8 @@ class DecodeUnitTest extends AnyFlatSpec with ChiselScalatestTester {
         c.io.id_uop(i).bits.instr_addr.poke(0x1000.U)
         c.io.id_uop(i).bits.target_PC.poke(0.U)
         c.io.id_uop(i).bits.GHR.poke(0.U)
-        c.io.id_uop(i).bits.branch_pred.poke(false.B)
-        c.io.id_uop(i).bits.btb_hit.poke(false.B)
+        c.io.id_uop(i).bits.branch_pred.poke(BranchPred.NT)
+        c.io.id_uop(i).bits.btb_hit.poke(BTBHit.NH)
       }
 
       // 分支预测错误

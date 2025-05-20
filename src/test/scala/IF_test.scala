@@ -4,9 +4,10 @@ import org.scalatest.flatspec.AnyFlatSpec
 import rsd_rv32.frontend._
 import rsd_rv32.common._
 
-class FetchUnit extends AnyFlatSpec with ChiselScalatestTester {
+class FetchUnitTest extends AnyFlatSpec with ChiselScalatestTester {
+  implicit val p: Parameters = new Parameters
     "FetchUnit"should "fetch two instructions and produce valid uops" in {
-    test(new FetchUnit()(new DefaultParameters)).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
+    test(new FetchUnit).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
       c.io.rob_commitsignal(0).valid.poke(false.B)
       c.io.id_ready.poke(true.B)
       c.io.branch_pred.poke(false.B)
@@ -27,7 +28,7 @@ class FetchUnit extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   "FetchUnit" should "suppress the second uop when 2 BTB hits" in {
-    test(new FetchUnit()(new DefaultParameters)).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
+    test(new FetchUnit).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
    
       c.io.rob_commitsignal(0).valid.poke(false.B)
       c.io.id_ready.poke(true.B)
