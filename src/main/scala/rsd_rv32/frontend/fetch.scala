@@ -35,9 +35,15 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     val pc_reg = RegInit(p.ENTRY_PC.U(p.XLEN.W))        //存储当前PC
     val pc_next = Wire(UInt(p.XLEN.W))            //下一个PC
     val pc_aligned = Wire(UInt(p.XLEN.W))         //对齐后的当前PC
+    pc_aligned := pc_reg & "hFFFFFFF8".U(32.W)
 
-    pc_aligned := pc_reg & 0x7FFFFFF8.U
+// <<<<<<< HEAD
+//     pc_aligned := pc_reg & 0x7FFFFFF8.U
 
+// ||||||| 37cfc08
+//     pc_aligned := pc_reg & ~((p.CORE_WIDTH.U << 2) - 1.U)
+// =======
+// >>>>>>> fadc7f7dd5ef8ab35d2e6aa1cce92e256ea93f31
     val pc_next_default = pc_aligned + (p.CORE_WIDTH.U <<2)
 
     //需不需要flush
@@ -69,16 +75,38 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
 
 
 
+// <<<<<<< HEAD
 
-    //生成两条给ID的uop
-    val uop_vec = Wire(Vec(2, Valid(new IF_ID_uop())))
-    val btb_hit_vec = io.btb_hit
-    val hit_11 = (btb_hit_delayed(0) && btb_hit_delayed(1))        //如果出现11
+//     //生成两条给ID的uop
+//     val uop_vec = Wire(Vec(2, Valid(new IF_ID_uop())))
+//     val btb_hit_vec = io.btb_hit
+//     val hit_11 = (btb_hit_delayed(0) && btb_hit_delayed(1))        //如果出现11
+// ||||||| 37cfc08
+    
+//     //生成两条给ID的uop
+//     val uop_vec = Wire(Vec(2, Valid(new IF_ID_uop())))
+//     val btb_hit_vec = io.btb_hit
+//     val hit_11 = (btb_hit_delayed === "b11".U)        //如果出现11
+// =======
+// >>>>>>> fadc7f7dd5ef8ab35d2e6aa1cce92e256ea93f31
 
+    //不考虑年轻年老交换的情况下
+    val uop_vec_unpro_valid = Wire(Vec(2, Bool()))
+    val uop_vec_unpro_bits = Wire(Vec(2, new IF_ID_uop()))
 
-    //构造uop向量
+// <<<<<<< HEAD
+//     //构造uop向量
 
-    for (i <-0 until 2 ){
+//     for (i <-0 until 2 ){
+// ||||||| 37cfc08
+    
+    
+//     //构造uop向量
+
+//     for (i <-0 until 2 ){
+// =======
+    for (i <- 0 until 2) {
+// >>>>>>> fadc7f7dd5ef8ab35d2e6aa1cce92e256ea93f31
         val uop = Wire(new IF_ID_uop())
         val current_pc = PC_delayed + (i.U << 2)
         uop.instr := instr_delayed(i)
@@ -88,24 +116,74 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         uop.branch_pred := Mux(branch_pred_delayed, BranchPred.T, BranchPred.NT)
         uop.btb_hit := Mux(btb_hit_delayed(i), BTBHit.H, BTBHit.NH)
 
-        val is_valid =  (!rob_flush_valid_delayed) && io.id_ready &&
-                        (!(btb_hit_delayed(i) && branch_pred_delayed)) &&
-                        !(hit_11 && (i == 1).B)
+// <<<<<<< HEAD
+//         val is_valid =  (!rob_flush_valid_delayed) && io.id_ready &&
+//                         (!(btb_hit_delayed(i) && branch_pred_delayed)) &&
+//                         !(hit_11 && (i == 1).B)
         
-        uop_vec(i).valid := is_valid
-        uop_vec(i).bits := uop
+//         uop_vec(i).valid := is_valid
+//         uop_vec(i).bits := uop
+// ||||||| 37cfc08
+//         val is_valid =  (!rob_flush_valid) && io.id_ready &&
+//                         (!(btb_hit_delayed(i) && branch_pred_delayed)) &&
+//                         !(hit_11 && i == 1)
+        
+//         uop.valid := is_valid
+//         uop_vec(i) := uop
+// =======
+        val is_valid = (!rob_flush_valid_delayed) && io.id_ready &&
+          (!(btb_hit_delayed(i) && branch_pred_delayed))
+
+        uop_vec_unpro_valid(i) := is_valid
+        uop_vec_unpro_bits(i) := uop
+// >>>>>>> fadc7f7dd5ef8ab35d2e6aa1cce92e256ea93f31
     }
 
+    //考虑bits年轻/年长限制的情况下
+    val uop_vec_final_valid = Wire(Vec(2, Bool()))
+    val uop_vec_final_bits = Wire(Vec(2, new IF_ID_uop()))
 
-        //考虑valid bits限制
-    // when (!uop_vec(0).valid && uop_vec(1).valid) {
-    //     uop_vec(0) := uop_vec(1)
-    //     uop_vec(1).valid := false.B
-    //     uop_vec(1).bits := 0.U.asTypeOf(new IF_ID_uop())
-    // }
+// <<<<<<< HEAD
+//         //考虑valid bits限制
+//     // when (!uop_vec(0).valid && uop_vec(1).valid) {
+//     //     uop_vec(0) := uop_vec(1)
+//     //     uop_vec(1).valid := false.B
+//     //     uop_vec(1).bits := 0.U.asTypeOf(new IF_ID_uop())
+//     // }
 
 
+// ||||||| 37cfc08
+//         //考虑valid bits限制
+//     when (!uop_vec(0).valid && uop_vec(1).valid) {
+//         uop_vec(0) := uop_vec(1)
+//         uop_vec(1).valid := false.B
+//         uop_vec(1).bits := 0.U.asTypeOf(new IF_ID_uop())
+// }
+ 
+// =======
+// >>>>>>> fadc7f7dd5ef8ab35d2e6aa1cce92e256ea93f31
 
+// <<<<<<< HEAD
+// ||||||| 37cfc08
+    
+// =======
+    when(!uop_vec_unpro_valid(0) && uop_vec_unpro_valid(1)) {
+        uop_vec_final_valid(0) := true.B
+        uop_vec_final_bits(0) := uop_vec_unpro_bits(1)
+        uop_vec_final_valid(1) := false.B
+        uop_vec_final_bits(1) := 0.U.asTypeOf(new IF_ID_uop())
+    }.otherwise {
+        uop_vec_final_valid := uop_vec_unpro_valid
+        uop_vec_final_bits := uop_vec_unpro_bits
+    }
+
+    val uop_vec = Wire(Vec(2, Valid(new IF_ID_uop())))
+    for (i <- 0 until 2) {
+        uop_vec(i).valid := uop_vec_final_valid(i)
+        uop_vec(i).bits := uop_vec_final_bits(i)
+    }
+    
+// >>>>>>> fadc7f7dd5ef8ab35d2e6aa1cce92e256ea93f31
 
     //存入寄存器给ID
     val IF_ID_Stage_reg = Reg(Vec(2, Valid(new IF_ID_uop())))
@@ -117,6 +195,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     }
 
     when(io.id_ready) {
-        printf(cf"Got instruction ${io.instr}\n")
+        printf(cf"Got instruction ${io.instr}%x\n")
     }
 }
+
