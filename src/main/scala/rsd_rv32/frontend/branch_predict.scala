@@ -181,7 +181,8 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
     nextGHR := Cat(ghr(p.GHR_WIDTH-3, 0), 0.U(1.W), 0.U(1.W))
   }
   // 更新GHR
-  ghr := nextGHRval nextGHR = Wire(UInt(p.GHR_WIDTH.W))
+  ghr := nextGHR
+  val nextGHR = Wire(UInt(p.GHR_WIDTH.W))
   when (pred0) {
     when(btbEntry0.isConditional){
       nextGHR := Cat(ghr(p.GHR_WIDTH-2, 0), 1.U(1.W))
