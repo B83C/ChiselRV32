@@ -4,9 +4,11 @@ import org.scalatest.flatspec.AnyFlatSpec
 import rsd_rv32.frontend._
 import rsd_rv32.common._
 
-class FetchUnit extends AnyFlatSpec with ChiselScalatestTester {
+class FetchUnitTest extends AnyFlatSpec with ChiselScalatestTester {
+  val p =Parameters()
     "FetchUnit"should "fetch two instructions and produce valid uops" in {
-    test(new FetchUnit()(new DefaultParameters)).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
+    test(new FetchUnit()(p)).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
+
       c.io.rob_commitsignal(0).valid.poke(false.B)
       c.io.id_ready.poke(true.B)
       c.io.branch_pred.poke(false.B)
@@ -15,10 +17,13 @@ class FetchUnit extends AnyFlatSpec with ChiselScalatestTester {
       c.io.target_PC.poke(0.U)
       c.io.GHR.poke(0.U)
 
-      c.clock.step()
-
       c.io.instr(0).poke("b00000000000000000000000000010011".U) // addi x0, x0, 0
       c.io.instr(1).poke("b00000000000000000000000000010011".U)
+
+
+
+
+      c.clock.step()
       c.clock.step()
 
       c.io.id_uop(0).valid.expect(true.B, "uop 0 应该是true")
@@ -27,8 +32,7 @@ class FetchUnit extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   "FetchUnit" should "suppress the second uop when 2 BTB hits" in {
-    test(new FetchUnit()(new DefaultParameters)).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
-   
+    test(new FetchUnit()(p)).withAnnotations(Seq(WriteVcdAnnotation)) { c =>
       c.io.rob_commitsignal(0).valid.poke(false.B)
       c.io.id_ready.poke(true.B)
       c.io.branch_pred.poke(true.B)
@@ -37,11 +41,14 @@ class FetchUnit extends AnyFlatSpec with ChiselScalatestTester {
       c.io.target_PC.poke(0.U)
       c.io.GHR.poke(0.U)
 
+      c.io.instr(0).poke("b00000000000000000000000000010011".U)
+      c.io.instr(1).poke("b00000000000000000000000000010011".U)
+
+
+
       c.clock.step()
 
 
-      c.io.instr(0).poke("b00000000000000000000000000010011".U)
-      c.io.instr(1).poke("b00000000000000000000000000010011".U)
       c.clock.step()
 
 
@@ -50,3 +57,4 @@ class FetchUnit extends AnyFlatSpec with ChiselScalatestTester {
     }
   }
 }
+
