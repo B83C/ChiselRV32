@@ -68,12 +68,13 @@ class BoothMultiplier extends Module {
   io.out.busy := busy
 }
 
+
 class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   override def supportedInstrTypes = Set(InstrType.MUL)
 
-  val out = Valid(new ALU_WB_uop())
+  val out = IO(Valid(new ALU_WB_uop()))
   val boothMul = Module(new BoothMultiplier())
-  val flush = Input(Bool())
+  // val flush = Input(Bool())
 
   // 状态定义
   val s_idle :: s_busy :: s_done :: Nil = Enum(3)
@@ -94,11 +95,14 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
       OprSel.Z -> 0.U,
     ))
   }
+  boothMul.io.in.start := false.B
+  boothMul.io.in.num_1 := 0.S(32.W)
+  boothMul.io.in.num_2 := 0.S(32.W)
 
   // 指令解码
   val instr = io.uop.bits.instr
   // 从指令中提取func3字段(R-type指令的14-12位)
-  val func3 = instr(14, 12)
+  val func3 = instr(7,5)
   // 解码乘法类型
   val is_mul    = func3 === 0.U  // MUL
   val is_mulh   = func3 === 1.U  // MULH
@@ -110,28 +114,27 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   switch(state) {
     is(s_idle) {
       when(io.uop.valid && io.uop.bits.instr_type === InstrType.MUL) {
-        // 锁存操作数和操作类型
+        // 锁存操作数
         op1Reg := Sel(io.uop.bits.fu_signals.opr1_sel, io.uop.bits.ps1_value).asSInt
         op2Reg := Sel(io.uop.bits.fu_signals.opr2_sel, io.uop.bits.ps2_value).asSInt
-        mulTypeReg := func3(1, 0)
-
-        // 设置乘法器输入（根据不同类型处理符号扩展）
+        mulTypeReg := func3
         val signed1 = !is_mulhu && !is_mulhsu
         val signed2 = !is_mulhu
 
-        boothMul.io.in.num_1 := Mux(signed1, op1Reg, op1Reg.asUInt).asSInt
-        boothMul.io.in.num_2 := Mux(signed2, op2Reg, op2Reg.asUInt).asSInt
-        boothMul.io.in.start := true.B
+        // 启动乘法器
+        boothMul.io.in.num_1 := Mux(signed1, op1Reg, op1Reg.asUInt.zext).asSInt
+        boothMul.io.in.num_2 := Mux(signed2, op2Reg, op2Reg.asUInt.zext).asSInt
+        boothMul.io.in.start := true.B  // 关键修改：明确启动信号
 
-        state := s_busy
+        state := s_busy  // 状态转移
+      }.otherwise {
+        boothMul.io.in.start := false.B  // 非激活状态保持start为低
       }
     }
+
     is(s_busy) {
-      boothMul.io.in.start := false.B
-      when(flush) {
-        state := s_idle  // 被冲刷时返回空闲状态
-      }.elsewhen(!boothMul.io.out.busy) {
-        // 根据乘法类型选择结果
+      boothMul.io.in.start := false.B  // 计算期间保持start为低
+      when(!boothMul.io.out.busy) {
         val fullResult = boothMul.io.out.result
         resultReg := MuxCase(fullResult(31, 0), Seq(
           is_mul    -> fullResult(31, 0),   // MUL: 取低32位
@@ -142,6 +145,7 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
         state := s_done
       }
     }
+
     is(s_done) {
       state := s_idle
     }
@@ -152,11 +156,12 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   data_out.pdst := io.uop.bits.pdst
   data_out.pdst_value := resultReg
   data_out.rob_index := io.uop.bits.rob_index
+  data_out.instr := io.uop.bits.instr
 
-  out.valid := (state === s_done)&& !flush
+  out.valid := (state === s_done) //&& !flush
   out.bits := data_out
 
   // 流控制
-  io.uop.ready := (state === s_idle)&& !flush
+  io.uop.ready := (state === s_idle) //&& !flush
 
 }
