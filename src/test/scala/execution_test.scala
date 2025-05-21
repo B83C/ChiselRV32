@@ -192,7 +192,7 @@ class ALUTest extends AnyFlatSpec with ChiselScalatestTester {
   }
 
 }
-
+//MUL的测试，都跑通了
 class MULFUTest extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = Parameters()
 
@@ -269,7 +269,7 @@ class MULFUTest extends AnyFlatSpec with ChiselScalatestTester {
     }
   }
 
-  /*  "MULFU" should "正确处理刷新信号" in {
+  "MULFU" should "正确处理刷新信号" in {
     test(new MULFU) { dut =>
       // 开始乘法
       dut.io.uop.bits.instr.poke("b0000001_00010_00001_000_00000".U)
@@ -280,16 +280,16 @@ class MULFUTest extends AnyFlatSpec with ChiselScalatestTester {
       // 1周期后发送刷新
       dut.clock.step()
       dut.io.uop.valid.poke(false.B)
-      dut.io.flush.poke(true.B)
+      dut.io.reset.poke(true.B)
       dut.clock.step()
-      dut.io.flush.poke(false.B)
+      dut.io.reset.poke(false.B)
 
       // 验证没有输出结果
       dut.out.valid.expect(false.B)
     }
   }
 
- */
+
 }
 class DIVFUTest extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = Parameters()
