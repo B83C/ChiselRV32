@@ -74,7 +74,7 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
 
   val out = IO(Valid(new ALU_WB_uop()))
   val boothMul = Module(new BoothMultiplier())
-  // val flush = Input(Bool())
+
 
   // 状态定义
   val s_idle :: s_busy :: s_done :: Nil = Enum(3)
@@ -113,10 +113,16 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   // 状态机转换
   switch(state) {
     is(s_idle) {
-      when(io.uop.valid && io.uop.bits.instr_type === InstrType.MUL) {
+      when(io.reset) {
+        state := s_idle
+    }.elsewhen(io.uop.valid && io.uop.bits.instr_type === InstrType.MUL) {
         // 锁存操作数
-        op1Reg := Sel(io.uop.bits.fu_signals.opr1_sel, io.uop.bits.ps1_value).asSInt
-        op2Reg := Sel(io.uop.bits.fu_signals.opr2_sel, io.uop.bits.ps2_value).asSInt
+        val op1 = Sel(io.uop.bits.fu_signals.opr1_sel, io.uop.bits.ps1_value).asSInt
+        val op2 = Sel(io.uop.bits.fu_signals.opr2_sel, io.uop.bits.ps2_value).asSInt
+
+        // 仍然更新寄存器用于后续状态
+        op1Reg := op1
+        op2Reg := op2
         mulTypeReg := func3
         val signed1 = !is_mulhu && !is_mulhsu
         val signed2 = !is_mulhu
@@ -133,6 +139,11 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
     }
 
     is(s_busy) {
+      when(io.reset) {
+        state := s_idle
+        // 可以同时重置其他寄存器
+        resultReg := 0.U
+      }.otherwise{
       boothMul.io.in.start := false.B  // 计算期间保持start为低
       when(!boothMul.io.out.busy) {
         val fullResult = boothMul.io.out.result
@@ -144,10 +155,15 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
         ))
         state := s_done
       }
+      }
     }
 
     is(s_done) {
-      state := s_idle
+      when(io.reset) {
+        state := s_idle
+      }.otherwise {
+        state := s_idle // 原有逻辑
+      }
     }
   }
 
@@ -158,10 +174,11 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   data_out.rob_index := io.uop.bits.rob_index
   data_out.instr := io.uop.bits.instr
 
-  out.valid := (state === s_done) //&& !flush
+  out.valid := (state === s_done) && !io.reset
   out.bits := data_out
 
   // 流控制
-  io.uop.ready := (state === s_idle) //&& !flush
+  io.uop.ready := (state === s_idle) && !io.reset
 
 }
+
