@@ -162,8 +162,8 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
   val btbHitVec = Wire(Vec(p.CORE_WIDTH, Bool()))
   btbHitVec(0) := btbHit0
   btbHitVec(1) := btbHit1
-  printf(p"btbHitVec(0): ${btbHitVec(0)}\n")
-  printf(p"btbHitVec(1): ${btbHitVec(1)}\n")
+  // printf(p"btbHitVec(0): ${btbHitVec(0)}\n")
+  // printf(p"btbHitVec(1): ${btbHitVec(1)}\n")
   val branchPredVec = Wire(Vec(p.CORE_WIDTH, Bool()))
   branchPredVec(0) := pred0 && pred0_valid
   branchPredVec(1) := pred1 && pred1_valid
