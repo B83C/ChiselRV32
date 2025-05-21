@@ -60,7 +60,7 @@ class DispatchUnit(implicit p: Parameters) extends CustomModule {
   // 对于wrap around的情况不影响
   val rob_tail_advance = io.rob_tail + p.CORE_WIDTH.U
   val wrapped_around = rob_tail_advance < io.rob_tail
-  val rob_ready = (Mux(io.rob_head > io.rob_tail || wrapped_around, io.rob_head >= io.rob_tail_advance, io.rob_tail_advance > io.rob_head)) && !io.rob_full
+  val rob_ready = (Mux(io.rob_head > io.rob_tail || wrapped_around, io.rob_head >= rob_tail_advance, rob_tail_advance > io.rob_head)) && !io.rob_full
 
   // Special Instruction - Serialised mode
   val is_csr = VecInit(io.rob_uop.map(x => x.bits.instr_type === InstrType.CSR)).asUInt
@@ -197,7 +197,6 @@ class DispatchUnit(implicit p: Parameters) extends CustomModule {
   }), input_ready && st_valid)
 
   when(should_kill) {
-    io.rob_uop.valid := 0.U
     io.exu_issue_uop.valid := 0.U
     io.ld_issue_uop.valid := 0.U
     io.st_issue_uop.valid := 0.U

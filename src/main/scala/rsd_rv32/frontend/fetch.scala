@@ -37,13 +37,6 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     val pc_aligned = Wire(UInt(p.XLEN.W))         //对齐后的当前PC
     pc_aligned := pc_reg & "hFFFFFFF8".U(32.W)
 
-// <<<<<<< HEAD
-//     pc_aligned := pc_reg & 0x7FFFFFF8.U
-
-// ||||||| 37cfc08
-//     pc_aligned := pc_reg & ~((p.CORE_WIDTH.U << 2) - 1.U)
-// =======
-// >>>>>>> fadc7f7dd5ef8ab35d2e6aa1cce92e256ea93f31
     val pc_next_default = pc_aligned + (p.CORE_WIDTH.U <<2)
 
     //需不需要flush
@@ -186,7 +179,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
 // >>>>>>> fadc7f7dd5ef8ab35d2e6aa1cce92e256ea93f31
 
     //存入寄存器给ID
-    val IF_ID_Stage_reg = Reg(Vec(2, Valid(new IF_ID_uop())))
+    val IF_ID_Stage_reg = Wire(Vec(2, Valid(new IF_ID_uop())))
 
     for (i <- 0 until 2) {
         IF_ID_Stage_reg(i).valid := uop_vec(i).valid
@@ -195,7 +188,9 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     }
 
     when(io.id_ready) {
-        printf(cf"Got instruction ${io.instr}%x\n")
+        val instr1 = io.instr(0).asUInt
+        val instr2 = io.instr(1).asUInt
+        printf(cf"PC: ${pc_reg} Got instruction ${instr1}%x ${instr2}%x\n")
     }
 }
 

@@ -73,7 +73,7 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
 
   // 预测错误判断
   val mispred = is_conditional &&
-    (actual_direction =/= io.uop.bits.branch_pred.taken ||
+    (actual_direction =/= (io.uop.bits.branch_pred === BranchPred.T) ||
       (actual_direction && actual_target =/= io.uop.bits.target_PC))
 
   val data_out = Wire(new BU_WB_uop())
@@ -186,8 +186,9 @@ class BR(implicit p: Parameters) extends Module with BRConsts {
       BR_LTU -> (io.rs1 < io.rs2),
       BR_GEU -> (io.rs1 >= io.rs2),
 
-      BR_JALR -> ((io.rs1 + io.imm) & ~1.U),
-      BR_JAL  -> (io.pc + io.imm)
+      // Should be targetPC
+      // BR_JALR -> ((io.rs1 + io.imm) & ~1.U),
+      // BR_JAL  -> (io.pc + io.imm)
     )
   )
 

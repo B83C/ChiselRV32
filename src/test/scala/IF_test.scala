@@ -16,13 +16,6 @@ class FetchUnitTest extends AnyFlatSpec with ChiselScalatestTester {
       c.io.target_PC.poke(0.U)
       c.io.GHR.poke(0.U)
 
-// <<<<<<< HEAD
-// ||||||| 37cfc08
-//       c.clock.step()
-
-// =======
-
-// >>>>>>> fadc7f7dd5ef8ab35d2e6aa1cce92e256ea93f31
       c.io.instr(0).poke("b00000000000000000000000000010011".U) // addi x0, x0, 0
       c.io.instr(1).poke("b00000000000000000000000000010011".U)
 

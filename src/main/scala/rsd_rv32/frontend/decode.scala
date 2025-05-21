@@ -32,6 +32,16 @@ class ID_Rename_Stage_reg(implicit  p: Parameters) extends CustomModule {
     uop := uop
   }
   io.rename_uop := uop
+  for(i <- 0 until p.CORE_WIDTH) {
+    printf(cf"[Decode->Rename]\n")
+    
+    when(uop(i).valid) {
+      val itype = uop(i).bits.instr_type
+      val addr  = uop(i).bits.instr_addr 
+      printf(cf" PC: ${addr} type: ${itype} ")
+    }
+    printf(cf"\n")
+  }
 }
 
 
@@ -160,6 +170,7 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
         }
 
       } //switch的后括号
+
     }
   }
 }

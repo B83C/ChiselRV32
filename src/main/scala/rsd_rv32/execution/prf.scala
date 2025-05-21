@@ -12,6 +12,7 @@ class PRF_IO(implicit p: Parameters) extends CustomBundle{
   val mul_wb_uop = Input(Vec(p.MUL_NUM, Valid(new ALU_WB_uop())))
   val divrem_wb_uop = Input(Vec(p.DIV_NUM, Valid(new ALU_WB_uop())))
   val ldu_wb_uop = Input(Vec(p.LDU_NUM, Valid(new ALU_WB_uop())))
+  val serialised_wb_uop = Input(Valid(new ALU_WB_uop()))
 
   //exu_issue的读地址与寄存器值
   val exu_issue_r_addr1 = Input(Vec(2, UInt(log2Ceil(p.PRF_DEPTH).W)))
@@ -50,6 +51,7 @@ class PRF_Value(implicit p: Parameters) extends Module {
     val mul_wb_uop = Input(Vec(p.MUL_NUM, Valid(new ALU_WB_uop())))
     val divrem_wb_uop = Input(Vec(p.DIV_NUM, Valid(new ALU_WB_uop())))
     val ldu_wb_uop = Input(Vec(p.LDU_NUM, Valid(new ALU_WB_uop())))
+    val serialised_wb_uop = Input(Vec(p.LDU_NUM, Valid(new ALU_WB_uop())))
 
     //exu_issue的读地址与寄存器值
     val exu_issue_r_addr1 = Input(Vec(2, UInt(log2Ceil(p.PRF_DEPTH).W)))
@@ -73,8 +75,8 @@ class PRF_Value(implicit p: Parameters) extends Module {
       })
   )
   //定义地址写入和数据写入
-  val writeAddr  = Wire(Vec(6,UInt(log2Ceil(p.PRF_DEPTH).W)))
-  val writeData  = Wire(Vec(6,UInt(p.XLEN.W)))
+  val writeAddr  = Wire(Vec(7,UInt(log2Ceil(p.PRF_DEPTH).W)))
+  val writeData  = Wire(Vec(7,UInt(p.XLEN.W)))
   //地址写入
   writeAddr(0) := io.alu_wb_uop(0).bits.pdst
   writeAddr(1) := io.alu_wb_uop(1).bits.pdst
@@ -82,6 +84,7 @@ class PRF_Value(implicit p: Parameters) extends Module {
   writeAddr(3) := io.mul_wb_uop(0).bits.pdst
   writeAddr(4) := io.divrem_wb_uop(0).bits.pdst
   writeAddr(5) := io.ldu_wb_uop(0).bits.pdst
+  writeAddr(6) := io.serialised_wb_uop(0).bits.pdst
 
   //数据写入
   writeData(0) := io.alu_wb_uop(0).bits.pdst_value
@@ -90,9 +93,10 @@ class PRF_Value(implicit p: Parameters) extends Module {
   writeData(3) := io.mul_wb_uop(0).bits.pdst_value
   writeData(4) := io.divrem_wb_uop(0).bits.pdst_value
   writeData(5) := io.ldu_wb_uop(0).bits.pdst_value
+  writeData(6) := io.serialised_wb_uop(0).bits.pdst_value
 
   // 执行寄存器写入
-  for (i <- 0 until 6) {
+  for (i <- 0 until 7) {
     regBank(writeAddr(i)) := writeData(i)
   }
 
@@ -117,6 +121,7 @@ class PRF_Valid(implicit p: Parameters) extends Module {
     val mul_wb_uop = Input(Vec(p.MUL_NUM, Valid(new ALU_WB_uop())))
     val divrem_wb_uop = Input(Vec(p.DIV_NUM, Valid(new ALU_WB_uop())))
     val ldu_wb_uop = Input(Vec(p.LDU_NUM, Valid(new ALU_WB_uop())))
+    val serialised_wb_uop = Input(Valid(new ALU_WB_uop()))
     //接收Rename Unit的AMT用于更新prf_valid
     val amt = Input(Vec(32,UInt(log2Ceil(p.PRF_DEPTH).W)))
     val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Valid(new ROBContent())))
@@ -158,6 +163,9 @@ class PRF_Valid(implicit p: Parameters) extends Module {
       when(io.ldu_wb_uop(i).valid){
         prf_valid(io.ldu_wb_uop(i).bits.pdst) := true.B
       }
+    }
+    when(io.serialised_wb_uop.valid){
+      prf_valid(io.serialised_wb_uop.bits.pdst) := true.B
     }
   }
 
