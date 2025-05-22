@@ -15,8 +15,8 @@ class MmapDevice(addrBase: UInt, length_in_word: UInt) extends Module {
     val wdata = Flipped(Valid(UInt(32.W)))    // write data (ignored here)
     val wmask = Flipped(UInt(32.W))    // write data (ignored here)
     val ren   = Flipped(Bool())        // read enable
-    val rdata = Output(UInt(32.W))   // read data
-    val ready = Output(Bool())       // ready/valid response
+    val rdata = (UInt(32.W))   // read data
+    val ready = (Bool())       // ready/valid response
   })
 
   // def read(offset: UInt): UInt

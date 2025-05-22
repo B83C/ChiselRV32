@@ -9,7 +9,7 @@ class Port(
    val read: Boolean,
  )(implicit p: Parameters) extends CustomBundle {
   val addr = Flipped(UInt(addr_width.W))
-  val data = if (read) Output(UInt(data_width.W)) else Flipped(UInt(data_width.W))
+  val data = if (read) (UInt(data_width.W)) else Flipped(UInt(data_width.W))
 }
 
 class MultiportRam(

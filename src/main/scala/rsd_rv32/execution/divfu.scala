@@ -11,9 +11,9 @@ class Divider extends Module {
     val valid     = Flipped(Bool())  // 改为Bool类型更规范
     val dividend  = Flipped(UInt(32.W))  // 32位被除数
     val divisor   = Flipped(UInt(32.W))  // 32位除数
-    val ready     = Output(Bool())
-    val quotient  = Output(UInt(32.W))
-    val remainder = Output(UInt(32.W))
+    val ready     = (Bool())
+    val quotient  = (UInt(32.W))
+    val remainder = (UInt(32.W))
   })
 
   // 寄存器定义

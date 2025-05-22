@@ -143,14 +143,14 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
 
       // 分支预测接口
       val pred = new Bundle {
-        val taken = Output(Bool())
-        val target = Output(UInt(p.XLEN.W))
-        val mispredict = Output(Bool())
+        val taken = (Bool())
+        val target = (UInt(p.XLEN.W))
+        val mispredict = (Bool())
       }
 
       // 控制信号
       val flush = Flipped(Bool())
-      val busy = Output(Bool())
+      val busy = (Bool())
     })
 
     // 实例化BR功能单元
@@ -192,10 +192,10 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
 //  val fn = Flipped(UInt(4.W))            // 分支操作码（见下方常量）
 //
 //  // 输出结果
-//  val branchTaken = Output(Bool())     // 是否跳转
-//  val targetPC = Output(UInt(p.XLEN.W)) // 跳转目标地址
-//  val pcPlus4 = Output(UInt(p.XLEN.W)) // PC+4（用于JAL/JALR写回）
-//  val cmp_out = Output(Bool())
+//  val branchTaken = (Bool())     // 是否跳转
+//  val targetPC = (UInt(p.XLEN.W)) // 跳转目标地址
+//  val pcPlus4 = (UInt(p.XLEN.W)) // PC+4（用于JAL/JALR写回）
+//  val cmp_out = (Bool())
 //}
 //
 //class BR(implicit p: Parameters) extends Module with BRConsts {

@@ -20,7 +20,7 @@ class FreeListCam[T <: Data](
     // val deq_request = Decoupled(Vec(multiShot, gen.cloneType))
     // val enq_request  = Flipped(Decoupled(Vec(multiShot, gen.cloneType)))
     val squeeze = Flipped(Bool())
-    // val is_empty = Output(Bool())
+    // val is_empty = (Bool())
   })
 
   // require(depth > 0 && isPow2(multiShot), "multishot length must be a power of two")

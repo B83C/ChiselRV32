@@ -11,12 +11,12 @@ class st_issue_IO(implicit p: Parameters) extends CustomBundle {
 
     //发射到st的输出
     val store_uop = Valid(new STISSUE_STPIPE_uop())  //发射的指令
-    // val value_o1 = Output(UInt(p.XLEN.W)) //发射的指令的操作数1
-    // val value_o2 = Output(UInt(p.XLEN.W)) //发射的指令的操作数2
+    // val value_o1 = (UInt(p.XLEN.W)) //发射的指令的操作数1
+    // val value_o2 = (UInt(p.XLEN.W)) //发射的指令的操作数2
 
     //PRF
-    val prf_raddr1 = Output(UInt(log2Ceil(p.PRF_DEPTH).W)) //PRF读地址1
-    val prf_raddr2 = Output(UInt(log2Ceil(p.PRF_DEPTH).W)) //PRF读地址2
+    val prf_raddr1 = (UInt(log2Ceil(p.PRF_DEPTH).W)) //PRF读地址1
+    val prf_raddr2 = (UInt(log2Ceil(p.PRF_DEPTH).W)) //PRF读地址2
     val ps1_value = Flipped(UInt(p.XLEN.W)) //操作数1
     val ps2_value = Flipped(UInt(p.XLEN.W)) //操作数2
 
@@ -31,22 +31,22 @@ class st_issue_IO(implicit p: Parameters) extends CustomBundle {
     //val LDU_complete_uop1 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
 
     //输出至Dispatch Unit以及ld_issue的信号
-    val st_issued_index = Output(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W))) //更新IQ Freelist
+    val st_issued_index = (Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W))) //更新IQ Freelist
 
     //with ROB
     val rob_commitsignal = Flipped(Vec(p.CORE_WIDTH, Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
 
     //To ld_issue_queue
-    val st_queue_state = Output(Vec(p.STISSUE_DEPTH, Bool()))//在ld_issue中要进一步处理
+    val st_queue_state = (Vec(p.STISSUE_DEPTH, Bool()))//在ld_issue中要进一步处理
 
     //测试用
-    val queue = Output(Vec(p.STISSUE_DEPTH, new st_issue_content()))
+    val queue = (Vec(p.STISSUE_DEPTH, new st_issue_content()))
 }
 
 class st_iq_select_logic(implicit p: Parameters) extends CustomModule{
     val io = IO(new Bundle {
         val issue_queue = Flipped(Vec(p.STISSUE_DEPTH, new st_issue_content()))
-        val sel_index = Output(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W))) //选择的索引
+        val sel_index = (Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W))) //选择的索引
     })
     val readySt = VecInit((0 until p.STISSUE_DEPTH).map { i =>
         val q = io.issue_queue(i)
@@ -74,7 +74,7 @@ class issue2st(implicit p: Parameters) extends CustomModule {
         val ps1_value = Flipped(UInt(p.XLEN.W)) //操作数1
         val ps2_value = Flipped(UInt(p.XLEN.W)) //操作数2
         val dis_issue_uop = Flipped(new DISPATCH_STISSUE_uop()) //被select的uop
-        val store_uop = Output(Valid(new STISSUE_STPIPE_uop())) //发往STPIPE的uop
+        val store_uop = (Valid(new STISSUE_STPIPE_uop())) //发往STPIPE的uop
     })
     val uop = RegInit(Valid(new STISSUE_STPIPE_uop()), 0.U.asTypeOf(Valid(new STISSUE_STPIPE_uop())))
     uop.valid := io.if_valid

@@ -8,7 +8,7 @@ import rsd_rv32.common._
 // 两个输出: instr_addr, id_uop 
 class Fetch_IO(implicit p: Parameters) extends CustomBundle {
     // with MEM
-    val instr_addr = Output(UInt(p.XLEN.W)) //当前IFU的PC值
+    val instr_addr = (UInt(p.XLEN.W)) //当前IFU的PC值
     val instr = Flipped(Vec(p.CORE_WIDTH, UInt(32.W)))
 
     // with ID

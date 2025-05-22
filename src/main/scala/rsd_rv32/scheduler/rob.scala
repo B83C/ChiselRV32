@@ -30,10 +30,10 @@ import Utils._
 class ROBIO(implicit p: Parameters) extends CustomBundle {
     val rob_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop())))  //Dispatch Unit的uop,存入条目中
 
-    val rob_full = Output(Bool())  //ROB满标志(1表示满，无法分配新条目)
+    val rob_full = (Bool())  //ROB满标志(1表示满，无法分配新条目)
     // 没必要
-    val rob_head = Output(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB头指针
-    val rob_tail = Output(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
+    val rob_head = (UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB头指针
+    val rob_tail = (UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
 
     val alu_wb_uop = Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Flipped(Valid(new ALU_WB_uop())))  //来自alu0、alu1、mul、div、load pipeline的uop
     val bu_wb_uop = Vec(p.BU_NUM, Flipped(Valid(new BU_WB_uop()))) //来自bu的uop,更新就绪状态

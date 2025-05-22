@@ -26,7 +26,7 @@ package object Utils {
   }
 
   case class Request[T <: Data](data: T) extends Bundle {
-    val bits = Output(data)
+    val bits = (data)
     val ready = Flipped(Bool())
   }
 

@@ -9,7 +9,7 @@ import Utils._
 //Github上的乘法器bundle定义
 class ArithBundle extends Bundle {
   val in = Flipped(new ArithBundle_in)
-  val out = Output(new ArithBundle_out)
+  val out = (new ArithBundle_out)
 }
 
 // Flipped Bundle

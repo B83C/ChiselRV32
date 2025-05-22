@@ -18,11 +18,11 @@ class Req_Abter(implicit p: Parameters) extends CustomBundle {
 
 class LSUIO(implicit p: Parameters) extends CustomBundle {
   //with MEM
-  val data_addr     = Output(UInt(64.W))//访存指令的目标地址
-  val data_into_mem = Output(UInt(64.W))//需要写入储存器的数据
-  val write_en      = Output(Bool())//写使能信号
+  val data_addr     = (UInt(64.W))//访存指令的目标地址
+  val data_into_mem = (UInt(64.W))//需要写入储存器的数据
+  val write_en      = (Bool())//写使能信号
 
-  val func3 = Output(UInt(3.W))//访存指令的fun3字段
+  val func3 = (UInt(3.W))//访存指令的fun3字段
 
   val data_out_mem  = Flipped(UInt(64.W))//从储存器中读取的数据
 
@@ -33,9 +33,9 @@ class LSUIO(implicit p: Parameters) extends CustomBundle {
   val load_uop  = Flipped(Decoupled(new LDISSUE_LDPIPE_uop()))//加载指令的uop
 
   //with dispatcher
-  val stq_tail  = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引 
-  val stq_head  = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的头部索引
-  val stq_full  = Output(Bool())//stq是否为满,1表示满
+  val stq_tail  = (UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引 
+  val stq_head  = (UInt(log2Ceil(p.STQ_DEPTH).W))//stq的头部索引
+  val stq_full  = (Bool())//stq是否为满,1表示满
   val st_cnt = Flipped(UInt(log2Ceil(p.CORE_WIDTH + 1).W))//存储指令被派遣的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）
   
   //with ROB
@@ -49,7 +49,7 @@ class PipelineReg(val width: Int) extends CustomModule {
   val io = IO(new Bundle {
     val stall_in = Flipped(Bool())
     val data_in  = Flipped(UInt(width.W))
-    val data_out = Output(UInt(width.W))
+    val data_out = (UInt(width.W))
     val reset = Flipped(Bool())
   })
   val reg = RegInit(0.U(width.W))
@@ -75,7 +75,7 @@ class LSUArbiter(implicit p: Parameters) extends CustomModule {
 
     val memOut = Decoupled(new Req_Abter())//arbiter的输出信号，传递给存储器
 
-    val isStore = Output(Bool())//是否为存储请求信号
+    val isStore = (Bool())//是否为存储请求信号
   })
   val arb = Module(new RRArbiter(new Req_Abter(), 2))//创建一个arbiter模块，输入信号为两个请求信号，输出信号为存储器的请求信号
 
@@ -104,8 +104,8 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
     val ldu_wb_uop  = Valid((new ALU_WB_uop()))//加载完成的信号,wb to ROB and PRF
 
     val addr_search_stq = Valid(UInt(p.XLEN.W))//地址搜索信号,进入stq的搜索地址
-    val func3 = Output(UInt(3.W))//fun3信号
-    val stq_tail = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引
+    val func3 = (UInt(3.W))//fun3信号
+    val stq_tail = (UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引
     
 
     val ldReq = Decoupled(new Req_Abter())//加载请求信号
@@ -315,10 +315,10 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
     val store_uop = Flipped(Valid(new STISSUE_STPIPE_uop()))//存储指令的uop
     val stu_wb_uop = Valid(new STPIPE_WB_uop())//存储完成的信号,wb to ROB
 
-    val data_into_stq = Output(UInt(p.XLEN.W))//需要写入stq的数据
+    val data_into_stq = (UInt(p.XLEN.W))//需要写入stq的数据
     val dataAddr_into_stq = Valid(UInt(p.XLEN.W))//需要写入stq的地址
-    val func3 = Output(UInt(3.W))//fun3信号
-    val stq_index = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//需要写入stq的索引
+    val func3 = (UInt(3.W))//fun3信号
+    val stq_index = (UInt(log2Ceil(p.STQ_DEPTH).W))//需要写入stq的索引
 
     val rob_commitsignal = Flipped(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
   })
@@ -412,15 +412,15 @@ class STQEntry(implicit p: Parameters) extends Bundle {
 
 class StoreQueue(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
-    val stq_full = Output(Bool())//stq是否为满,1表示满
-    val stq_tail = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引 
-    val stq_head = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的头部索引
+    val stq_full = (Bool())//stq是否为满,1表示满
+    val stq_tail = (UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引 
+    val stq_head = (UInt(log2Ceil(p.STQ_DEPTH).W))//stq的头部索引
 
     val input_tail = Flipped(UInt(log2Ceil(p.STQ_DEPTH).W))//输入的tail指针，用于后续的查找
     val addr_search_stq = Flipped(Valid(UInt(p.XLEN.W)))//地址搜索信号,进入stq的搜索地址
     val ld_func3 = Flipped(UInt(3.W))//fun3信号
 
-    val searched_data = Output(new STQEntry)//从stq中读取的数据
+    val searched_data = (new STQEntry)//从stq中读取的数据
 
     val stqReq = Decoupled(new Req_Abter())//存储请求信号
 

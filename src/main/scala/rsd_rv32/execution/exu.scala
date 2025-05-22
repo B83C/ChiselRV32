@@ -13,18 +13,18 @@ class EXUIO(fu_num: Int)(implicit p: Parameters) extends Bundle{
   
   val serialised_uop = Flipped(Valid(new EXUISSUE_EXU_uop))
 
-  // val readys = Output(Vec(fu_num, Bool()))
+  // val readys = (Vec(fu_num, Bool()))
 
-  // val wb = Output(Vec(p.FU_NUM, Valid(new WB_uop())))
+  // val wb = (Vec(p.FU_NUM, Valid(new WB_uop())))
   
-  // val branch_info = Output(new FUBranchInfo())
+  // val branch_info = (new FUBranchInfo())
   //val rob_signal = Flipped(new ROBSignal())
   val rob_commitsignal = Flipped(Vec(p.CORE_WIDTH, Valid(new ROBContent())))
   //flush = rob_commitsignal(0).valid && rob_commitsignal(0).bits.mispred
   // Should be removed in place of more general readys
   //反馈给exu_issue queue的信号
-  val mul_ready = Output(Bool())
-  val div_ready = Output(Bool())
+  val mul_ready = (Bool())
+  val div_ready = (Bool())
 
   // val wb_uop = Vec(fu_num, Valid(new WB_uop()))
   //写回信号

@@ -10,14 +10,14 @@ import rsd_rv32.common._
 class RenameUnit_IO(implicit p: Parameters) extends Bundle {
   //with ID
   val rename_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new ID_RENAME_uop()))) //来自ID单元的uop
-  val rename_ready = Output(Bool()) // 反馈给IDU，显示Rename单元是否准备好接收指令
+  val rename_ready = (Bool()) // 反馈给IDU，显示Rename单元是否准备好接收指令
   //with ROB
   val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))  //ROB提交时的广播信号，rob正常提交指令时更新amt与rmt，发生误预测时对本模块进行恢复
   //with Dispatch
   val dis_uop = Vec(p.CORE_WIDTH, Valid(new RENAME_DISPATCH_uop()))//发往Dispatch单元的uop
   val dis_ready = Flipped(Bool()) // 来自Dispatch单元的反馈，显示dispatch单元是否准备好接收指令
   //for prf valid bits
-  val amt = Output(Vec(32,UInt(log2Ceil(p.PRF_DEPTH).W)))
+  val amt = (Vec(32,UInt(log2Ceil(p.PRF_DEPTH).W)))
 }
 
 /*

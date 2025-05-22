@@ -10,12 +10,12 @@ class ld_issue_IO(implicit p: Parameters) extends CustomBundle {
 
     //发射到ld的输出
     val load_uop = Decoupled(new LDISSUE_LDPIPE_uop())  //发射的指令
-    // val value_o1 = Output(UInt(p.XLEN.W)) //发射的指令的操作数1
-    // val value_o2 = Output(UInt(p.XLEN.W)) //发射的指令的操作数2
+    // val value_o1 = (UInt(p.XLEN.W)) //发射的指令的操作数1
+    // val value_o2 = (UInt(p.XLEN.W)) //发射的指令的操作数2
 
     //PRF
-    val prf_raddr = Output(UInt(log2Ceil(p.PRF_DEPTH).W)) //PRF读地址1
-    //val raddr2 = Output(UInt(log2Ceil(p.PRF_DEPTH).W)) //PRF读地址2
+    val prf_raddr = (UInt(log2Ceil(p.PRF_DEPTH).W)) //PRF读地址1
+    //val raddr2 = (UInt(log2Ceil(p.PRF_DEPTH).W)) //PRF读地址2
     val prf_value = Flipped(UInt(p.XLEN.W)) //操作数1
     //val value_i2 = Flipped(UInt(p.XLEN.W)) //操作数2    
 
@@ -30,7 +30,7 @@ class ld_issue_IO(implicit p: Parameters) extends CustomBundle {
     //val ldu_wb_uop1 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
 
     //输出至Dispatch Unit的信号
-    val ld_issued_index = Output(Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W))) //更新IQ Freelist
+    val ld_issued_index = (Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W))) //更新IQ Freelist
 
     //with ROB
     val rob_commitsignal = Flipped(Vec(p.CORE_WIDTH, Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
@@ -42,13 +42,13 @@ class ld_issue_IO(implicit p: Parameters) extends CustomBundle {
     val st_issue_uop = Flipped(Valid(Vec(p.CORE_WIDTH, Valid(new DISPATCH_STISSUE_uop()))))
 
     //测试接口
-    val queue = Output(Vec(p.LDISSUE_DEPTH, new ld_issue_content()))
+    val queue = (Vec(p.LDISSUE_DEPTH, new ld_issue_content()))
 }
 
 class ld_iq_select_logic(implicit p: Parameters) extends CustomModule{
     val io = IO(new Bundle {
         val issue_queue = Flipped(Vec(p.LDISSUE_DEPTH, new ld_issue_content()))
-        val sel_index = Output(Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W))) //选择的索引
+        val sel_index = (Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W))) //选择的索引
         val ldpipe_ready = Flipped(Bool())
     })
     val readyLd = VecInit((0 until p.LDISSUE_DEPTH).map { i =>
@@ -77,7 +77,7 @@ class issue2ld(implicit p: Parameters) extends CustomModule {
         val ld_ready = Flipped(Bool())
         val ps_value = Flipped(UInt(p.XLEN.W)) //操作数1
         val dis_issue_uop = Flipped(new DISPATCH_LDISSUE_uop()) //被select的uop
-        val load_uop = Output(Valid((new LDISSUE_LDPIPE_uop()))) //发往LDPIPE的uop
+        val load_uop = (Valid((new LDISSUE_LDPIPE_uop()))) //发往LDPIPE的uop
         //val stpipe_ready = Flipped(Bool())
     })
     val uop = RegInit(Valid(new LDISSUE_LDPIPE_uop()), 0.U.asTypeOf(Valid(new LDISSUE_LDPIPE_uop())))

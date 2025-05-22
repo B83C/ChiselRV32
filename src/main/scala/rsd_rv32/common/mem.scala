@@ -8,23 +8,23 @@ import scala.io.Source
 import java.nio.file.Files
 
 class if_mem extends Bundle {
-  val instAddr = Output(UInt(64.W))
+  val instAddr = (UInt(64.W))
 }
 
 class mem_id(val instWidth: Int) extends Bundle {
-  val inst = Output(Vec(instWidth, UInt(32.W)))
+  val inst = (Vec(instWidth, UInt(32.W)))
 }
 
 class lsu_mem_c extends Bundle {
-  val atomFlag  = Output(Bool())
-  val data_addr  = Output(UInt(64.W))
-  val write_en   = Output(Bool())
-  val data_into_mem = Output(UInt(64.W))
-  val func3     = Output(UInt(3.W))
+  val atomFlag  = (Bool())
+  val data_addr  = (UInt(64.W))
+  val write_en   = (Bool())
+  val data_into_mem = (UInt(64.W))
+  val func3     = (UInt(3.W))
 }
 
 class mem_lsu_c extends Bundle {
-  val data_out_mem = Output(UInt(64.W))
+  val data_out_mem = (UInt(64.W))
 }
 
 class mem(mem_path: String, memDepth: Int, instWidth: Int) extends CustomModule {

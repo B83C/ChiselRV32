@@ -83,7 +83,7 @@ class ALUIO(implicit p: Parameters) extends Bundle {
   val fn  = Flipped(UInt(4.W))  // ALU操作码
 
   // 输出结果
-  val out = Output(UInt(p.XLEN.W))
+  val out = (UInt(p.XLEN.W))
 }
 
 class ALU(implicit p: Parameters) extends Module with ALUConsts {
