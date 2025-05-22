@@ -8,9 +8,9 @@ import Utils._
 
 class Divider extends Module {
   val io = IO(new Bundle {
-    val valid     = Input(Bool())  // 改为Bool类型更规范
-    val dividend  = Input(UInt(32.W))  // 32位被除数
-    val divisor   = Input(UInt(32.W))  // 32位除数
+    val valid     = Flipped(Bool())  // 改为Bool类型更规范
+    val dividend  = Flipped(UInt(32.W))  // 32位被除数
+    val divisor   = Flipped(UInt(32.W))  // 32位除数
     val ready     = Output(Bool())
     val quotient  = Output(UInt(32.W))
     val remainder = Output(UInt(32.W))

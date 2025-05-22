@@ -10,11 +10,11 @@ import chisel3.experimental.hierarchy.{Definition, Instance, instantiable, publi
 @instantiable 
 class MmapDevice(addrBase: UInt, length_in_word: UInt) extends Module {
   @public val io = IO(new Bundle {
-    val reset = Input(Bool())
-    val addr  = Input(UInt(12.W))    // 12‑bit address as defined in RISCV manual
-    val wdata = Input(Valid(UInt(32.W)))    // write data (ignored here)
-    val wmask = Input(UInt(32.W))    // write data (ignored here)
-    val ren   = Input(Bool())        // read enable
+    val reset = Flipped(Bool())
+    val addr  = Flipped(UInt(12.W))    // 12‑bit address as defined in RISCV manual
+    val wdata = Flipped(Valid(UInt(32.W)))    // write data (ignored here)
+    val wmask = Flipped(UInt(32.W))    // write data (ignored here)
+    val ren   = Flipped(Bool())        // read enable
     val rdata = Output(UInt(32.W))   // read data
     val ready = Output(Bool())       // ready/valid response
   })

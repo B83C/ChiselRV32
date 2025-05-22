@@ -27,7 +27,7 @@ package object Utils {
 
   case class Request[T <: Data](data: T) extends Bundle {
     val bits = Output(data)
-    val ready = Input(Bool())
+    val ready = Flipped(Bool())
   }
 
 }
@@ -181,5 +181,15 @@ object Instr {
   }
 }
 
+object dbg {
+  var enabled = true  // mutable for runtime switching (in sim), or keep as val for compile-time
 
-
+  def apply(fmt: Printable)(implicit cond: Bool = true.B): Unit = {
+    if (enabled) {
+      // printf emits only when cond is true
+      when(cond) {
+        printf(fmt)
+      }
+    }
+  }
+}

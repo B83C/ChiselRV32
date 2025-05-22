@@ -78,9 +78,9 @@ class ALUFU(implicit p: Parameters) extends FunctionalUnit() with ALUConsts  {
 // ALU 的 interface
 class ALUIO(implicit p: Parameters) extends Bundle {
   // 输入操作数
-  val in1 = Input(UInt(p.XLEN.W))
-  val in2 = Input(UInt(p.XLEN.W))
-  val fn  = Input(UInt(4.W))  // ALU操作码
+  val in1 = Flipped(UInt(p.XLEN.W))
+  val in2 = Flipped(UInt(p.XLEN.W))
+  val fn  = Flipped(UInt(4.W))  // ALU操作码
 
   // 输出结果
   val out = Output(UInt(p.XLEN.W))

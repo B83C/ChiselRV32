@@ -4,6 +4,8 @@ import chisel3._
 import chisel3.util._
 import chisel3.util.experimental.loadMemoryFromFile
 import firrtl.annotations.MemoryLoadFileType
+import scala.io.Source
+import java.nio.file.Files
 
 class if_mem extends Bundle {
   val instAddr = Output(UInt(64.W))
@@ -25,9 +27,9 @@ class mem_lsu_c extends Bundle {
   val data_out_mem = Output(UInt(64.W))
 }
 
-class mem(memDepth: Int, instWidth: Int) extends CustomModule {
+class mem(mem_path: String, memDepth: Int, instWidth: Int) extends CustomModule {
   val io = IO(new Bundle {
-    val reset   = Input(Bool())           // Mem reset signal
+    val reset   = Flipped(Bool())           // Mem reset signal
     val if_mem  = Flipped(new if_mem()) 
     val ex_mem  = Flipped( 
       new lsu_mem_c
@@ -89,7 +91,39 @@ class mem(memDepth: Int, instWidth: Int) extends CustomModule {
     }
   }
 
-  loadMemoryFromFile(memInside, ".../.../.../drystone.data", MemoryLoadFileType.Hex)
+  loadMemoryFromFile(memInside, mem_path, MemoryLoadFileType.Hex)
+
+  def readMemFile(file: String): Seq[Vec[UInt]] = {
+    println(s"Reading from : ${file}")
+    val source = Source.fromFile(file)
+    println(s"Done reading\n")
+    try {
+      source.getLines().map { line =>
+        val word = BigInt(line.trim, 16).U(32.W)
+        word.asTypeOf(Vec(4, UInt(8.W)))
+      }.toSeq
+    } finally {
+      source.close()
+    }
+  }
+
+  // Read the memory contents
+  // val memContents = readMemFile("/home/b83c/chisel/ChiselRV32/drystone.data")
+
+  // val value = VecInit(memContents)
+
+  // val loaded = RegInit(0.U(14.W))
+  // Initialize memory during reset
+  
+  // when (loaded < 20.U) {
+  //   memInside.write(loaded, value(loaded))
+  //   loaded := loaded + 1.U
+  // }
+  // when(true.B) {
+  //   printf(cf"first byte ${memInside.read(0.U)} \n")
+  // }
+
+  // loadMemoryFromFile(memInside, "drystone.data", MemoryLoadFileType.Hex)
 
   val data_addr   = Wire(UInt(64.W))
   val dataAddrP1 = Wire(UInt(64.W))

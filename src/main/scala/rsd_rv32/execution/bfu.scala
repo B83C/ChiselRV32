@@ -101,20 +101,8 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
   val return_addr = pc + 4.U
 
   // 预测错误判断
-<<<<<<< HEAD
-  val mispred = is_conditional &&
-    (actual_direction =/= (io.uop.bits.branch_pred === BranchPred.T) ||
-      (actual_direction && actual_target =/= io.uop.bits.target_PC))
-
-||||||| Update IF_test.scala
-  val mispred = is_conditional &&
-    (actual_direction =/= io.uop.bits.branch_pred.taken ||
-      (actual_direction && actual_target =/= io.uop.bits.target_PC))
-
-=======
   //val mispred = is_conditional && (actual_direction =/= io.uop.bits.branch_pred || ((actual_direction === BranchPred.T) && actual_target =/= io.uop.bits.target_PC))
   val mispred = actual_direction =/= io.uop.bits.branch_pred || ((actual_direction === BranchPred.T) && (io.uop.bits.branch_pred === BranchPred.T) && actual_target =/= io.uop.bits.target_PC)
->>>>>>> main
   val data_out = Wire(new BU_WB_uop())
 
   data_out.instr := io.uop.bits.instr
@@ -161,7 +149,7 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
       }
 
       // 控制信号
-      val flush = Input(Bool())
+      val flush = Flipped(Bool())
       val busy = Output(Bool())
     })
 
@@ -195,89 +183,13 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
 
    */
 
-<<<<<<< HEAD
-class BRIO(implicit p: Parameters) extends Bundle {
-  // 输入操作数
-  val rs1 = Input(UInt(p.XLEN.W))      // 寄存器rs1值
-  val rs2 = Input(UInt(p.XLEN.W))      // 寄存器rs2值
-  val pc = Input(UInt(p.XLEN.W))       // 当前指令PC
-  val imm = Input(UInt(p.XLEN.W))      // 符号扩展后的偏移量
-  val fn = Input(UInt(4.W))            // 分支操作码（见下方常量）
-
-  // 输出结果
-  val branchTaken = Output(Bool())     // 是否跳转
-  val targetPC = Output(UInt(p.XLEN.W)) // 跳转目标地址
-  val pcPlus4 = Output(UInt(p.XLEN.W)) // PC+4（用于JAL/JALR写回）
-  val cmp_out = Output(Bool())
-}
-
-class BR(implicit p: Parameters) extends Module with BRConsts {
-  val io = IO(new BRIO)
-
-  // 计算PC+4（用于JAL/JALR写回）
-  io.pcPlus4 := io.pc + 4.U
-
-  io.cmp_out := MuxLookup(io.fn, false.B)(
-    Seq(
-      BR_EQ  -> (io.rs1 === io.rs2),
-      BR_NE  -> (io.rs1 =/= io.rs2),
-      BR_LT  -> (io.rs1.asSInt < io.rs2.asSInt),
-      BR_GE  -> (io.rs1.asSInt >= io.rs2.asSInt),
-      BR_LTU -> (io.rs1 < io.rs2),
-      BR_GEU -> (io.rs1 >= io.rs2),
-
-      // Should be targetPC
-      // BR_JALR -> ((io.rs1 + io.imm) & ~1.U),
-      // BR_JAL  -> (io.pc + io.imm)
-    )
-  )
-
-}
-||||||| Update IF_test.scala
-class BRIO(implicit p: Parameters) extends Bundle {
-  // 输入操作数
-  val rs1 = Input(UInt(p.XLEN.W))      // 寄存器rs1值
-  val rs2 = Input(UInt(p.XLEN.W))      // 寄存器rs2值
-  val pc = Input(UInt(p.XLEN.W))       // 当前指令PC
-  val imm = Input(UInt(p.XLEN.W))      // 符号扩展后的偏移量
-  val fn = Input(UInt(4.W))            // 分支操作码（见下方常量）
-
-  // 输出结果
-  val branchTaken = Output(Bool())     // 是否跳转
-  val targetPC = Output(UInt(p.XLEN.W)) // 跳转目标地址
-  val pcPlus4 = Output(UInt(p.XLEN.W)) // PC+4（用于JAL/JALR写回）
-  val cmp_out = Output(Bool())
-}
-
-class BR(implicit p: Parameters) extends Module with BRConsts {
-  val io = IO(new BRIO)
-
-  // 计算PC+4（用于JAL/JALR写回）
-  io.pcPlus4 := io.pc + 4.U
-
-  io.cmp_out := MuxLookup(io.fn, false.B)(
-    Seq(
-      BR_EQ  -> (io.rs1 === io.rs2),
-      BR_NE  -> (io.rs1 =/= io.rs2),
-      BR_LT  -> (io.rs1.asSInt < io.rs2.asSInt),
-      BR_GE  -> (io.rs1.asSInt >= io.rs2.asSInt),
-      BR_LTU -> (io.rs1 < io.rs2),
-      BR_GEU -> (io.rs1 >= io.rs2),
-
-      BR_JALR -> ((io.rs1 + io.imm) & ~1.U),
-      BR_JAL  -> (io.pc + io.imm)
-    )
-  )
-
-}
-=======
 //class BRIO(implicit p: Parameters) extends Bundle {
 //  // 输入操作数
-//  val rs1 = Input(UInt(p.XLEN.W))      // 寄存器rs1值
-//  val rs2 = Input(UInt(p.XLEN.W))      // 寄存器rs2值
-//  val pc = Input(UInt(p.XLEN.W))       // 当前指令PC
-//  val imm = Input(UInt(p.XLEN.W))      // 符号扩展后的偏移量
-//  val fn = Input(UInt(4.W))            // 分支操作码（见下方常量）
+//  val rs1 = Flipped(UInt(p.XLEN.W))      // 寄存器rs1值
+//  val rs2 = Flipped(UInt(p.XLEN.W))      // 寄存器rs2值
+//  val pc = Flipped(UInt(p.XLEN.W))       // 当前指令PC
+//  val imm = Flipped(UInt(p.XLEN.W))      // 符号扩展后的偏移量
+//  val fn = Flipped(UInt(4.W))            // 分支操作码（见下方常量）
 //
 //  // 输出结果
 //  val branchTaken = Output(Bool())     // 是否跳转
@@ -307,4 +219,3 @@ class BR(implicit p: Parameters) extends Module with BRConsts {
 //  )
 //
 //}
->>>>>>> main

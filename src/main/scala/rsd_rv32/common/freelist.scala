@@ -16,12 +16,12 @@ class FreeList[T <: Data](
 )(implicit p: Parameters) extends CustomModule {
   val depth_bits = log2Ceil(depth)
   val io = IO(new Bundle {
-    val checkpoint, restore = Input(Bool()) // Signals to checkpoint and restore both head and tail pointer
+    val checkpoint, restore = Flipped(Bool()) // Signals to checkpoint and restore both head and tail pointer
     val deq_request = Decoupled(gen.cloneType)
     val enq_request  = Flipped(Decoupled(gen.cloneType))
     // val deq_request = Decoupled(Vec(multiShot, gen.cloneType))
     // val enq_request  = Flipped(Decoupled(Vec(multiShot, gen.cloneType)))
-    val squeeze = Input(Bool())
+    val squeeze = Flipped(Bool())
     // val is_empty = Output(Bool())
   })
 

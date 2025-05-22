@@ -8,8 +8,8 @@ class Port(
    val data_width: Int,
    val read: Boolean,
  )(implicit p: Parameters) extends CustomBundle {
-  val addr = Input(UInt(addr_width.W))
-  val data = if (read) Output(UInt(data_width.W)) else Input(UInt(data_width.W))
+  val addr = Flipped(UInt(addr_width.W))
+  val data = if (read) Output(UInt(data_width.W)) else Flipped(UInt(data_width.W))
 }
 
 class MultiportRam(
@@ -20,7 +20,7 @@ class MultiportRam(
 )(implicit p: Parameters) extends CustomModule {
   val addr_width = log2Ceil(Depth)
   val io = IO(new Bundle {
-    val readers = Input(Vec(ReadersCount, new Port(addr_width, DataWidth, true)))
-    val writers = Input(Vec(WriterCount, new Port(addr_width, DataWidth, false)))
+    val readers = Flipped(Vec(ReadersCount, new Port(addr_width, DataWidth, true)))
+    val writers = Flipped(Vec(WriterCount, new Port(addr_width, DataWidth, false)))
   })
 }

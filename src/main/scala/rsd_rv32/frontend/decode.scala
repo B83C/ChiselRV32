@@ -7,10 +7,10 @@ import rsd_rv32.common._
 class Decode_IO(implicit p: Parameters) extends CustomBundle {
   // with IF
   val id_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new IF_ID_uop())))
-  val id_ready = Output(Bool()) // ID是否准备好接收指令
+  val id_ready = Bool() // ID是否准备好接收指令
   // with Rename
   val rename_uop = Vec(p.CORE_WIDTH, Valid(new ID_RENAME_uop()))
-  val rename_ready = Input(Bool()) // Rename是否准备好接收指令
+  val rename_ready = Flipped(Bool()) // Rename是否准备好接收指令
   // with ROB
   val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) // ROB提交时的广播信号，发生误预测时对本模块进行冲刷
 }
@@ -18,8 +18,8 @@ class Decode_IO(implicit p: Parameters) extends CustomBundle {
 //级间流水寄存器
 class ID_Rename_Stage_reg(implicit  p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
-    val rob_flush = Input(Bool())
-    val rename_ready = Input(Bool())
+    val rob_flush = Flipped(Bool())
+    val rename_ready = Flipped(Bool())
     val stage_reg_uop = Flipped(Vec(p.CORE_WIDTH, Valid(new ID_RENAME_uop())))
     val rename_uop = Vec(p.CORE_WIDTH, Valid(new ID_RENAME_uop()))
   })
@@ -32,15 +32,22 @@ class ID_Rename_Stage_reg(implicit  p: Parameters) extends CustomModule {
     uop := uop
   }
   io.rename_uop := uop
-  for(i <- 0 until p.CORE_WIDTH) {
-    printf(cf"[Decode->Rename]\n")
+
+  //Debugging
+  uop.foreach(x => {
+    x.bits.debug := DontCare 
+  })
+  when(uop.map(_.valid).reduce(_ || _)) {
+     for(i <- 0 until p.CORE_WIDTH) {
+      printf(cf"[Decode->Rename] ")
     
-    when(uop(i).valid) {
-      val itype = uop(i).bits.instr_type
-      val addr  = uop(i).bits.instr_addr 
-      printf(cf" PC: ${addr} type: ${itype} ")
-    }
-    printf(cf"\n")
+      when(uop(i).valid) {
+        val itype = uop(i).bits.instr_type
+        val addr  = uop(i).bits.instr_addr 
+        printf(cf" PC: ${addr} type: ${itype} ")
+      }
+      printf(cf"\n")
+    }   
   }
 }
 
@@ -71,6 +78,7 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
       stage_reg.io.stage_reg_uop(i).bits.GHR := io.id_uop(i).bits.GHR
       stage_reg.io.stage_reg_uop(i).bits.branch_pred := io.id_uop(i).bits.branch_pred
       stage_reg.io.stage_reg_uop(i).bits.btb_hit := io.id_uop(i).bits.btb_hit
+      
 
       //切割instr
       val opcode = instr(6, 0)
@@ -173,6 +181,14 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
 
     }
   }
+  
+  // Debugging
+  stage_reg.io.stage_reg_uop.foreach(x => {
+    x.bits.debug := DontCare
+  })
+  io.rename_uop.zip(io.id_uop).foreach{case (x, y) => {
+      x.bits.debug := RegNext(y.bits.debug)
+  }}
 }
 //  for (i <-0 until p.CORE_WIDTH){
 //    val valid = io.id_uop(i).valid && ready

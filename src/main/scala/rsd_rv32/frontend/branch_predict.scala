@@ -6,7 +6,7 @@ import rsd_rv32.common._
 
 class BP_IO (implicit p: Parameters) extends CustomBundle {
   // With IF
-  val instr_addr = Input(UInt(p.XLEN.W))  // 当前PC值，双发射下指向第一条指令的PC
+  val instr_addr = Flipped(UInt(p.XLEN.W))  // 当前PC值，双发射下指向第一条指令的PC
   val target_PC = Output(UInt(p.XLEN.W))  // 预测的下个cycle取指的目标地址
   val btb_hit = Output(Vec(p.CORE_WIDTH, Bool()))  // 每条指令是否命中BTB
   val branch_pred = Output(Vec(p.CORE_WIDTH, Bool()))  // 每条指令的预测结果
@@ -212,16 +212,8 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
   val btbHitVec = Wire(Vec(p.CORE_WIDTH, Bool()))
   btbHitVec(0) := btbHit0
   btbHitVec(1) := btbHit1
-<<<<<<< HEAD
-  // printf(p"btbHitVec(0): ${btbHitVec(0)}\n")
-  // printf(p"btbHitVec(1): ${btbHitVec(1)}\n")
-||||||| Update IF_test.scala
-  printf(p"btbHitVec(0): ${btbHitVec(0)}\n")
-  printf(p"btbHitVec(1): ${btbHitVec(1)}\n")
-=======
   //printf(p"btbHitVec(0): ${btbHitVec(0)}\n")
   //printf(p"btbHitVec(1): ${btbHitVec(1)}\n")
->>>>>>> main
   val branchPredVec = Wire(Vec(p.CORE_WIDTH, Bool()))
   branchPredVec(0) := pred0 && pred0_valid
   branchPredVec(1) := pred1 && pred1_valid

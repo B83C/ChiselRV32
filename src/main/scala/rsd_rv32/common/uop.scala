@@ -101,7 +101,8 @@ object BUSignals {
 // import conversion._
 
 abstract class uop(implicit p: Parameters) extends CustomBundle {
-}
+    val debug = new InstrDebug
+} 
 
 class IF_ID_uop(implicit p: Parameters) extends uop {
     val instr = UInt(p.XLEN.W) 
@@ -279,4 +280,9 @@ class BU_WB_uop(implicit p: Parameters) extends uop {
 
 class STPIPE_WB_uop(implicit p: Parameters) extends uop {
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+}
+
+class InstrDebug(implicit p: Parameters) extends Bundle {
+    val instr = UInt(p.XLEN.W)
+    val pc = UInt(p.XLEN.W)
 }

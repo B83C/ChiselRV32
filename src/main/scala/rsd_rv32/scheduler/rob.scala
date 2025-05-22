@@ -8,16 +8,16 @@ import rsd_rv32.common._
 class Dispatch_ROB_Interface(implicit p: Parameters) extends CustomBundle {
     val dis_uops = Valid(Vec(p.DISPATCH_WIDTH, new uop()))  //Dispatch Unit的uop
 
-    val rob_empty = Input(Bool())  //ROB空标志(0表示空，1表示非空)
-    val rob_head = Input(UInt(log2Ceil(p.ROB_DEPTH))) //ROB头指针
-    val rob_tail = Input(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
+    val rob_empty = Flipped(Bool())  //ROB空标志(0表示空，1表示非空)
+    val rob_head = Flipped(UInt(log2Ceil(p.ROB_DEPTH))) //ROB头指针
+    val rob_tail = Flipped(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
 }
 
 class WB_ROB_Interface(implicit p: Parameters) extends CustomBundle {
-    val complete_map = Input(Vec(p.FU_NUM, Bool()))  //完成映射表
-    val complete_uop = Input(Vec(p.FU_NUM, new uop()))  //来自exu的uop
-    val mispred = Input(Bool()) //分支误预测信号
-    val if_jump = Input(Bool()) //分支指令跳转信号
+    val complete_map = Flipped(Vec(p.FU_NUM, Bool()))  //完成映射表
+    val complete_uop = Flipped(Vec(p.FU_NUM, new uop()))  //来自exu的uop
+    val mispred = Flipped(Bool()) //分支误预测信号
+    val if_jump = Flipped(Bool()) //分支指令跳转信号
 }
 
 class ROB_broadcast(implicit p: Parameters) extends CustomBundle {
@@ -39,8 +39,8 @@ class ROBIO(implicit p: Parameters) extends CustomBundle {
     val bu_wb_uop = Vec(p.BU_NUM, Flipped(Valid(new BU_WB_uop()))) //来自bu的uop,更新就绪状态
     val stu_wb_uop = Vec(p.STU_NUM, Flipped(Valid(new STPIPE_WB_uop())))  //来自stu的uop,更新就绪状态
     //val LDU_complete_uop = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop,更新就绪状态
-    // val mispred = Input(Bool()) //分支误预测信号
-    // val if_jump = Input(Bool()) //分支指令跳转信号
+    // val mispred = Flipped(Bool()) //分支误预测信号
+    // val if_jump = Flipped(Bool()) //分支指令跳转信号
 
     val rob_commitsignal = Vec(p.CORE_WIDTH, Valid(new ROBContent()))  //广播ROB条目
 }
@@ -190,6 +190,14 @@ class ROB(implicit p: Parameters) extends CustomModule {
 
                 full_next := tail_next === rob_head
             }
+            // 因为dispatch不会左对齐
+            is("b01".U){
+                allocate_rob_entry(io.rob_uop(1).bits, rob_allocate0)
+
+                tail_next := Mux(rob_tail === (p.ROB_DEPTH - 1).U, 1.U, rob_tail + 1.U)
+
+                full_next := tail_next === rob_head
+            }
         }
     }
 
@@ -265,7 +273,6 @@ class ROB(implicit p: Parameters) extends CustomModule {
                 //io.rob_uop.ready := !rob_full
                 is (ROBType.Branch) {
                     //io.rob_uop.ready := !rob_full
-                }
                     val j = rob(i).as_Jump
                     printf(p"[JUMP] rd=${j.rd} pdst=${j.pdst} " +
                       p"hit=${j.btb_hit} tgt=0x${Hexadecimal(j.target_PC)}\n")
@@ -274,6 +281,7 @@ class ROB(implicit p: Parameters) extends CustomModule {
                     // 如果 Store 有字段，可解包打印；否则只标记
                     // //io.rob_uop.ready := !rob_full
                     printf(p"[STORE]\n")
+                }
                 is (ROBType.CSR) {
                     val c = rob(i).as_CSR
                     printf(p"[CSR] rd=${c.rd} pdst=${c.pdst}\n")

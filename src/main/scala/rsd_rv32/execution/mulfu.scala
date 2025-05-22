@@ -8,11 +8,11 @@ import Utils._
 
 //Github上的乘法器bundle定义
 class ArithBundle extends Bundle {
-  val in = Input(new ArithBundle_in)
+  val in = Flipped(new ArithBundle_in)
   val out = Output(new ArithBundle_out)
 }
 
-// Input Bundle
+// Flipped Bundle
 class ArithBundle_in extends Bundle {
   val start = Bool() // Start signal for 1 cycle
   val num_1 = SInt(32.W) // Operation number 1
@@ -74,7 +74,7 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
 
   val out = IO(Valid(new ALU_WB_uop()))
   val boothMul = Module(new BoothMultiplier())
-  // val flush = Input(Bool())
+  // val flush = Flipped(Bool())
 
   // 状态定义
   val s_idle :: s_busy :: s_done :: Nil = Enum(3)

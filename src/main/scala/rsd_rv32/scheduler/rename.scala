@@ -15,7 +15,7 @@ class RenameUnit_IO(implicit p: Parameters) extends Bundle {
   val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))  //ROB提交时的广播信号，rob正常提交指令时更新amt与rmt，发生误预测时对本模块进行恢复
   //with Dispatch
   val dis_uop = Vec(p.CORE_WIDTH, Valid(new RENAME_DISPATCH_uop()))//发往Dispatch单元的uop
-  val dis_ready = Input(Bool()) // 来自Dispatch单元的反馈，显示dispatch单元是否准备好接收指令
+  val dis_ready = Flipped(Bool()) // 来自Dispatch单元的反馈，显示dispatch单元是否准备好接收指令
   //for prf valid bits
   val amt = Output(Vec(32,UInt(log2Ceil(p.PRF_DEPTH).W)))
 }
@@ -418,36 +418,54 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
     freelist_empty := Mux(head_next === tail_next, empty_next, false.B)
   }
 
-  printf("\nstart printing-------------------------------------------\n")
+  // printf("\nstart printing-------------------------------------------\n")
+
+  // Debugging
+  when(io.rename_ready) {
+    printf(cf"[Rename -> Dispatch] PC: ${io.dis_uop(0).bits.instr_addr} ")
+    for(i <- 0 until p.CORE_WIDTH) {
+      when(io.dis_uop(i).valid) {
+        val pd = io.dis_uop(i).bits.pdst 
+        val rd = io.dis_uop(i).bits.instr(4, 0) //Truncated instr
+        val valid = io.dis_uop(i).valid
+        printf(cf" rd(${i})=${rd} to pdst${pd} vaild : ${valid}| ")
+      }
+    }
+    printf("\n")
+  }
+
+  io.dis_uop.zip(io.rename_uop).foreach{case (x, y) => {
+      x.bits.debug := RegNext(y.bits.debug)
+  }}
 
   //output
-  printf("\nrename_ready: %d\n", io.rename_ready)
+  // printf("\nrename_ready: %d\n", io.rename_ready)
 
-  printf("\n--dis_uop(0)\n")
-  printf("valid: %d\n", io.dis_uop(0).valid)
-  printf("pdst: %d\n", io.dis_uop(0).bits.pdst)
-  printf("ps1: %d\n", io.dis_uop(0).bits.ps1)
-  printf("ps2: %d\n", io.dis_uop(0).bits.ps2)
-  printf("\n--dis_uop(1)\n")
-  printf("valid: %d\n", io.dis_uop(1).valid)
-  printf("pdst: %d\n", io.dis_uop(1).bits.pdst)
-  printf("ps1: %d\n", io.dis_uop(1).bits.ps1)
-  printf("ps2: %d\n", io.dis_uop(1).bits.ps2)
+  // printf("\n--dis_uop(0)\n")
+  // printf("valid: %d\n", io.dis_uop(0).valid)
+  // printf("pdst: %d\n", io.dis_uop(0).bits.pdst)
+  // printf("ps1: %d\n", io.dis_uop(0).bits.ps1)
+  // printf("ps2: %d\n", io.dis_uop(0).bits.ps2)
+  // printf("\n--dis_uop(1)\n")
+  // printf("valid: %d\n", io.dis_uop(1).valid)
+  // printf("pdst: %d\n", io.dis_uop(1).bits.pdst)
+  // printf("ps1: %d\n", io.dis_uop(1).bits.ps1)
+  // printf("ps2: %d\n", io.dis_uop(1).bits.ps2)
 
-  //signals inside
-  printf("\n--rmt\n")
-  for(i <- 0 until 32){
-    printf("rmt_%d: valid = %d, value = %d\n", i.U, rmt_valid(i), rmt(i))
-  }
+  // //signals inside
+  // printf("\n--rmt\n")
+  // for(i <- 0 until 32){
+  //   printf("rmt_%d: valid = %d, value = %d\n", i.U, rmt_valid(i), rmt(i))
+  // }
 
-  printf("\n--amt\n")
-  for(i <- 0 until 32){
-    printf("amt_%d: %d\n", i.U, amt(i))
-  }
+  // printf("\n--amt\n")
+  // for(i <- 0 until 32){
+  //   printf("amt_%d: %d\n", i.U, amt(i))
+  // }
 
-  printf("\n--freelist\n")
-  printf("freelist_head: %d, freelist_tail: %d, freelist_empty: %d\n", freelist_head, freelist_tail, freelist_empty)
-  for(i <- 0 until p.PRF_DEPTH - 32){
-    printf("freelist_%d: %d\n", i.U, freelist(i))
-  }
+  // printf("\n--freelist\n")
+  // printf("freelist_head: %d, freelist_tail: %d, freelist_empty: %d\n", freelist_head, freelist_tail, freelist_empty)
+  // for(i <- 0 until p.PRF_DEPTH - 32){
+  //   printf("freelist_%d: %d\n", i.U, freelist(i))
+  // }
 }

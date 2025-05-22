@@ -24,7 +24,7 @@ class LSUIO(implicit p: Parameters) extends CustomBundle {
 
   val func3 = Output(UInt(3.W))//访存指令的fun3字段
 
-  val data_out_mem  = Input(UInt(64.W))//从储存器中读取的数据
+  val data_out_mem  = Flipped(UInt(64.W))//从储存器中读取的数据
 
   //with store issue queue
   val store_uop = Flipped(Valid(new STISSUE_STPIPE_uop()))//存储指令的uop
@@ -36,10 +36,10 @@ class LSUIO(implicit p: Parameters) extends CustomBundle {
   val stq_tail  = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引 
   val stq_head  = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的头部索引
   val stq_full  = Output(Bool())//stq是否为满,1表示满
-  val st_cnt = Input(UInt(log2Ceil(p.CORE_WIDTH + 1).W))//存储指令被派遣的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）
+  val st_cnt = Flipped(UInt(log2Ceil(p.CORE_WIDTH + 1).W))//存储指令被派遣的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）
   
   //with ROB
-  val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
+  val rob_commitsignal = Flipped(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
   val stu_wb_uop = Valid((new STPIPE_WB_uop()))//存储完成的信号,wb to ROB
   val ldu_wb_uop  = Valid((new ALU_WB_uop()))//加载完成的信号,wb to ROB and PRF
 }
@@ -47,10 +47,10 @@ class LSUIO(implicit p: Parameters) extends CustomBundle {
 //PipelineReg模块，用于将数据从一个阶段传递到下一个阶段
 class PipelineReg(val width: Int) extends CustomModule {
   val io = IO(new Bundle {
-    val stall_in = Input(Bool())
-    val data_in  = Input(UInt(width.W))
+    val stall_in = Flipped(Bool())
+    val data_in  = Flipped(UInt(width.W))
     val data_out = Output(UInt(width.W))
-    val reset = Input(Bool())
+    val reset = Flipped(Bool())
   })
   val reg = RegInit(0.U(width.W))
 
@@ -110,10 +110,10 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
 
     val ldReq = Decoupled(new Req_Abter())//加载请求信号
 
-    val data_out_mem = Input(UInt(64.W))//从储存器中读取的数据
-    val data_out_stq = Input(new STQEntry())//从stq中读取的数据
+    val data_out_mem = Flipped(UInt(64.W))//从储存器中读取的数据
+    val data_out_stq = Flipped(new STQEntry())//从stq中读取的数据
 
-    val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
+    val rob_commitsignal = Flipped(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
   })
   val need_flush = Wire(Bool())
   need_flush := io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
@@ -320,7 +320,7 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
     val func3 = Output(UInt(3.W))//fun3信号
     val stq_index = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//需要写入stq的索引
 
-    val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
+    val rob_commitsignal = Flipped(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
   })
   val need_flush = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
 //stage1地址计算
@@ -416,21 +416,21 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
     val stq_tail = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的尾部索引 
     val stq_head = Output(UInt(log2Ceil(p.STQ_DEPTH).W))//stq的头部索引
 
-    val input_tail = Input(UInt(log2Ceil(p.STQ_DEPTH).W))//输入的tail指针，用于后续的查找
+    val input_tail = Flipped(UInt(log2Ceil(p.STQ_DEPTH).W))//输入的tail指针，用于后续的查找
     val addr_search_stq = Flipped(Valid(UInt(p.XLEN.W)))//地址搜索信号,进入stq的搜索地址
-    val ld_func3 = Input(UInt(3.W))//fun3信号
+    val ld_func3 = Flipped(UInt(3.W))//fun3信号
 
     val searched_data = Output(new STQEntry)//从stq中读取的数据
 
     val stqReq = Decoupled(new Req_Abter())//存储请求信号
 
-    val st_cnt = Input(UInt(log2Ceil(p.CORE_WIDTH + 1).W))//用于更新store queue（在lsu中）的tail（full标志位）
-    val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
+    val st_cnt = Flipped(UInt(log2Ceil(p.CORE_WIDTH + 1).W))//用于更新store queue（在lsu中）的tail（full标志位）
+    val rob_commitsignal = Flipped(Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))))//ROB的CommitSignal信号
 
     val dataAddr_into_stq = Flipped(Valid(UInt(p.XLEN.W)))//需要写入stq的地址
-    val data_into_stq = Input(UInt(p.XLEN.W))//需要写入stq的数据
-    val stq_index = Input(UInt(log2Ceil(p.STQ_DEPTH+1).W))//需要写入stq的索引
-    val st_func3 = Input(UInt(3.W))//fun3信号
+    val data_into_stq = Flipped(UInt(p.XLEN.W))//需要写入stq的数据
+    val stq_index = Flipped(UInt(log2Ceil(p.STQ_DEPTH+1).W))//需要写入stq的索引
+    val st_func3 = Flipped(UInt(3.W))//fun3信号
   })   
 
   //flush信号，作flush的时候tail指针回到write_valid所处的地方

@@ -6,13 +6,13 @@ import rsd_rv32.common._
 
 class exu_issue_IO(implicit p: Parameters) extends CustomBundle {
     //来自Dispatch Unit的输入
-    // val bits.iq_index = Input(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID,
+    // val bits.iq_index = Flipped(Vec(p.DISPATCH_WIDTH, UInt(log2Ceil(p.IQ_DEPTH).W))) //IQ ID,
     val exu_issue_uop = Flipped(Valid(Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop()))))  //来自Dispatch Unit的输入
 
     //with EXU
     val execute_uop = Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())) //发往EXU的uop
-    val mul_ready = Input(Bool()) //乘法器的ready信号
-    val div_ready = Input(Bool()) //除法器的ready信号
+    val mul_ready = Flipped(Bool()) //乘法器的ready信号
+    val div_ready = Flipped(Bool()) //除法器的ready信号
 
     //val dst_FU = Output(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.ALU_NUM).W)))  //发射的指令的目标功能单元
     //val issue_uop = Valid(Vec(p.CORE_WIDTH, new EXUISSUE_EXU_uop()))  //发射的指令(包含操作数的值)
@@ -22,23 +22,23 @@ class exu_issue_IO(implicit p: Parameters) extends CustomBundle {
     //PRF
     val prf_raddr1 = Output(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W))) //PRF读地址1
     val prf_raddr2 = Output(Vec(p.CORE_WIDTH, UInt(log2Ceil(p.PRF_DEPTH).W))) //PRF读地址2
-    val ps1_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数1
-    val ps2_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数2
+    val ps1_value = Flipped(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数1
+    val ps2_value = Flipped(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数2
 
     //监听PRF的valid信号用于更新ready状态
-    val prf_valid = Input(Vec(p.PRF_DEPTH, Bool())) //PRF的valid信号
+    val prf_valid = Flipped(Vec(p.PRF_DEPTH, Bool())) //PRF的valid信号
 //    //监听FU后级间寄存器内的物理寄存器ready信号
-//    val wb_uop2 = Input((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop()))))  //来自alu、mul、div、load pipeline的uop
+//    val wb_uop2 = Flipped((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop()))))  //来自alu、mul、div、load pipeline的uop
     //PRF前的ready信号
-    val wb_uop1 = Input((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop())))) //来自alu、mul、div、load pipeline的uop
-    val bu_wb_uop = Input((Vec(p.BU_NUM, Valid(new BU_WB_uop()))))
+    val wb_uop1 = Flipped((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop())))) //来自alu、mul、div、load pipeline的uop
+    val bu_wb_uop = Flipped((Vec(p.BU_NUM, Valid(new BU_WB_uop()))))
     //val ldu_wb_uop1 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
 
     //输出至Dispatch Unit的信号
     val exu_issued_index = Output(Vec(p.CORE_WIDTH, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W)))) //更新IQ Freelist
 
     //with ROB
-    val rob_commitsignal = Input(Vec(p.CORE_WIDTH, Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
+    val rob_commitsignal = Flipped(Vec(p.CORE_WIDTH, Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
 
     //以下是测试时需要的输出
     val queue = Output(Vec(p.EXUISSUE_DEPTH, new exu_issue_content())) //发射队列的内容
@@ -55,9 +55,9 @@ class exu_issue_content(implicit p: Parameters) extends Bundle {
 
 class exu_iq_select_logic(implicit p: Parameters) extends CustomModule {
     val io = IO(new Bundle {
-        val mul_ready = Input(Bool()) //乘法器的ready信号
-        val div_ready = Input(Bool()) //除法器的ready信号
-        val issue_queue = Input(Vec(p.EXUISSUE_DEPTH, new exu_issue_content()))
+        val mul_ready = Flipped(Bool()) //乘法器的ready信号
+        val div_ready = Flipped(Bool()) //除法器的ready信号
+        val issue_queue = Flipped(Vec(p.EXUISSUE_DEPTH, new exu_issue_content()))
         val sel_index = Output(Vec(2, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W)))) //选择的指令的索引
     })
     //生成ready序列
@@ -152,11 +152,11 @@ class exu_iq_select_logic(implicit p: Parameters) extends CustomModule {
 //exu_issue->exu的级间寄存器
 class issue2exu(implicit p: Parameters) extends CustomModule {
     val io = IO(new Bundle {
-        val flush = Input(Bool())
-        val if_valid = Input(Vec(p.CORE_WIDTH, Bool())) //指令是否有效
-        val ps1_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数1
-        val ps2_value = Input(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数2
-        val dis_issue_uop = Input(Vec(p.CORE_WIDTH, new DISPATCH_EXUISSUE_uop())) //来自Dispatch的uop
+        val flush = Flipped(Bool())
+        val if_valid = Flipped(Vec(p.CORE_WIDTH, Bool())) //指令是否有效
+        val ps1_value = Flipped(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数1
+        val ps2_value = Flipped(Vec(p.CORE_WIDTH, UInt(p.XLEN.W))) //操作数2
+        val dis_issue_uop = Flipped(Vec(p.CORE_WIDTH, new DISPATCH_EXUISSUE_uop())) //来自Dispatch的uop
         val execute_uop = Output(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop()))) //发往EXU的uop
     })
     val uop = RegInit(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop())), 0.U.asTypeOf(Vec(p.CORE_WIDTH, Valid(new EXUISSUE_EXU_uop()))))
@@ -174,6 +174,12 @@ class issue2exu(implicit p: Parameters) extends CustomModule {
         uop(i).bits.rob_index := io.dis_issue_uop(i).rob_index
     }
     io.execute_uop := uop
+
+    // Debugging
+    import chisel3.experimental.BundleLiterals._
+    io.execute_uop.zip(io.dis_issue_uop).zip(io.if_valid).foreach{case ((x, y), z) => {
+      x.bits.debug := RegNext(Mux(z, y.debug, 0.U.asTypeOf(new InstrDebug)))
+    }}
 }
 
 class exu_issue_queue(implicit p: Parameters) extends CustomModule {
