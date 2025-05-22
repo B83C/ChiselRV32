@@ -28,6 +28,7 @@ object ROB_Branch {
 }
 
 class ROB_Jump(implicit p: Parameters) extends CustomBundle {
+    val GHR = UInt(p.GHR_WIDTH.W) // Global history register
     val btb_hit = BTBHit() // BTB hit flag
     val target_PC = UInt(p.XLEN.W) // Target address
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W) // Physical destination register

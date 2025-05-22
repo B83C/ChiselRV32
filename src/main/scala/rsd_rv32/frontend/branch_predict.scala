@@ -16,6 +16,13 @@ class BP_IO (implicit p: Parameters) extends CustomBundle {
   val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))  // ROB提交时的广播信号
 }
 
+class BTBEntry(implicit val p: Parameters) extends Bundle {
+    val valid = Bool()                // 有效位
+    val target = UInt(p.XLEN.W)       // 跳转目标地址
+    val isConditional = Bool()        // 是否条件分支
+    val tag = UInt(21.W)              // PC 高位标签
+}
+
 class BranchPredictorUnit(implicit p: Parameters) extends Module {
   // 参数定义
   val bimodeTableSize = 1024         // T/NT 表大小
@@ -44,22 +51,17 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
   // 初始化内存
   when (reset.asBool) {
     for (i <- 0 until bimodeTableSize) {
-      bimodeT(i) := 2.U(counterBits.W)  // T表初始化为2'b10 (弱预测跳转)
-      bimodeNT(i) := 1.U(counterBits.W) // NT表初始化为2'b01 (弱预测不跳转)
+      bimodeT(i) := 2.U(counterBits.W)  // T表初始化为2'b10 弱预测跳转
+      bimodeNT(i) := 1.U(counterBits.W) // NT表初始化为2'b01 弱预测不跳转
     }
     for (i <- 0 until choiceTableSize) {
-      choice(i) := 2.U(counterBits.W)   // 选择器初始化为2'b10 (弱选择T表)
+      choice(i) := 2.U(counterBits.W)   // 选择器初始化为2'b10 弱选择T表
     }
   }
   // ---------------------------------------------------------------------------
   // 1. BTB 部分
   // ---------------------------------------------------------------------------
-  class BTBEntry extends Bundle {
-    val valid = Bool()                // 有效位
-    val target = UInt(p.XLEN.W)       // 跳转目标地址
-    val isConditional = Bool()        // 是否条件分支
-    val tag = UInt(21.W)              // PC 高位标签
-  }
+  
 
   // BTB表存储
   val btb = Mem(btbSize, new BTBEntry)
@@ -387,4 +389,113 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
       Mux(cur === min_val, min_val, cur - 1.U)
     )
   }
+}
+
+class BP_Reference(implicit p: Parameters) extends Module {
+  val io = IO(new BP_IO())
+
+  val bimodeTableSize = 1024         // T/NT 表大小
+  val choiceTableSize = 1024         // 选择器表大小
+  val counterBits = 2                // 饱和计数器位宽
+  val btbSize = 512                  // BTB 表大小
+  val instBytes = 4                  // 指令字节宽度
+
+  val flush = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
+
+  //BHT
+  val T_table = RegInit(VecInit(Seq.fill(bimodeTableSize)(2.U(counterBits.W))))
+  val NT_table = RegInit(VecInit(Seq.fill(bimodeTableSize)(1.U(counterBits.W))))
+  val choice_table = RegInit(VecInit(Seq.fill(choiceTableSize)(2.U(counterBits.W))))
+  //BTB
+  val btb = RegInit(VecInit(Seq.fill(btbSize)(0.U.asTypeOf(new BTBEntry))))
+  //GHR
+  val ghr = RegInit(0.U(p.GHR_WIDTH.W))
+  io.GHR := ghr
+  val ghr_next = WireDefault(ghr)
+
+  //common methods
+  def get_btbIndex(pc: UInt): UInt = pc(log2Ceil(btbSize) + log2Ceil(instBytes) - 1, log2Ceil(instBytes))
+  def get_btbTag(pc: UInt): UInt = pc(p.XLEN-1, log2Ceil(instBytes) + log2Ceil(btbSize))
+  def get_histIndex(pc: UInt, ghr: UInt): UInt = (pc(p.XLEN-1, log2Ceil(instBytes)) ^ ghr.pad(p.XLEN - log2Ceil(instBytes)))(log2Ceil(bimodeTableSize)-1, 0)
+  def get_choiceIndex(pc: UInt): UInt = pc(log2Ceil(choiceTableSize) - 1 + log2Ceil(instBytes), log2Ceil(instBytes))
+  def tran_to_Bool(branch_pred: BranchPred.Type): Bool = {
+    MuxLookup(branch_pred, false.B)(Seq(
+      BranchPred.T -> true.B,
+      BranchPred.NT -> false.B
+    ))
+  }
+  //predict logic
+  val pc = VecInit((0 until p.CORE_WIDTH).map(i => io.instr_addr + (i * instBytes).U))
+
+  val btb_hit = Wire(Vec(p.CORE_WIDTH, Bool()))
+  for(i <- 0 until p.CORE_WIDTH){
+    btb_hit(i) := btb(get_btbIndex(pc(i))).valid && (btb(get_btbIndex(pc(i))).tag === get_btbTag(pc(i)))
+  }
+  //io.btb_hit := PriorityMux((0 till p.CORE_WIDTH).map(i => if (i == p.CORE_WIDTH) (true.B -> 0.U.asTypeOf(chiselTypeof(io.btb_hit))) else (btb_hit(i)) -> (1 << i).U.asTypeOf(chiselTypeof(io.btb_hit))))
+  io.btb_hit(0) := btb_hit(0)
+  io.btb_hit(1) := Mux(btb_hit(0), false.B, btb_hit(1)) // 仅在第一条指令未命中时检查第二条指令
+
+  val target_PC = WireDefault(VecInit((0 until p.CORE_WIDTH).map(i => pc(i) + instBytes.U)))
+  val branch_pred = WireDefault(VecInit(Seq.fill(p.CORE_WIDTH)(false.B)))
+
+  io.target_PC := Mux(btb_hit(0), target_PC(0), target_PC(1))
+  io.branch_pred := branch_pred
+
+  for(i <- 0 until p.CORE_WIDTH){
+    when(btb_hit(i)){
+      branch_pred(i) := Mux(btb(get_btbIndex(pc(i))).isConditional, Mux(choice_table(get_choiceIndex(pc(i)))(1), T_table(get_histIndex(pc(i), ghr))(1), NT_table(get_histIndex(pc(i), ghr))(1)), true.B)
+      target_PC(i) := Mux(branch_pred(i), btb(get_btbIndex(pc(i))).target, pc(i) + instBytes.U)
+    }
+  }
+
+  //ghr logic
+
+  when(!flush && ((btb_hit(0) && btb(get_btbIndex(pc(0))).isConditional) || (btb_hit(1) && btb(get_btbIndex(pc(1))).isConditional))){
+    ghr_next := Cat(ghr(p.GHR_WIDTH - 2, 0), branch_pred.reduce(_||_))
+  }
+  when(flush){
+    when(io.rob_commitsignal(0).bits.rob_type === ROBType.Branch){
+      ghr_next := Cat((io.rob_commitsignal(0).bits.as_Branch.GHR << 1)(p.GHR_WIDTH-1, 1), tran_to_Bool(io.rob_commitsignal(0).bits.as_Branch.branch_direction))
+    }.elsewhen(io.rob_commitsignal(0).bits.rob_type === ROBType.Jump){
+      ghr_next := io.rob_commitsignal(0).bits.as_Jump.GHR
+    }
+    
+  }
+
+  //bht and btb update logic
+  //val valid_bits = (io.rob_commitsignal(0).valid && (io.rob_commitsignal(0).bits.rob_type === ROBType.Branch || io.rob_commitsignal(0).bits.rob_type === ROBType.Jump)) ## 
+  def counter_update(counter: UInt, branch_direction: BranchPred.Type): UInt = {
+    val result = WireDefault(counter)
+    when(branch_direction === BranchPred.T){
+      result := Mux(counter === 3.U, 3.U, counter + 1.U)
+    }.otherwise{
+      result := Mux(counter === 0.U, 0.U, counter - 1.U)
+    }
+    result
+  }
+
+for(i <- 0 until p.CORE_WIDTH){
+  when(io.rob_commitsignal(i).valid){
+    when(io.rob_commitsignal(i).bits.rob_type === ROBType.Branch){
+      val choice_temp = counter_update(choice_table(get_choiceIndex(io.rob_commitsignal(i).bits.instr_addr)), io.rob_commitsignal(i).bits.as_Branch.branch_direction)
+      choice_table(get_choiceIndex(io.rob_commitsignal(i).bits.instr_addr)) := choice_temp
+      when(choice_temp(1) === true.B){
+        T_table(get_histIndex(io.rob_commitsignal(i).bits.instr_addr, io.rob_commitsignal(i).bits.as_Branch.GHR)) := counter_update(T_table(get_histIndex(io.rob_commitsignal(i).bits.instr_addr, io.rob_commitsignal(i).bits.as_Branch.GHR)), io.rob_commitsignal(i).bits.as_Branch.branch_direction)
+      }.otherwise{
+        NT_table(get_histIndex(io.rob_commitsignal(i).bits.instr_addr, io.rob_commitsignal(i).bits.as_Branch.GHR)) := counter_update(NT_table(get_histIndex(io.rob_commitsignal(i).bits.instr_addr, io.rob_commitsignal(i).bits.as_Branch.GHR)), io.rob_commitsignal(i).bits.as_Branch.branch_direction)
+      }
+      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).target := io.rob_commitsignal(i).bits.as_Branch.target_PC
+      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).isConditional := true.B
+      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).valid := true.B
+      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).tag := get_btbTag(io.rob_commitsignal(i).bits.instr_addr)
+    }
+    when(io.rob_commitsignal(i).bits.rob_type === ROBType.Jump){
+      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).target := io.rob_commitsignal(i).bits.as_Jump.target_PC
+      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).isConditional := false.B
+      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).valid := true.B
+      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).tag := get_btbTag(io.rob_commitsignal(i).bits.instr_addr)
+    }
+  }
+}
+  
 }
