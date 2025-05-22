@@ -7,3 +7,13 @@ mill.*
 .metals
 project/
 .vscode
+obj_dir/*
+obj_dir
+.bloop
+.metals
+log
+.DS_Store
+.bloop
+.ropeproject
+./Machine.sv
+

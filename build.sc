@@ -25,15 +25,21 @@ object `rsd_rv32` extends SbtModule { m =>
   )
   override def ivyDeps = Agg(
     ivy"org.chipsalliance::chisel:6.6.0",
-    ivy"edu.berkeley.cs::chiseltest:6.0.0"
+    ivy"edu.berkeley.cs::chiseltest:6.0.0",
+    ivy"com.github.rameloni::tywaves-chisel-api:0.4.2-SNAPSHOT",
+    ivy"com.zhutmost::chipmunk:0.1-SNAPSHOT",
   )
+  // val ivyRepos = Seq(
+  //       ivy.IvyModule(ivy.IvyRepo("local", "file://" + System.getProperty("user.home") + "/.ivy2/local/"))
+  //       )
   override def scalacPluginIvyDeps = Agg(
     ivy"org.chipsalliance:::chisel-plugin:6.6.0",
   )
   object test extends SbtTests with TestModule.ScalaTest {
     override def ivyDeps = m.ivyDeps() ++ Agg(
       ivy"edu.berkeley.cs::chiseltest::6.0.0",
-      ivy"org.scalatest::scalatest::3.2.16"
+      ivy"org.scalatest::scalatest::3.2.16",
+      ivy"com.zhutmost::chipmunk:0.1-SNAPSHOT",
     )
   }
 }

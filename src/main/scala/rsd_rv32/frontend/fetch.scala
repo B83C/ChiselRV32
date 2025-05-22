@@ -9,35 +9,43 @@ import rsd_rv32.common._
 class Fetch_IO(implicit p: Parameters) extends CustomBundle {
     // with MEM
     val instr_addr = Output(UInt(p.XLEN.W)) //当前IFU的PC值
-    val instr = Input(Vec(p.CORE_WIDTH, UInt(32.W)))
+    val instr = Flipped(Vec(p.CORE_WIDTH, UInt(32.W)))
 
     // with ID
     val id_uop = Vec(p.CORE_WIDTH, Valid(new IF_ID_uop()))
-    val id_ready = Input(Bool()) //ID是否准备好接收指令
+    val id_ready = Flipped(Bool()) //ID是否准备好接收指令
 
     // with ROB
     val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
     
     // with BranchPredictor
     // instr_addr上面已写
-    val target_PC = Input(UInt(p.XLEN.W)) //预测的下个cycle取指的目标地址
-    val btb_hit = Input(Vec(p.CORE_WIDTH, Bool())) //1代表hit，0相反；将最年长的命中BTB的置为1，其余为0
-    val branch_pred = Input(Bool()) //branch指令的BHT的预测结果；1代表跳转，0相反
-    val GHR = Input(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照
+    val target_PC = Flipped(UInt(p.XLEN.W)) //预测的下个cycle取指的目标地址
+    val btb_hit = Flipped(Vec(p.CORE_WIDTH, Bool())) //1代表hit，0相反；将最年长的命中BTB的置为1，其余为0
+    val branch_pred = Flipped(Bool()) //branch指令的BHT的预测结果；1代表跳转，0相反
+    val GHR = Flipped(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照
 }
 
+object FetchState extends ChiselEnum {
+    val rst, entry_pc, running, stopped = Value
+}
 
-
-
+// Currently the FetchUnit consists of three stages:
+// The first stage being pc_reg,
+// the second stage being the memory,
+// and the last stage being the output,
+// This has the benefit for implementing the branch_predictor with buffered input 
 class FetchUnit(implicit p: Parameters) extends CustomModule {
     val io = IO(new Fetch_IO())
 
+    import FetchState._
+    val core_state = RegInit(rst)
+  
     val pc_reg = RegInit(p.ENTRY_PC.U(p.XLEN.W))        //存储当前PC
     val pc_next = Wire(UInt(p.XLEN.W))            //下一个PC
-    val pc_aligned = Wire(UInt(p.XLEN.W))         //对齐后的当前PC
-    pc_aligned := pc_reg & "hFFFFFFF8".U(32.W)
+    val pc_aligned = pc_reg & ~((p.CORE_WIDTH << 2).U(p.XLEN.W) - 1.U)         //对齐后的当前PC
 
-    val pc_next_default = pc_aligned + (p.CORE_WIDTH.U <<2)
+    val pc_next_default = pc_aligned + (p.CORE_WIDTH.U << 2)
 
     //需不需要flush
     val rob_flush_valid = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
@@ -48,17 +56,23 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     val bp_target = io.target_PC
 
     //决定下个pc(ROB>BP>default)
-    pc_next := Mux(rob_flush_valid,rob_flush_pc,
-                  Mux(whether_take_bp,bp_target,pc_next_default))
+    pc_next := Mux(rob_flush_valid, rob_flush_pc,
+                  Mux(whether_take_bp, bp_target, pc_next_default))
 
     //更新PC寄存器
-    when(io.id_ready){
-        pc_reg := pc_next
+    when(!reset.asBool) {
+        when(core_state === rst) {
+            core_state := entry_pc
+        }.elsewhen(core_state === entry_pc) {
+            core_state := running
+        }
+        when(io.id_ready && core_state =/= rst){
+            pc_reg := pc_next
+        }
     }
     io.instr_addr := pc_reg
 
     //为对齐时序而延迟一周期的内容
-    val instr_delayed = RegNext(io.instr)
     val rob_flush_valid_delayed = RegNext(rob_flush_valid)
     val PC_delayed = RegNext(pc_aligned)
     val btb_hit_delayed = RegNext(io.btb_hit)
@@ -66,131 +80,36 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     val branch_pred_delayed = RegNext(io.branch_pred)
     val target_PC_delayed = RegNext(io.target_PC)
 
-
-
-// <<<<<<< HEAD
-
-//     //生成两条给ID的uop
-//     val uop_vec = Wire(Vec(2, Valid(new IF_ID_uop())))
-//     val btb_hit_vec = io.btb_hit
-//     val hit_11 = (btb_hit_delayed(0) && btb_hit_delayed(1))        //如果出现11
-// ||||||| 37cfc08
-    
-//     //生成两条给ID的uop
-//     val uop_vec = Wire(Vec(2, Valid(new IF_ID_uop())))
-//     val btb_hit_vec = io.btb_hit
-//     val hit_11 = (btb_hit_delayed === "b11".U)        //如果出现11
-// =======
-// >>>>>>> fadc7f7dd5ef8ab35d2e6aa1cce92e256ea93f31
-
-    //不考虑年轻年老交换的情况下
-    val uop_vec_unpro_valid = Wire(Vec(2, Bool()))
-    val uop_vec_unpro_bits = Wire(Vec(2, new IF_ID_uop()))
-
-// <<<<<<< HEAD
-//     //构造uop向量
-
-//     for (i <-0 until 2 ){
-// ||||||| 37cfc08
-    
-    
-//     //构造uop向量
-
-//     for (i <-0 until 2 ){
-// =======
-    for (i <- 0 until 2) {
-// >>>>>>> fadc7f7dd5ef8ab35d2e6aa1cce92e256ea93f31
+   
+    for (i <- 0 until p.CORE_WIDTH) {
         val uop = Wire(new IF_ID_uop())
         val current_pc = PC_delayed + (i.U << 2)
-        uop.instr := instr_delayed(i)
+        
+        uop.debug := DontCare 
+        uop.instr := io.instr(i)
         uop.instr_addr := current_pc
+        
         uop.target_PC := target_PC_delayed
         uop.GHR := GHR_delayed
         uop.branch_pred := Mux(branch_pred_delayed, BranchPred.T, BranchPred.NT)
         uop.btb_hit := Mux(btb_hit_delayed(i), BTBHit.H, BTBHit.NH)
-
-// <<<<<<< HEAD
-//         val is_valid =  (!rob_flush_valid_delayed) && io.id_ready &&
-//                         (!(btb_hit_delayed(i) && branch_pred_delayed)) &&
-//                         !(hit_11 && (i == 1).B)
         
-//         uop_vec(i).valid := is_valid
-//         uop_vec(i).bits := uop
-// ||||||| 37cfc08
-//         val is_valid =  (!rob_flush_valid) && io.id_ready &&
-//                         (!(btb_hit_delayed(i) && branch_pred_delayed)) &&
-//                         !(hit_11 && i == 1)
-        
-//         uop.valid := is_valid
-//         uop_vec(i) := uop
-// =======
         val is_valid = (!rob_flush_valid_delayed) && io.id_ready &&
-          (!(btb_hit_delayed(i) && branch_pred_delayed))
+          (!(btb_hit_delayed(i) && branch_pred_delayed)) && core_state === running
 
-        uop_vec_unpro_valid(i) := is_valid
-        uop_vec_unpro_bits(i) := uop
-// >>>>>>> fadc7f7dd5ef8ab35d2e6aa1cce92e256ea93f31
+        io.id_uop(i).valid := RegNext(is_valid)
+        io.id_uop(i).bits := RegEnable(uop, is_valid)
+
+
+        // Debugging
+        io.id_uop(i).bits.debug.instr := RegEnable(io.instr(i), is_valid)
+        io.id_uop(i).bits.debug.pc := RegEnable(current_pc, is_valid)
     }
 
-    //考虑bits年轻/年长限制的情况下
-    val uop_vec_final_valid = Wire(Vec(2, Bool()))
-    val uop_vec_final_bits = Wire(Vec(2, new IF_ID_uop()))
-
-// <<<<<<< HEAD
-//         //考虑valid bits限制
-//     // when (!uop_vec(0).valid && uop_vec(1).valid) {
-//     //     uop_vec(0) := uop_vec(1)
-//     //     uop_vec(1).valid := false.B
-//     //     uop_vec(1).bits := 0.U.asTypeOf(new IF_ID_uop())
-//     // }
-
-
-// ||||||| 37cfc08
-//         //考虑valid bits限制
-//     when (!uop_vec(0).valid && uop_vec(1).valid) {
-//         uop_vec(0) := uop_vec(1)
-//         uop_vec(1).valid := false.B
-//         uop_vec(1).bits := 0.U.asTypeOf(new IF_ID_uop())
-// }
- 
-// =======
-// >>>>>>> fadc7f7dd5ef8ab35d2e6aa1cce92e256ea93f31
-
-// <<<<<<< HEAD
-// ||||||| 37cfc08
-    
-// =======
-    when(!uop_vec_unpro_valid(0) && uop_vec_unpro_valid(1)) {
-        uop_vec_final_valid(0) := true.B
-        uop_vec_final_bits(0) := uop_vec_unpro_bits(1)
-        uop_vec_final_valid(1) := false.B
-        uop_vec_final_bits(1) := 0.U.asTypeOf(new IF_ID_uop())
-    }.otherwise {
-        uop_vec_final_valid := uop_vec_unpro_valid
-        uop_vec_final_bits := uop_vec_unpro_bits
-    }
-
-    val uop_vec = Wire(Vec(2, Valid(new IF_ID_uop())))
-    for (i <- 0 until 2) {
-        uop_vec(i).valid := uop_vec_final_valid(i)
-        uop_vec(i).bits := uop_vec_final_bits(i)
-    }
-    
-// >>>>>>> fadc7f7dd5ef8ab35d2e6aa1cce92e256ea93f31
-
-    //存入寄存器给ID
-    val IF_ID_Stage_reg = Wire(Vec(2, Valid(new IF_ID_uop())))
-
-    for (i <- 0 until 2) {
-        IF_ID_Stage_reg(i).valid := uop_vec(i).valid
-        IF_ID_Stage_reg(i).bits := uop_vec(i).bits
-        io.id_uop(i) := IF_ID_Stage_reg(i)
-    }
-
-    when(io.id_ready) {
-        val instr1 = io.instr(0).asUInt
-        val instr2 = io.instr(1).asUInt
-        printf(cf"PC: ${pc_reg} Got instruction ${instr1}%x ${instr2}%x\n")
+    when(io.id_ready && core_state === running) {
+        // val instr1 = instr_delayed(0).asUInt
+        // val instr2 = instr_delayed(1).asUInt
+        // printf(cf"PC: ${PC_delayed} Got instruction ${instr1}%x ${instr2}%x\n")
     }
 }
 
