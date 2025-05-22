@@ -159,6 +159,7 @@ class ROB(implicit p: Parameters) extends CustomModule {
                 jump_payload.target_PC := 0.U
                 jump_payload.pdst := uop.pdst
                 jump_payload.rd := uop.rd
+                jump_payload.GHR := uop.GHR
                 rob_allocate.payload := jump_payload.asUInt
             }
             is(InstrType.CSR){
