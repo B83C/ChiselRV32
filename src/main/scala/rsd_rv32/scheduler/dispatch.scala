@@ -6,23 +6,22 @@ import rsd_rv32.common._
 
 import Utils._
 
-class Dispatcher_IO(implicit p:Parameters) extends CustomBundle {
+class Dispatcher_IO(exu_fu_num: Int)(implicit p:Parameters) extends CustomBundle {
   // with Rename
   val dis_uop = Flipped(Decoupled(Vec(p.CORE_WIDTH, Flipped(Valid(new RENAME_DISPATCH_uop()))))) //来自rename单元的uop
   
-  val rob_uop = Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop())) //发往ROB的uop
+  val rob_uop = Decoupled(Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop()))) //发往ROB的uop
   
-  val rob_full = Flipped(Bool())
-  val rob_head = Flipped(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB头指针
-  val rob_tail = Flipped(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
+  val rob_index = Flipped(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
+  val rob_empty = Flipped(Bool()) //ROB尾指针
   
   val serialised_uop = Valid(new DISPATCH_EXUISSUE_uop()) // 只有在顺序执行模式下才有效
   
   //感觉可能csr采用到
-  val rob_commitsignal = Flipped(Vec(p.CORE_WIDTH, Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
+  val rob_controlsignal = Flipped(Valid(new ROBControlSignal)) //来自于ROB的控制信号
   // with exu_issue
   val exu_issue_uop = Valid(Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop()))) //发往EXU的uop
-  val exu_issued_index = Flipped(Vec(p.CORE_WIDTH, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W)))) //本周期EXU ISSUE queue发出指令对应的issue queue ID，用于更新iq freelist
+  val exu_issued_index = Flipped(Vec(exu_fu_num, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W)))) //本周期EXU ISSUE queue发出指令对应的issue queue ID，用于更新iq freelist
   // with st_issue
   val st_issue_uop = Valid(Vec(p.CORE_WIDTH, Valid(new DISPATCH_STISSUE_uop()))) //发往Store Issue的uop
   val st_issued_index = Flipped(Valid(UInt(log2Ceil(p.STISSUE_DEPTH).W)))//本周期Store Issue queue发出指令对应的issue queue ID，用于更新issue queue freelist
@@ -47,25 +46,23 @@ object DispatchState extends ChiselEnum {
 // 该模块负责将重命名单元发来的指令派遣到ROB，根据指令类型派遣到三个issue queue（分别为exu issue queue，store issue queue和load issue queue），如果是store指令，则还需要派遣到STQ（store queue）中。
 // 该模块通过和三个issue queue分别共同维护一个freelist（不是FIFO！），freelist到head和tail之间为可用的issue queue ID，dispatch单元选择head处的issue queue id进行派遣，issue queue发射指令后会将issue queue id
 // 反馈给dispatch单元，dispatch单元会将该id存入freelist的tail处。
-class DispatchUnit(implicit p: Parameters) extends CustomModule {
+class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule {
 
   implicit val debug_print_enabled: Bool = true.B
   
-  val io = IO(new Dispatcher_IO)
+  val io = IO(new Dispatcher_IO(exu_fu_num))
 
   import DispatchState._
   val state = RegInit(ooo_mode)
   
   //函数定义见common/utils.scala
-  val should_kill = reset.asBool || isMispredicted(io.rob_commitsignal(0))
-  val rob_empty = (io.rob_head === io.rob_tail) && !io.rob_full
+  val flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
+  val should_kill = reset.asBool || flush
+  val rob_ready = io.rob_uop.ready
   // 对于wrap around的情况不影响: 修改rob可简化（不需要大改）
-  val rob_tail_advance = io.rob_tail + p.CORE_WIDTH.U
-  val wrapped_around = rob_tail_advance < io.rob_tail
-  val rob_ready = (Mux(io.rob_head > io.rob_tail || wrapped_around, io.rob_head >= rob_tail_advance, rob_tail_advance >= io.rob_head)) && !io.rob_full
 
   // Special Instruction - Serialised mode
-  val is_csr = VecInit(io.rob_uop.map(x => x.bits.instr_type.isOneOf(InstrType.CSR))).asUInt
+  val is_csr = VecInit(io.rob_uop.bits.map(x => x.bits.instr_type.isOneOf(InstrType.CSR))).asUInt
   // val ooo_mask = 
   val serialise_mask = Reg(UInt(p.CORE_WIDTH.W)) // All 1's by default
   val still_has_csr = (serialise_mask & is_csr) =/= 0.U 
@@ -113,7 +110,7 @@ class DispatchUnit(implicit p: Parameters) extends CustomModule {
   val st_issue_depth_bits = log2Ceil(p.STISSUE_DEPTH)
   //为了解决单周期iq条目释放数量的不确定行，对不同通道设立一个独立的freelist，使两者地址域不交叠
   // Write back length is determined by issue width, not entirely core_width
-  val exu_freelist = Module(new FreeListCam(p.EXUISSUE_DEPTH, p.CORE_WIDTH, p.CORE_WIDTH)) 
+  val exu_freelist = Module(new FreeListCam(p.EXUISSUE_DEPTH, p.CORE_WIDTH, exu_fu_num)) 
   val ld_freelist = Module(new FreeListCam(p.LDISSUE_DEPTH, p.CORE_WIDTH, 1)) 
   val st_freelist = Module(new FreeListCam(p.STISSUE_DEPTH, p.CORE_WIDTH, 1)) 
 
@@ -183,7 +180,8 @@ class DispatchUnit(implicit p: Parameters) extends CustomModule {
   io.st_cnt := RegNext(PopCount(is_st.asBools))
    
   val rob_uop_valid = RegNext(input_ready)
-  io.rob_uop := RegEnable(VecInit(io.dis_uop.bits.map{c =>
+  io.rob_uop.valid := rob_uop_valid
+  io.rob_uop.bits := RegEnable(VecInit(io.dis_uop.bits.map{c =>
     val out = Wire(Valid(new DISPATCH_ROB_uop()))
     out.valid := c.valid && input_ready
     (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
@@ -192,39 +190,39 @@ class DispatchUnit(implicit p: Parameters) extends CustomModule {
     out
   }), input_ready)
 
-  // Can be omitted if we store them all simutaneously
-  val rob_indicies = (0 until p.CORE_WIDTH).map{ i => io.rob_tail + i.U}
-  
   io.exu_issue_uop.valid := RegNext(input_ready && ex_valid)
-  io.exu_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_ex.asBools).zip(exu_freelist.io.deq_request).zip(rob_indicies).map{case (((c, v), fl), rob_ind) =>
+  io.exu_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_ex.asBools).zip(exu_freelist.io.deq_request).zipWithIndex.map{case (((c, v), fl), rob_inner_ind) =>
     val out = Wire(Valid(new DISPATCH_EXUISSUE_uop()))
     out.valid := c.valid && v && fl.valid
     (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
     //TODO: This is not that appropriate
     out.bits.iq_index := fl.bits
-    out.bits.rob_index := rob_ind
+    out.bits.rob_index := io.rob_index
+    out.bits.rob_inner_index := rob_inner_ind.U
     out
   }), input_ready && ex_valid)
   
   io.ld_issue_uop.valid := RegNext(input_ready && ld_valid)
-  io.ld_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_ld.asBools).zip(ld_freelist.io.deq_request).zip(rob_indicies).map{case (((c, v), fl), rob_ind) =>
+  io.ld_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_ld.asBools).zip(ld_freelist.io.deq_request).zipWithIndex.map{case (((c, v), fl), rob_inner_ind) =>
     val out = Wire(Valid(new DISPATCH_LDISSUE_uop()))
     out.valid := c.valid &&  v && fl.valid
     (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
     out.bits.iq_index := fl.bits
     out.bits.stq_tail := io.stq_tail //TODO: Check on its validity
-    out.bits.rob_index := rob_ind
+    out.bits.rob_index := io.rob_index
+    out.bits.rob_inner_index := rob_inner_ind.U
     out
   }), input_ready && ld_valid)
   
   io.st_issue_uop.valid := RegNext(input_ready && st_valid)
-  io.st_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_st.asBools).zip(st_freelist.io.deq_request).zip(rob_indicies).map{case (((c, v), fl), rob_ind) =>
+  io.st_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_st.asBools).zip(st_freelist.io.deq_request).zipWithIndex.map{case (((c, v), fl), rob_inner_ind) =>
     val out = Wire(Valid(new DISPATCH_STISSUE_uop()))
 
     out.valid := c.valid &&  v && fl.valid
     (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
     out.bits.iq_index := fl.bits
-    out.bits.rob_index := rob_ind
+    out.bits.rob_index := io.rob_index
+    out.bits.rob_inner_index := rob_inner_ind.U
     out.bits.stq_index := io.stq_head //TODO: Check on its validity
     out
   }), input_ready && st_valid)
@@ -244,7 +242,7 @@ class DispatchUnit(implicit p: Parameters) extends CustomModule {
     // }.otherwise {
     state:= pre_ino_mode
     // }
-  }.elsewhen(state === pre_ino_mode && rob_empty) {
+  }.elsewhen(state === pre_ino_mode && io.rob_empty) {
     state:= ino_mode
   }.elsewhen(state === ino_mode) {
     val next_serialise_mask = (serialise_mask << 1.U)

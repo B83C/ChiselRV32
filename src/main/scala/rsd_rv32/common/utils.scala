@@ -30,6 +30,30 @@ package object Utils {
     val ready = Flipped(Bool())
   }
 
+  class ReadValueRequest[T <: Data, Q <: Data](genT: T, genQ: Q) extends Bundle {
+    val value = Flipped(genT.cloneType)
+    val addr  = genQ.cloneType
+    val valid = Bool()
+    // override def cloneType: this.type = new ReadValueRequest(genT, genQ).asInstanceOf[this.type]
+  }
+
+  object ReadValueRequest {
+    def apply[T <: Data, Q <: Data](genT: T, genQ: Q): ReadValueRequest[T, Q] =
+      new ReadValueRequest(genT, genQ)
+
+    def apply[T <: Data, Q <: Data](value: T, addr: Q, valid: Bool): ReadValueRequest[T, Q] = {
+        val req = Wire(new ReadValueRequest(value.cloneType, addr.cloneType))
+        value := req.value
+        req.addr := addr
+        req.valid := valid
+        req
+    }
+  }
+  // case class ReadValueRequest[T <: Data, Q <: Data](data: T, addr_type: Q) extends Bundle {
+  //   val value = Flipped(data)
+  //   val addr = addr_type
+  //   val valid = Bool()
+  // }
 }
   
 // Helper tool to generate RiscV instructions
@@ -191,5 +215,11 @@ object dbg {
         printf(fmt)
       }
     }
+  }
+}
+
+object DebugRegNext {
+  def apply[T <: Data](value: T, valid: Bool): T = {
+    RegNext(Mux(valid, value, 0.U.asTypeOf(value.cloneType)))
   }
 }

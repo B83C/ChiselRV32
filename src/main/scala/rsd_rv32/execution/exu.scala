@@ -4,36 +4,37 @@ import chisel3._
 import chisel3.util._
 
 import rsd_rv32.common._
+import rsd_rv32.scheduler._
 
-import rsd_rv32.frontend._
 
 class EXUIO(fu_num: Int)(implicit p: Parameters) extends Bundle{
   //来自exu_issue queue的输入
-  val execute_uop = Flipped(Vec(fu_num, Valid(new EXUISSUE_EXU_uop)))
+  val execute_uop = Flipped(Vec(fu_num, Decoupled(new EXUISSUE_EXU_uop)))
   
   val serialised_uop = Flipped(Valid(new EXUISSUE_EXU_uop))
-
-  // val readys = (Vec(fu_num, Bool()))
 
   // val wb = (Vec(p.FU_NUM, Valid(new WB_uop())))
   
   // val branch_info = (new FUBranchInfo())
   //val rob_signal = Flipped(new ROBSignal())
-  val rob_commitsignal = Flipped(Vec(p.CORE_WIDTH, Valid(new ROBContent())))
+  val rob_controlsignal = Flipped(Valid(new ROBControlSignal)) //来自于ROB的控制信号
   //flush = rob_commitsignal(0).valid && rob_commitsignal(0).bits.mispred
   // Should be removed in place of more general readys
   //反馈给exu_issue queue的信号
-  val mul_ready = (Bool())
-  val div_ready = (Bool())
+  // val mul_ready = (Bool())
+  // val div_ready = (Bool())
 
   // val wb_uop = Vec(fu_num, Valid(new WB_uop()))
   //写回信号
-  val alu_wb_uop = Vec(p.ALU_NUM, Valid(new ALU_WB_uop()))
-  val bu_wb_uop = Vec(p.BU_NUM, Valid(new BU_WB_uop()))
-  val mul_wb_uop = Vec(p.MUL_NUM, Valid(new ALU_WB_uop()))
-  val divrem_wb_uop = Vec(p.DIV_NUM, Valid(new ALU_WB_uop()))
+  val wb_uop = Vec(fu_num, Valid(new WB_uop()))
   
-  val serialised_wb_uop = Valid(new ALU_WB_uop())
+  val bu_signals = Valid(new BU_uop)
+  val serialised_wb_uop = Valid(new WB_uop())
+  // val bu_wb_uop = Vec(p.BU_NUM, Valid(new BU_WB_uop()))
+  // val mul_wb_uop = Vec(p.MUL_NUM, Valid(new ALU_WB_uop()))
+  // val divrem_wb_uop = Vec(p.DIV_NUM, Valid(new ALU_WB_uop()))
+  
+  // val serialised_wb_uop = Valid(new ALU_WB_uop())
 }
 
 //把exu的各个fu封装起来的顶层模块
@@ -43,29 +44,46 @@ class EXU(implicit p: Parameters) extends Module {
   val mul = Seq.fill(p.MUL_NUM)(Module(new MULFU))
   val div = Seq.fill(p.DIV_NUM)(Module(new DIVFU))
 
-  val fus = (alu ++ bu ++ mul ++ div)
-  val io = IO(new EXUIO(fus.length))
-  fus.foreach { fu => 
-    (fu.io: Data).waiveAll :<>= (io: Data).waiveAll
-  }
+  require(bu.length <= 1, "Currently supports only 1 BU")
   
-  // io.readys := VecInit((alu ++ bu ++ mul ++ div ++ csru).map(!_.io.uop.ready))
-  //TODO 改成readys
-  io.mul_ready  := VecInit((mul).map(_.io.uop.ready)).asUInt.orR
-  io.div_ready  := VecInit((div).map(_.io.uop.ready)).asUInt.orR
-  def get_readys_instr_type: Set[InstrType.Type] = fus.map(_.supportedInstrTypes).reduce(_ ++ _)
+  val fus = (bu ++ alu ++ mul ++ div)
+  val io = IO(new EXUIO(fus.length))
+  fus.zip(io.execute_uop).foreach { case (fu, in_uop) => 
+    fu.io.uop.valid := in_uop.valid
+    fu.io.uop.bits := in_uop.bits
+    in_uop.ready := fu.io.uop.ready
+  }
 
-  // io.wb_uop := VecInit(fus.map(_.io.out))
-  io.alu_wb_uop := VecInit((alu).map(_.out))
-  io.bu_wb_uop := VecInit(bu.map(_.out))
-  io.mul_wb_uop := VecInit(mul.map(_.out))
-  io.divrem_wb_uop := VecInit(div.map(_.out))
+  io.bu_signals := bu(0).bu_out
+  
+  def fus_mapping: EXU.InstrTypeSets = fus.map(_.supportedInstrTypes)
 
+  // Note that checks if instr_type is as subset of any FUs' supported types
+  io.wb_uop := VecInit(fus.map(_.io.out))
 
+  // In-order FUs should deserve better attention
   val csru = Module(new CSRFU_Default)
   //Serialised uop
-  csru.uop := io.serialised_uop
-  //TODO
-  // csru.reset := 
-  io.serialised_wb_uop := csru.out
+  csru.io.uop.bits := io.serialised_uop.bits
+  csru.io.uop.valid := io.serialised_uop.valid
+  // CSRU should always be ready? 
+  io.serialised_wb_uop := csru.io.out
+}
+
+object EXU {
+
+  type InstrTypeSets = Seq[Set[InstrType.Type]]
+  def get_indicies_of_fus_that_support(instr_type_mapping: Seq[Set[InstrType.Type]])(instr_type: InstrType.Type*): Seq[Int] = {
+    instr_type_mapping.zipWithIndex.collect{
+      case (x, y) if instr_type.toSet.subsetOf(x) => y
+    }
+  }
+    
+  def get_mapping_of_fus_that_support[T <: Data](instr_type_mapping: Seq[Set[InstrType.Type]])(instr_type: InstrType.Type*)(vec: Vec[T]): Seq[T] = {
+   val indices = get_indicies_of_fus_that_support(instr_type_mapping)(instr_type: _*)
+
+    require(indices.nonEmpty, s"No functional units all the features: ${instr_type.mkString(", ")}")
+
+    indices.map(vec(_))
+  }
 }

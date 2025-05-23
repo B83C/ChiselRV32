@@ -72,7 +72,6 @@ class BoothMultiplier extends Module {
 class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   override def supportedInstrTypes = Set(InstrType.MUL)
 
-  val out = IO(Valid(new ALU_WB_uop()))
   val boothMul = Module(new BoothMultiplier())
 
   // 状态定义
@@ -112,7 +111,7 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   // 状态机转换
   switch(state) {
     is(s_idle) {
-      when(io.reset) {
+      when(reset.asBool) {
         state := s_idle
     }.elsewhen(io.uop.valid && io.uop.bits.instr_type === InstrType.MUL) {
         // 锁存操作数
@@ -138,7 +137,7 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
     }
 
     is(s_busy) {
-      when(io.reset) {
+      when(reset.asBool) {
         state := s_idle
         // 可以同时重置其他寄存器
         resultReg := 0.U
@@ -158,7 +157,7 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
     }
 
     is(s_done) {
-      when(io.reset) {
+      when(reset.asBool) {
         state := s_idle
       }.otherwise {
         state := s_idle // 原有逻辑
@@ -166,18 +165,20 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
     }
   }
 
+  val out_valid = (state === s_done) && !reset.asBool
+  val out = Wire(new WB_uop)
   // 输出连接
-  val data_out = Wire(new ALU_WB_uop())
-  data_out.pdst := io.uop.bits.pdst
-  data_out.pdst_value := resultReg
-  data_out.rob_index := io.uop.bits.rob_index
-  data_out.instr := io.uop.bits.instr
+  (out: Data).waiveAll :<= (io.uop.bits: Data).waiveAll
+  out.pdst_value.valid := true.B
+  out.pdst_value.bits := resultReg
 
-  out.valid := (state === s_done) && !io.reset
-  out.bits := data_out
+  io.out.bits := RegEnable(out, out_valid)
+  io.out.valid := RegNext(out_valid)
 
   // 流控制
-  io.uop.ready := (state === s_idle) && !io.reset
+  io.uop.ready := (state === s_idle) && !reset.asBool
 
+  // Debugging
+  out.debug := DebugRegNext(io.uop.bits.debug, out_valid)
 }
 

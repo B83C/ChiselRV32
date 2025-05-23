@@ -3,6 +3,7 @@ package rsd_rv32.frontend
 import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
+import rsd_rv32.scheduler._
 
 class Decode_IO(implicit p: Parameters) extends CustomBundle {
   // with IF
@@ -12,7 +13,7 @@ class Decode_IO(implicit p: Parameters) extends CustomBundle {
   val rename_uop = Vec(p.CORE_WIDTH, Valid(new ID_RENAME_uop()))
   val rename_ready = Flipped(Bool()) // Rename是否准备好接收指令
   // with ROB
-  val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) // ROB提交时的广播信号，发生误预测时对本模块进行冲刷
+  val rob_controlsignal = Flipped(Valid(new ROBControlSignal)) //来自于ROB的控制信号
 }
 
 //级间流水寄存器
@@ -58,7 +59,7 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
   //是否接受指令
   //val rob_flush = io.rob_commitsignal.map(_.valid)reduce(_||_)  //是否要flush
   //flush信号
-  val rob_flush = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
+  val rob_flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
   io.id_ready := io.rename_ready && !rob_flush
   //级间流水寄存器
   val stage_reg = Module(new ID_Rename_Stage_reg())

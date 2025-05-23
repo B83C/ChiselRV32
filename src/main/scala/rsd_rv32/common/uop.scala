@@ -68,6 +68,7 @@ object BUSignals {
 //     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
 //     val ps2 = UInt(log2Ceil(p.PRF_DEPTH).W)
 //     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+//     val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
 //     val branch_taken = Bool()
 //     val btb_hit = Bool()
     
@@ -101,6 +102,8 @@ object BUSignals {
 // import conversion._
 
 abstract class uop(implicit p: Parameters) extends CustomBundle {
+    def prf_read_counts: Int = 0
+    // Debugging
     val debug = new InstrDebug
 } 
 
@@ -129,6 +132,7 @@ class ID_RENAME_uop(implicit p: Parameters) extends uop {
 
 //继承ID_RENAME的uop
 class RENAME_DISPATCH_uop(implicit p: Parameters) extends ID_RENAME_uop {
+    override def prf_read_counts: Int = 2
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps2 = UInt(log2Ceil(p.PRF_DEPTH).W)
@@ -148,9 +152,11 @@ class DISPATCH_ROB_uop(implicit p: Parameters) extends uop {
     val btb_hit = BTBHit()
     
     //val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+    //val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
 }
 
 class DISPATCH_EXUISSUE_uop(implicit p: Parameters) extends uop {
+    override def prf_read_counts: Int = 2
     val instr = UInt((p.XLEN-7).W) //EXU need it to get imm,func,etc
     val instr_addr = UInt(p.XLEN.W)
 
@@ -165,11 +171,13 @@ class DISPATCH_EXUISSUE_uop(implicit p: Parameters) extends uop {
     val ps2 = UInt(log2Ceil(p.PRF_DEPTH).W)
 
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+    val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
 
     val iq_index = UInt(log2Ceil(p.EXUISSUE_DEPTH).W)
 }
 
 class DISPATCH_LDISSUE_uop(implicit p: Parameters) extends uop {
+    override def prf_read_counts: Int = 1
     val instr = UInt((p.XLEN-7).W) //Load Pipeline need it to get imm,func,etc
     
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
@@ -177,11 +185,13 @@ class DISPATCH_LDISSUE_uop(implicit p: Parameters) extends uop {
     val stq_tail = UInt(log2Ceil(p.STQ_DEPTH).W) //needed to get the right forwarding data from STQ
 
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+    val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
 
     val iq_index = UInt(log2Ceil(p.LDISSUE_DEPTH).W)
 }
 
 class DISPATCH_STISSUE_uop(implicit p: Parameters) extends uop {
+    override def prf_read_counts: Int = 2
     val instr = UInt((p.XLEN-7).W) //Store Pipeline need it to get imm,func
     
     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
@@ -189,11 +199,13 @@ class DISPATCH_STISSUE_uop(implicit p: Parameters) extends uop {
 
     val stq_index = UInt(log2Ceil(p.STQ_DEPTH).W) //needed to writeback to STQ
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+    val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
 
     val iq_index = UInt(log2Ceil(p.STISSUE_DEPTH).W)
 }
 
 class EXUISSUE_EXU_uop(implicit p: Parameters) extends uop {
+    override def prf_read_counts: Int = 2
     val instr = UInt((p.XLEN-7).W)
     val instr_addr = UInt((p.XLEN).W)
 
@@ -209,10 +221,12 @@ class EXUISSUE_EXU_uop(implicit p: Parameters) extends uop {
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
 
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+    val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
     
 }
 
 class STISSUE_STPIPE_uop(implicit p: Parameters) extends uop {
+    override def prf_read_counts: Int = 2
     val instr = UInt((p.XLEN-7).W)
 
     val ps1_value = UInt(p.XLEN.W)
@@ -220,9 +234,11 @@ class STISSUE_STPIPE_uop(implicit p: Parameters) extends uop {
 
     val stq_index = UInt(log2Ceil(p.STQ_DEPTH).W)
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+    val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
 }
 
 class LDISSUE_LDPIPE_uop(implicit p: Parameters) extends uop {
+    override def prf_read_counts: Int = 1
     val instr = UInt((p.XLEN-7).W)
 
     val ps1_value = UInt(p.XLEN.W)
@@ -230,6 +246,7 @@ class LDISSUE_LDPIPE_uop(implicit p: Parameters) extends uop {
     val stq_tail = UInt(log2Ceil(p.STQ_DEPTH).W) //used when stq forwarding
 
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+    val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
 }
 
 /*class WB_uop(implicit p: Parameters) extends uop {
@@ -239,34 +256,37 @@ class LDISSUE_LDPIPE_uop(implicit p: Parameters) extends uop {
 
     //writeback to ROB
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+    val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
 }*/
 
-class ALU_WB_uop(implicit p: Parameters) extends uop {
-    //wrieback to PRF
-    // TODO: Temporary
-    val instr = UInt((p.XLEN-7).W)
-    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
-    val pdst_value = UInt(p.XLEN.W)
+// 所有FU的写回uop均相同，除了BU有额外的branch信号。BU信号通过EXU输出。
+class WB_uop(implicit p: Parameters) extends uop {
+
+    // Temporary 
+    // val instr = UInt((p.XLEN-7).W)
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W) // 对于大部分的FU来说，写回一般是有效的，但是有些指令是无需写回的。比如 Branch, ST指令无需写回
+    val pdst_value = Valid(UInt(p.XLEN.W))
 
     //writeback to ROB
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+    val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
 }
-//乘除法器、Load pipeline、CSRU的WB uop和ALU的WB uop相同
 
-class BU_WB_uop(implicit p: Parameters) extends uop {
+
+class BU_uop(implicit p: Parameters) extends Bundle {
     // TODO: Temporary
-    val instr = UInt((p.XLEN-7).W)
     val is_conditional = Bool() //needed to distinguish between conditional branches and unconditional branches, 1 represents conditional branch
 
     //writeback to ROB
-    val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
     val mispred = Bool() //1 if mispred, 0 otherwise
     val target_PC = UInt(p.XLEN.W)
     val branch_direction = BranchPred()
 
+    val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+    val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
     //jal and jalr need to writeback to PRF
-    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
-    val pdst_value = UInt(p.XLEN.W)
+    // val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
+    // val pdst_value = UInt(p.XLEN.W)
 }
 
 /*class LDPIPE_WB_uop(implicit p: Parameters) extends uop {
@@ -276,13 +296,16 @@ class BU_WB_uop(implicit p: Parameters) extends uop {
 
     //writeback to ROB
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+    val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
 }*/
 
 class STPIPE_WB_uop(implicit p: Parameters) extends uop {
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+    val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
 }
 
 class InstrDebug(implicit p: Parameters) extends Bundle {
     val instr = UInt(p.XLEN.W)
     val pc = UInt(p.XLEN.W)
 }
+

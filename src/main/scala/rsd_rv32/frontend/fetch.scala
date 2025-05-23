@@ -3,6 +3,7 @@ package rsd_rv32.frontend
 import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
+import rsd_rv32.scheduler._
 
 
 // 两个输出: instr_addr, id_uop 
@@ -16,7 +17,7 @@ class Fetch_IO(implicit p: Parameters) extends CustomBundle {
     val id_ready = Flipped(Bool()) //ID是否准备好接收指令
 
     // with ROB
-    val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent()))) //ROB提交时的广播信号，发生误预测时对本模块进行冲刷
+    val rob_controlsignal = Flipped(Valid(new ROBControlSignal)) //来自于ROB的控制信号
     
     // with BranchPredictor
     // instr_addr上面已写
@@ -48,8 +49,10 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     val pc_next_default = pc_aligned + (p.CORE_WIDTH.U << 2)
 
     //需不需要flush
-    val rob_flush_valid = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
-    val rob_flush_pc = io.rob_commitsignal(0).bits.instr_addr
+    val rob_flush_valid = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
+    // val rob_flush_valid = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
+    // TODO
+    val rob_flush_pc = DontCare
 
     //分支预测
     val whether_take_bp = io.branch_pred

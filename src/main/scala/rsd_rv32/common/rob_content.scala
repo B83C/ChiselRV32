@@ -61,11 +61,12 @@ object Payload {
 }
 
 class ROBContent(implicit p: Parameters) extends CustomBundle {
+    val valid = Bool()
     val instr_addr = UInt(p.XLEN.W) // Instruction address
-    val rob_type = ROBType() // Instruction type
     val mispred = Bool() // Misprediction flag(1 represents misprediction)
     val completed = Bool() // Completion flag(1 represents completion)
 
+    val rob_type = ROBType() // Instruction type
     val payload = UInt(Payload.width.W) // Payload of the ROB entry
     def as_Arithmetic: ROB_Arithmetic = payload.asTypeOf(new ROB_Arithmetic)
     def as_Branch: ROB_Branch = payload.asTypeOf(new ROB_Branch)

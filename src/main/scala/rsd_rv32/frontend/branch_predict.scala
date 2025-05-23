@@ -3,6 +3,7 @@ package rsd_rv32.frontend
 import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
+import rsd_rv32.scheduler._
 
 class BP_IO (implicit p: Parameters) extends CustomBundle {
   // With IF
@@ -13,7 +14,8 @@ class BP_IO (implicit p: Parameters) extends CustomBundle {
   val GHR = (UInt(p.GHR_WIDTH.W))  // 作出预测时的GHR快照
 
   // With ROB
-  val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))  // ROB提交时的广播信号
+  val rob_commitsignal = Flipped(ROB.CommitSignal)  // ROB提交时的广播信号
+  val rob_controlsignal = Flipped(ROB.ControlSignal) //来自于ROB的控制信号
 }
 
 class BTBEntry(implicit val p: Parameters) extends Bundle {
@@ -264,8 +266,8 @@ class BranchPredictorUnit(implicit p: Parameters) extends Module {
   // ---------------------------------------------------------------------------
   // 处理每个提交的指令
   for (i <- 0 until p.CORE_WIDTH) {
-    when (io.rob_commitsignal(i).valid) {
-      val rc = io.rob_commitsignal(i).bits
+    when (io.rob_commitsignal.bits(i).valid) {
+      val rc = io.rob_commitsignal.bits(i)
       val pc = rc.instr_addr
       when (rc.rob_type === ROBType.Branch || rc.rob_type === ROBType.Jump) {
         // 获取实际跳转结果
@@ -400,7 +402,7 @@ class BP_Reference(implicit p: Parameters) extends Module {
   val btbSize = 512                  // BTB 表大小
   val instBytes = 4                  // 指令字节宽度
 
-  val flush = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
+  val flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
 
   //BHT
   val T_table = RegInit(VecInit(Seq.fill(bimodeTableSize)(2.U(counterBits.W))))
@@ -454,16 +456,16 @@ class BP_Reference(implicit p: Parameters) extends Module {
     ghr_next := Cat(ghr(p.GHR_WIDTH - 2, 0), branch_pred.reduce(_||_))
   }
   when(flush){
-    when(io.rob_commitsignal(0).bits.rob_type === ROBType.Branch){
-      ghr_next := Cat((io.rob_commitsignal(0).bits.as_Branch.GHR << 1)(p.GHR_WIDTH-1, 1), tran_to_Bool(io.rob_commitsignal(0).bits.as_Branch.branch_direction))
-    }.elsewhen(io.rob_commitsignal(0).bits.rob_type === ROBType.Jump){
-      ghr_next := io.rob_commitsignal(0).bits.as_Jump.GHR
+    when(io.rob_commitsignal.bits(0).rob_type === ROBType.Branch){
+      ghr_next := Cat((io.rob_commitsignal.bits(0).as_Branch.GHR << 1)(p.GHR_WIDTH-1, 1), tran_to_Bool(io.rob_commitsignal.bits(0).as_Branch.branch_direction))
+    }.elsewhen(io.rob_commitsignal.bits(0).rob_type === ROBType.Jump){
+      ghr_next := io.rob_commitsignal.bits(0).as_Jump.GHR
     }
     
   }
 
   //bht and btb update logic
-  //val valid_bits = (io.rob_commitsignal(0).valid && (io.rob_commitsignal(0).bits.rob_type === ROBType.Branch || io.rob_commitsignal(0).bits.rob_type === ROBType.Jump)) ## 
+  //val valid_bits = (io.rob_commitsignal.bits(0).valid && (io.rob_commitsignal.bits(0).rob_type === ROBType.Branch || io.rob_commitsignal.bits(0).rob_type === ROBType.Jump)) ## 
   def counter_update(counter: UInt, branch_direction: BranchPred.Type): UInt = {
     val result = WireDefault(counter)
     when(branch_direction === BranchPred.T){
@@ -475,25 +477,25 @@ class BP_Reference(implicit p: Parameters) extends Module {
   }
 
 for(i <- 0 until p.CORE_WIDTH){
-  when(io.rob_commitsignal(i).valid){
-    when(io.rob_commitsignal(i).bits.rob_type === ROBType.Branch){
-      val choice_temp = counter_update(choice_table(get_choiceIndex(io.rob_commitsignal(i).bits.instr_addr)), io.rob_commitsignal(i).bits.as_Branch.branch_direction)
-      choice_table(get_choiceIndex(io.rob_commitsignal(i).bits.instr_addr)) := choice_temp
+  when(io.rob_commitsignal.bits(i).valid){
+    when(io.rob_commitsignal.bits(i).rob_type === ROBType.Branch){
+      val choice_temp = counter_update(choice_table(get_choiceIndex(io.rob_commitsignal.bits(i).instr_addr)), io.rob_commitsignal.bits(i).as_Branch.branch_direction)
+      choice_table(get_choiceIndex(io.rob_commitsignal.bits(i).instr_addr)) := choice_temp
       when(choice_temp(1) === true.B){
-        T_table(get_histIndex(io.rob_commitsignal(i).bits.instr_addr, io.rob_commitsignal(i).bits.as_Branch.GHR)) := counter_update(T_table(get_histIndex(io.rob_commitsignal(i).bits.instr_addr, io.rob_commitsignal(i).bits.as_Branch.GHR)), io.rob_commitsignal(i).bits.as_Branch.branch_direction)
+        T_table(get_histIndex(io.rob_commitsignal.bits(i).instr_addr, io.rob_commitsignal.bits(i).as_Branch.GHR)) := counter_update(T_table(get_histIndex(io.rob_commitsignal.bits(i).instr_addr, io.rob_commitsignal.bits(i).as_Branch.GHR)), io.rob_commitsignal.bits(i).as_Branch.branch_direction)
       }.otherwise{
-        NT_table(get_histIndex(io.rob_commitsignal(i).bits.instr_addr, io.rob_commitsignal(i).bits.as_Branch.GHR)) := counter_update(NT_table(get_histIndex(io.rob_commitsignal(i).bits.instr_addr, io.rob_commitsignal(i).bits.as_Branch.GHR)), io.rob_commitsignal(i).bits.as_Branch.branch_direction)
+        NT_table(get_histIndex(io.rob_commitsignal.bits(i).instr_addr, io.rob_commitsignal.bits(i).as_Branch.GHR)) := counter_update(NT_table(get_histIndex(io.rob_commitsignal.bits(i).instr_addr, io.rob_commitsignal.bits(i).as_Branch.GHR)), io.rob_commitsignal.bits(i).as_Branch.branch_direction)
       }
-      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).target := io.rob_commitsignal(i).bits.as_Branch.target_PC
-      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).isConditional := true.B
-      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).valid := true.B
-      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).tag := get_btbTag(io.rob_commitsignal(i).bits.instr_addr)
+      btb(get_btbIndex(io.rob_commitsignal.bits(i).instr_addr)).target := io.rob_commitsignal.bits(i).as_Branch.target_PC
+      btb(get_btbIndex(io.rob_commitsignal.bits(i).instr_addr)).isConditional := true.B
+      btb(get_btbIndex(io.rob_commitsignal.bits(i).instr_addr)).valid := true.B
+      btb(get_btbIndex(io.rob_commitsignal.bits(i).instr_addr)).tag := get_btbTag(io.rob_commitsignal.bits(i).instr_addr)
     }
-    when(io.rob_commitsignal(i).bits.rob_type === ROBType.Jump){
-      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).target := io.rob_commitsignal(i).bits.as_Jump.target_PC
-      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).isConditional := false.B
-      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).valid := true.B
-      btb(get_btbIndex(io.rob_commitsignal(i).bits.instr_addr)).tag := get_btbTag(io.rob_commitsignal(i).bits.instr_addr)
+    when(io.rob_commitsignal.bits(i).rob_type === ROBType.Jump){
+      btb(get_btbIndex(io.rob_commitsignal.bits(i).instr_addr)).target := io.rob_commitsignal.bits(i).as_Jump.target_PC
+      btb(get_btbIndex(io.rob_commitsignal.bits(i).instr_addr)).isConditional := false.B
+      btb(get_btbIndex(io.rob_commitsignal.bits(i).instr_addr)).valid := true.B
+      btb(get_btbIndex(io.rob_commitsignal.bits(i).instr_addr)).tag := get_btbTag(io.rob_commitsignal.bits(i).instr_addr)
     }
   }
 }

@@ -12,7 +12,8 @@ class RenameUnit_IO(implicit p: Parameters) extends Bundle {
   val rename_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new ID_RENAME_uop()))) //来自ID单元的uop
   val rename_ready = (Bool()) // 反馈给IDU，显示Rename单元是否准备好接收指令
   //with ROB
-  val rob_commitsignal = Vec(p.CORE_WIDTH, Flipped(Valid(new ROBContent())))  //ROB提交时的广播信号，rob正常提交指令时更新amt与rmt，发生误预测时对本模块进行恢复
+  val rob_commitsignal = Flipped(ROB.CommitSignal)  //ROB提交时的广播信号，rob正常提交指令时更新amt与rmt，发生误预测时对本模块进行恢复
+  val rob_controlsignal = Flipped(ROB.ControlSignal) //来自于ROB的控制信号
   //with Dispatch
   val dis_uop = Vec(p.CORE_WIDTH, Valid(new RENAME_DISPATCH_uop()))//发往Dispatch单元的uop
   val dis_ready = Flipped(Bool()) // 来自Dispatch单元的反馈，显示dispatch单元是否准备好接收指令
@@ -53,14 +54,13 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
   freelist_head := head_next //更新空闲寄存器列表头指针
   freelist_tail := tail_next //更新空闲寄存器列表尾指针
 
-  val flush = Wire(Bool()) //重命名单元冲刷标志
-  flush := io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred //发生误预测时冲刷重命名单元
+  val flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
 
   val valid_bits = Wire(UInt(2.W))
   valid_bits := io.rename_uop(0).valid ## io.rename_uop(1).valid //ID单元的指令有效位
 
   val rob_valid_bits = Wire(UInt(2.W))
-  rob_valid_bits := io.rob_commitsignal(0).valid ## io.rob_commitsignal(1).valid //ROB单元的指令有效位
+  rob_valid_bits := io.rob_commitsignal.bits(0).valid ## io.rob_commitsignal.bits(1).valid //ROB单元的指令有效位
 
   def needPd(instr_type : InstrType.Type, rd : UInt) : Bool = {
     (instr_type === InstrType.ALU || instr_type === InstrType.Jump || instr_type === InstrType.LD || instr_type === InstrType.CSR || instr_type === InstrType.MUL || instr_type === InstrType.DIV_REM) && (rd =/= 0.U)
@@ -78,9 +78,9 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
     }
     freelist_empty := false.B
     
-    when(hasPd(io.rob_commitsignal(0).bits.rob_type, io.rob_commitsignal(0).bits.payload(4,0))){
-      amt(io.rob_commitsignal(0).bits.payload(4,0)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1, 5)
-      freelist(freelist_tail) := amt(io.rob_commitsignal(0).bits.payload(4,0))
+    when(hasPd(io.rob_commitsignal.bits(0).rob_type, io.rob_commitsignal.bits(0).payload(4,0))){
+      amt(io.rob_commitsignal.bits(0).payload(4,0)) := io.rob_commitsignal.bits(0).payload(5 + log2Ceil(p.PRF_DEPTH) - 1, 5)
+      freelist(freelist_tail) := amt(io.rob_commitsignal.bits(0).payload(4,0))
       tail_next := Mux(freelist_tail === (p.PRF_DEPTH - 32 - 1).U, 0.U, freelist_tail + 1.U)
     }
   }
@@ -374,39 +374,39 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
   when(!flush){
     switch(rob_valid_bits){
       is("b10".U){
-        when(hasPd(io.rob_commitsignal(0).bits.rob_type, io.rob_commitsignal(0).bits.payload(4,0))){
-          amt(io.rob_commitsignal(0).bits.payload(4,0)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
-          freelist(freelist_tail) := amt(io.rob_commitsignal(0).bits.payload(4,0))
+        when(hasPd(io.rob_commitsignal.bits(0).rob_type, io.rob_commitsignal.bits(0).payload(4,0))){
+          amt(io.rob_commitsignal.bits(0).payload(4,0)) := io.rob_commitsignal.bits(0).payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+          freelist(freelist_tail) := amt(io.rob_commitsignal.bits(0).payload(4,0))
           tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1).U, freelist_tail + 1.U, 0.U)
         }
       }
       is("b11".U){
-        when(hasPd(io.rob_commitsignal(0).bits.rob_type, io.rob_commitsignal(0).bits.payload(4,0))){
-          when(hasPd(io.rob_commitsignal(1).bits.rob_type, io.rob_commitsignal(1).bits.payload(4,0))){
+        when(hasPd(io.rob_commitsignal.bits(0).rob_type, io.rob_commitsignal.bits(0).payload(4,0))){
+          when(hasPd(io.rob_commitsignal.bits(1).rob_type, io.rob_commitsignal.bits(1).payload(4,0))){
             tail_next := MuxLookup(freelist_tail, freelist_tail + 2.U)(Seq(
               (p.PRF_DEPTH - 32 - 2).U -> 0.U,
               (p.PRF_DEPTH - 32 - 1).U -> 1.U
             ))
-            when(io.rob_commitsignal(0).bits.payload(4,0) === io.rob_commitsignal(1).bits.payload(4,0)){
-              amt(io.rob_commitsignal(1).bits.payload(4,0)) := io.rob_commitsignal(1).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
-              freelist(freelist_tail) := amt(io.rob_commitsignal(0).bits.payload(4,0))
-              freelist(Mux(freelist_tail === (p.PRF_DEPTH - 32 - 1).U, 0.U, freelist_tail + 1.U)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+            when(io.rob_commitsignal.bits(0).payload(4,0) === io.rob_commitsignal.bits(1).payload(4,0)){
+              amt(io.rob_commitsignal.bits(1).payload(4,0)) := io.rob_commitsignal.bits(1).payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+              freelist(freelist_tail) := amt(io.rob_commitsignal.bits(0).payload(4,0))
+              freelist(Mux(freelist_tail === (p.PRF_DEPTH - 32 - 1).U, 0.U, freelist_tail + 1.U)) := io.rob_commitsignal.bits(0).payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
             }.otherwise{
-              amt(io.rob_commitsignal(0).bits.payload(4,0)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
-              amt(io.rob_commitsignal(1).bits.payload(4,0)) := io.rob_commitsignal(1).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
-              freelist(freelist_tail) := amt(io.rob_commitsignal(0).bits.payload(4,0))
-              freelist(Mux(freelist_tail === (p.PRF_DEPTH - 32 - 1).U, 0.U, freelist_tail + 1.U)) := amt(io.rob_commitsignal(0).bits.payload(4,0))
+              amt(io.rob_commitsignal.bits(0).payload(4,0)) := io.rob_commitsignal.bits(0).payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+              amt(io.rob_commitsignal.bits(1).payload(4,0)) := io.rob_commitsignal.bits(1).payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+              freelist(freelist_tail) := amt(io.rob_commitsignal.bits(0).payload(4,0))
+              freelist(Mux(freelist_tail === (p.PRF_DEPTH - 32 - 1).U, 0.U, freelist_tail + 1.U)) := amt(io.rob_commitsignal.bits(0).payload(4,0))
             }
           }.otherwise{
             tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1).U, freelist_tail + 1.U, 0.U)
-            amt(io.rob_commitsignal(0).bits.payload(4,0)) := io.rob_commitsignal(0).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
-            freelist(freelist_tail) := amt(io.rob_commitsignal(0).bits.payload(4,0))
+            amt(io.rob_commitsignal.bits(0).payload(4,0)) := io.rob_commitsignal.bits(0).payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+            freelist(freelist_tail) := amt(io.rob_commitsignal.bits(0).payload(4,0))
           }
         }.otherwise{
-          when(hasPd(io.rob_commitsignal(1).bits.rob_type, io.rob_commitsignal(1).bits.payload(4,0))){
+          when(hasPd(io.rob_commitsignal.bits(1).rob_type, io.rob_commitsignal.bits(1).payload(4,0))){
             tail_next := Mux(freelist_tail =/= (p.PRF_DEPTH - 32 - 1).U, freelist_tail + 1.U, 0.U)
-            amt(io.rob_commitsignal(1).bits.payload(4,0)) := io.rob_commitsignal(1).bits.payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
-            freelist(freelist_tail) := amt(io.rob_commitsignal(1).bits.payload(4,0))
+            amt(io.rob_commitsignal.bits(1).payload(4,0)) := io.rob_commitsignal.bits(1).payload(5 + log2Ceil(p.PRF_DEPTH) - 1,5)
+            freelist(freelist_tail) := amt(io.rob_commitsignal.bits(1).payload(4,0))
           }
         }
       }

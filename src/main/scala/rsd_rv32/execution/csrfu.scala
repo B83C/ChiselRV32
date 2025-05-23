@@ -85,14 +85,11 @@ class CSRFU_Default(implicit p: Parameters) extends CSRFU(Seq(
 
 class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extends FunctionalUnit with CSRConsts {
   override def supportedInstrTypes = Set(InstrType.CSR)
-
-  val out = IO(Valid(new ALU_WB_uop()))
   //TODO
   io.uop.ready := true.B
 
   val uop = io.uop.bits
-  uop := DontCare
-  (out.bits: Data).waiveAll :<>= (uop: Data).waiveAll
+  // (io.out.bits: Data).waiveAll :<>= (uop: Data).waiveAll
 
   // val mcycle = Module(new McycleDevice(p.CSR_MCYCLE_ADDR.U))
   // val mtime  = Module(new MtimeDevice(p.CSR_MTIME_ADDR.U))
@@ -109,7 +106,7 @@ class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extend
     dev.io.wdata := wdata
     dev.io.ren   := ren 
     dev.io.wmask   := wmask
-    dev.io.reset := io.reset //TODO should be replaced by mispred
+    dev.io.reset := reset //TODO should be replaced by mispred
   }
 
   val rdata = VecInit(all_devices.map(_.io.rdata))
@@ -130,12 +127,15 @@ class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extend
   val should_input = rs1 =/= 0.U
   val should_output = uop.pdst =/= 0.U || !(opr_is(CSRRW) || opr_is(CSRRWI))
 
+  val out = Wire(new WB_uop)
+  (out: Data).waiveAll :<= (uop: Data).waiveAll
   // TODO: Not sure yet
-  out.bits := DontCare
-  out.bits.rob_index := uop.rob_index
-  out.valid := RegNext(should_output)
-  out.bits.pdst := RegEnable(uop.pdst, should_output)
-  out.bits.pdst_value := RegEnable(first_ready_rdata, should_output)
+  out.pdst_value.valid := should_output
+  out.pdst_value.bits := first_ready_rdata
+
+  io.out.bits := RegEnable(out, should_output)
+  io.out.valid := RegNext(should_output)
+
   ren := should_output
 
   //Works for both immediate and non-immediate versions
@@ -168,4 +168,6 @@ class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extend
     }   
   }
 
+  // Debugging
+  out.debug := DebugRegNext(io.uop.bits.debug, should_output)
 }

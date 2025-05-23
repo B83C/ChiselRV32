@@ -52,7 +52,6 @@ class Divider extends Module {
 class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   override def supportedInstrTypes = Set(InstrType.DIV_REM)
 
-  val out = IO(Valid(new ALU_WB_uop()))
   val divider = Module(new Divider())
 
   // 状态定义
@@ -185,16 +184,19 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
     }
   }
 
+  val out_valid = (state === s_done)
+  val out = Wire(new WB_uop)
   // 输出连接
-  val data_out = Wire(new ALU_WB_uop())
-  data_out.pdst := uopReg.pdst
-  data_out.pdst_value := resultReg
-  data_out.rob_index := uopReg.rob_index
-  data_out.instr := uopReg.instr
+  (out: Data).waiveAll :<= (uopReg: Data).waiveAll
+  out.pdst_value.valid := true.B
+  out.pdst_value.bits := resultReg
 
-  out.valid := (state === s_done)
-  out.bits := data_out
+  io.out.bits := RegEnable(out, out_valid)
+  io.out.valid := RegNext(out_valid)
 
   // 流控制
   io.uop.ready := (state === s_idle)
+  
+  // Debugging
+  out.debug := DebugRegNext(io.uop.bits.debug, out_valid)
 }

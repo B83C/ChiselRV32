@@ -10,7 +10,6 @@ import Utils._
 class ALUFU(implicit p: Parameters) extends FunctionalUnit() with ALUConsts  {
   override def supportedInstrTypes = Set(InstrType.ALU)
   // 为了配合上一级的uop，输出按FU区分
-  val out = IO(Valid(new ALU_WB_uop()))
   
   val internal_alu = Module(new ALU())
   val fu_signals = io.uop.bits.fu_signals
@@ -57,22 +56,24 @@ class ALUFU(implicit p: Parameters) extends FunctionalUnit() with ALUConsts  {
   ))
   )
 
-
-  val data_out = Wire(new ALU_WB_uop())
-  data_out.pdst := io.uop.bits.pdst
-  when (is_LUI){
-    data_out.pdst_value := (io.uop.bits.instr(24, 5) << 12.U)
-  }.elsewhen(is_AUIPC){
-    data_out.pdst_value := io.uop.bits.instr_addr + (io.uop.bits.instr(24, 5) << 12.U)
-  }.otherwise{
-    data_out.pdst_value := internal_alu.io.out
-  }
-  data_out.rob_index := io.uop.bits.rob_index
-  data_out.instr := io.uop.bits.instr
-
-  out.valid := io.uop.valid
-  out.bits := data_out
   io.uop.ready := true.B
+  
+  val out = Wire(new WB_uop)
+  (out: Data).waiveAll :<= (io.uop.bits: Data).waiveAll
+  out.pdst_value.valid := true.B // ALU always writes back
+  when (is_LUI){
+    out.pdst_value.bits := (io.uop.bits.instr(24, 5) << 12.U)
+  }.elsewhen(is_AUIPC){
+    out.pdst_value.bits := io.uop.bits.instr_addr + (io.uop.bits.instr(24, 5) << 12.U)
+  }.otherwise{
+    out.pdst_value.bits := internal_alu.io.out
+  }
+
+  io.out.bits := RegEnable(out, io.uop.valid)
+  io.out.valid := RegNext(io.uop.valid)
+  
+  // Debugging
+  out.debug := DebugRegNext(io.uop.bits.debug, io.uop.valid)
 }
 
 // ALU 的 interface
