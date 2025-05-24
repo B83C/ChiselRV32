@@ -85,6 +85,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
 
     when(dis_instr.rd =/= 0.U) {
       rmt(dis_instr.rd) := prf_deq.bits
+      rmt_valid(dis_instr.rd) := true.B
     }
 
     val rmt1 = rmt(dis_instr.rs1)
