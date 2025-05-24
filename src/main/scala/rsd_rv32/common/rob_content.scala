@@ -8,8 +8,6 @@ object ROBType extends ChiselEnum {
 }
 
 class ROB_Arithmetic(implicit p: Parameters) extends CustomBundle {
-    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W) // Physical destination register
-    val rd = UInt(5.W) // Destination register
 }
 
 object ROB_Arithmetic {
@@ -31,8 +29,6 @@ class ROB_Jump(implicit p: Parameters) extends CustomBundle {
     val GHR = UInt(p.GHR_WIDTH.W) // Global history register
     val btb_hit = BTBHit() // BTB hit flag
     val target_PC = UInt(p.XLEN.W) // Target address
-    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W) // Physical destination register
-    val rd = UInt(5.W) // Destination register
 }
 
 object ROB_Jump {
@@ -48,8 +44,6 @@ object ROB_Store {
 }
 
 class ROB_CSR(implicit p: Parameters) extends CustomBundle {
-    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W) // Physical destination register
-    val rd = UInt(5.W) // Destination register
 }
 
 object ROB_CSR {
@@ -65,6 +59,10 @@ class ROBContent(implicit p: Parameters) extends CustomBundle {
     val instr_addr = UInt(p.XLEN.W) // Instruction address
     val mispred = Bool() // Misprediction flag(1 represents misprediction)
     val completed = Bool() // Completion flag(1 represents completion)
+
+    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W) // Physical destination register
+    val rd = UInt(5.W) // Destination register
+    val wb = Bool()
 
     val rob_type = ROBType() // Instruction type
     val payload = UInt(Payload.width.W) // Payload of the ROB entry

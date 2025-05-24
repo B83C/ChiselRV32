@@ -12,23 +12,25 @@ class FreeListCam[T <: Data](
   depth: Int,  /* Depth of freelist */
   multiShotRead: Int = 1, /* To enable multiple read requests at once */ 
   multiShotWrite: Int = 1, /* To enable multiple read requests at once */ 
+  maskedRegions: Seq[Range] = Seq(),
+  preOccupiedRegion: Seq[Range] = Seq(),
 )(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
     val checkpoint, restore = Flipped(Bool()) // Signals to checkpoint and restore both head and tail pointer
     val deq_request = Vec(multiShotRead, Decoupled(UInt(log2Ceil(depth).W)))
     val enq_request  = Flipped(Vec(multiShotWrite, Valid(UInt(log2Ceil(depth).W))))
-    // val deq_request = Decoupled(Vec(multiShot, gen.cloneType))
-    // val enq_request  = Flipped(Decoupled(Vec(multiShot, gen.cloneType)))
     val squeeze = Flipped(Bool())
-    // val is_empty = (Bool())
   })
 
+  // 由一组ranges，生成对应的bitmask
+  val preOccupied = preOccupiedRegion.flatten.foldLeft(0.U(depth.W)){ case (mask, bit) => mask.bitSet(bit.U, true.B)}
+  val masked = maskedRegions.flatten.foldLeft(0.U(depth.W)){ case (mask, bit) => mask.bitSet(bit.U, true.B)}
   // require(depth > 0 && isPow2(multiShot), "multishot length must be a power of two")
-  val buffer = RegInit(0.U(depth.W))
+  val buffer = RegInit(0.U(depth.W) | preOccupied)
 
-  var tempMask = buffer
+  var tempMask = buffer | masked
   var masks = for (i <- 0 until multiShotRead) yield {
-    val enc = Mux(io.deq_request(i).ready, PriorityEncoderOH(~tempMask), 0.U)
+    val enc = Mux(io.deq_request(i).ready, PriorityEncoderOH(~tempMask(depth - 1, 0)), 0.U)
     val valid = tempMask =/= ~0.U(depth.W) && io.deq_request(i).ready
     io.deq_request(i).valid := valid
     io.deq_request(i).bits := WireInit(0.U(log2Ceil(depth).W)) 

@@ -13,6 +13,7 @@ object ROB {
       Valid(new ROBControlSignal)
     }
 }
+
 class ROBControlSignal(implicit p: Parameters) extends CustomBundle {
     val mispred = Bool()
     def isMispredicted: Bool = mispred
@@ -34,7 +35,7 @@ class ROBIO(implicit p: Parameters) extends CustomBundle {
     val bu_uop = Flipped(Valid(new BU_uop())) // 来自bu的uop,更新就绪状态
 
     // 不让其他从commitsignal判断是否发生mispred，因为这是rob的职责。这里这里不是要论谁对谁错，而是画清责任的界线，这样如果内部实现方式发生了变化，就不影响其他模块，这就是api/abi的作用，目的是为了减轻工作量。
-    // 写回信号，仅对rename起作用
+    // 写回信号，仅对特定模块起作用 
     val rob_commitsignal = ROB.CommitSignal  //广播ROB条目
     val rob_controlsignal = ROB.ControlSignal
 }
@@ -53,6 +54,7 @@ class ROB(implicit p: Parameters) extends CustomModule {
     val tail = RegInit(0.U((depth_bits + 1).W)) //ROB尾指针
     // Using the MSB to distinguish between full and empty states
     // w- prefix indicates wrapped, which means normal width
+    // 有w前缀的whead和wtail才是我们调用rob时用的
     val whead = head(depth_bits - 1, 0)
     val wtail = tail(depth_bits - 1, 0)
     val hwrap = head(depth_bits)
@@ -68,12 +70,12 @@ class ROB(implicit p: Parameters) extends CustomModule {
     io.rob_uop.ready := can_dequeue
 
     when(can_dequeue) {
-        printf(cf"ROB dequeuing ${io.rob_uop.bits}")
+        dbg(cf"ROB dequeuing ${io.rob_uop.bits}")
         head := head + 1.U
     }
 
     when(io.rob_uop.fire) {
-        printf(cf"Enqueuing ${io.rob_uop.bits}")
+        dbg(cf"Enqueuing ${io.rob_uop.bits}")
         rob(wtail) := io.rob_uop.bits.map(uop =>
             convert_to_content(uop)
         )
@@ -108,16 +110,15 @@ class ROB(implicit p: Parameters) extends CustomModule {
         ))
         rob_allocate.mispred := false.B
         rob_allocate.completed := false.B
+        rob_allocate.pdst := uop.pdst
+        rob_allocate.rd := uop.rd
+        import InstrType._
+        // TODO CSR doesn't always write back, use valid to check if wb is possible
+        rob_allocate.wb := uop.instr_type.isOneOf(ALU, MUL, DIV_REM, LD, Jump, CSR)
         rob_allocate.payload := 0.U
 
         //payload部分
         switch(uop.instr_type){
-            is(InstrType.ALU, InstrType.MUL, InstrType.DIV_REM, InstrType.LD){
-                val arithmetic_payload = Wire(new ROB_Arithmetic())
-                arithmetic_payload.pdst := uop.pdst
-                arithmetic_payload.rd := uop.rd
-                rob_allocate.payload := arithmetic_payload.asUInt
-            }
             is(InstrType.Branch){
                 val branch_payload = Wire(new ROB_Branch())
                 branch_payload.btb_hit := uop.btb_hit
@@ -130,16 +131,8 @@ class ROB(implicit p: Parameters) extends CustomModule {
                 val jump_payload = Wire(new ROB_Jump())
                 jump_payload.btb_hit := uop.btb_hit
                 jump_payload.target_PC := 0.U
-                jump_payload.pdst := uop.pdst
-                jump_payload.rd := uop.rd
                 jump_payload.GHR := uop.GHR
                 rob_allocate.payload := jump_payload.asUInt
-            }
-            is(InstrType.CSR){
-                val csr_payload = Wire(new ROB_CSR)
-                csr_payload.pdst := uop.pdst
-                csr_payload.rd := uop.rd
-                rob_allocate.payload := csr_payload.asUInt
             }
         }
         rob_allocate

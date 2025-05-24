@@ -153,55 +153,32 @@ object Instr {
   }
 
   case class DisplayInstr(
-    instrType: InstrType.Type,
-    rd: Option[Int] = None,
-    rs1: Option[Int] = None,
-    rs2: Option[Int] = None,
-    funct3: Option[Int] = None,
-    funct7: Option[Int] = None,
-    imm: Option[BigInt] = None,
-    raw: BigInt
+    opcode: UInt = 0.U,
+    rd: UInt = 0.U,
+    rs1: UInt = 0.U,
+    rs2: UInt = 0.U,
+    funct3: UInt = 0.U,
+    funct7: UInt = 0.U,
+    imm: UInt = 0.U
   )
 
-  def disassemble(instr: UInt, instrType: InstrType.Type): DisplayInstr = {
-    val bits = instr.litValue
+  def disassemble(instr: UInt, instr_type: IType.Type = IType.I): DisplayInstr = {
 
-    def get(start: Int, len: Int): BigInt = (bits >> start) & ((BigInt(1) << len) - 1)
+    val opcode = instr(6, 0)
+    val rd     = instr(11, 7)
+    val funct3 = instr(14, 12)
+    val rs1    = instr(19, 15)
+    val rs2    = instr(24, 20)
+    val funct7 = instr(31, 25)
 
-    val rd     = get(7, 5).toInt
-    val funct3 = get(12, 3).toInt
-    val rs1    = get(15, 5).toInt
-    val rs2    = get(20, 5).toInt
-    val funct7 = get(25, 7).toInt
-
-    val display = instrType match {
-      case InstrType.ALU | InstrType.MUL | InstrType.DIV_REM =>
-        DisplayInstr(instrType, Some(rd), Some(rs1), Some(rs2), Some(funct3), Some(funct7), None, bits)
-
-      case InstrType.Branch =>
-        val imm = (get(31, 1) << 12) |
-                  (get(7, 1)  << 11) |
-                  (get(25, 6) << 5 ) |
-                  (get(8, 4)  << 1 )
-        DisplayInstr(instrType, None, Some(rs1), Some(rs2), Some(funct3), None, Some(imm), bits)
-
-      case InstrType.Jump =>
-        val imm = (get(31, 1) << 20) |
-                  (get(12, 8) << 12) |
-                  (get(20, 1) << 11) |
-                  (get(21,10) << 1)
-        DisplayInstr(instrType, Some(rd), None, None, None, None, Some(imm), bits)
-
-      case InstrType.LD | InstrType.CSR =>
-        val imm = get(20, 12)
-        DisplayInstr(instrType, Some(rd), Some(rs1), None, Some(funct3), None, Some(imm), bits)
-
-      case InstrType.ST =>
-        val imm = (get(25, 7) << 5) | get(7, 5)
-        DisplayInstr(instrType, None, Some(rs1), Some(rs2), Some(funct3), None, Some(imm), bits)
+    val imm = instr_type match {
+      case IType.I => instr(31,20)
+      case IType.S => Cat(instr(31,25),instr(11,7))
+      case IType.B => Cat(instr(31), instr(7), instr(30, 25), instr(11, 8), 0.U(1.W))
+      case IType.U => Cat(instr(31, 12), 0.U(12.W))
+      case IType.J => Cat(instr(31), instr(19,12), instr(20), instr(30,21), 0.U(1.W))
     }
-
-    display
+    DisplayInstr(opcode, rd, rs1, rs2, funct3, funct7, imm)
   }
 }
 
@@ -215,11 +192,5 @@ object dbg {
         printf(fmt)
       }
     }
-  }
-}
-
-object DebugRegNext {
-  def apply[T <: Data](value: T, valid: Bool): T = {
-    RegNext(Mux(valid, value, 0.U.asTypeOf(value.cloneType)))
   }
 }

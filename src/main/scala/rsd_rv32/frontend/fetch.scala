@@ -13,8 +13,7 @@ class Fetch_IO(implicit p: Parameters) extends CustomBundle {
     val instr = Flipped(Vec(p.CORE_WIDTH, UInt(32.W)))
 
     // with ID
-    val id_uop = Vec(p.CORE_WIDTH, Valid(new IF_ID_uop()))
-    val id_ready = Flipped(Bool()) //ID是否准备好接收指令
+    val id_uop = Decoupled(Vec(p.CORE_WIDTH, Valid(new IF_ID_uop())))
 
     // with ROB
     val rob_controlsignal = Flipped(Valid(new ROBControlSignal)) //来自于ROB的控制信号
@@ -69,7 +68,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         }.elsewhen(core_state === entry_pc) {
             core_state := running
         }
-        when(io.id_ready && core_state =/= rst){
+        when(io.id_uop.ready && core_state =/= rst){
             pc_reg := pc_next
         }
     }
@@ -97,22 +96,17 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         uop.branch_pred := Mux(branch_pred_delayed, BranchPred.T, BranchPred.NT)
         uop.btb_hit := Mux(btb_hit_delayed(i), BTBHit.H, BTBHit.NH)
         
-        val is_valid = (!rob_flush_valid_delayed) && io.id_ready &&
+        val is_valid = (!rob_flush_valid_delayed) && io.id_uop.ready &&
           (!(btb_hit_delayed(i) && branch_pred_delayed)) && core_state === running
 
-        io.id_uop(i).valid := RegNext(is_valid)
-        io.id_uop(i).bits := RegEnable(uop, is_valid)
+        // TODO
+        io.id_uop.bits(i).valid := RegNext(is_valid)
+        io.id_uop.bits(i).bits := RegEnable(uop, is_valid)
 
-
+        io.id_uop.valid := RegNext(is_valid)
+        
         // Debugging
-        io.id_uop(i).bits.debug.instr := RegEnable(io.instr(i), is_valid)
-        io.id_uop(i).bits.debug.pc := RegEnable(current_pc, is_valid)
-    }
-
-    when(io.id_ready && core_state === running) {
-        // val instr1 = instr_delayed(0).asUInt
-        // val instr2 = instr_delayed(1).asUInt
-        // printf(cf"PC: ${PC_delayed} Got instruction ${instr1}%x ${instr2}%x\n")
+        io.id_uop.bits(i).bits.debug(io.instr(i), current_pc, is_valid)
     }
 }
 

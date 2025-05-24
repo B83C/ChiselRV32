@@ -36,7 +36,7 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
 
   def Sel(sel: OprSel.Type, reg: UInt,is_jal: Boolean = false, is_jalr: Boolean = false) = {
     MuxLookup(sel, 0.U)(Seq(
-      OprSel.IMM -> Mux(is_jalr.asBool, immExtract(Cat(io.uop.bits.instr, 0.U(7.W)), IType.I), Mux(is_jal.asBool,immExtract(Cat(io.uop.bits.instr, 0.U(7.W)), IType.J),immExtract(Cat(io.uop.bits.instr, 0.U(7.W)), IType.B))),
+      OprSel.IMM -> Mux(is_jalr.asBool, immExtract(Cat(io.uop.bits.instr_, 0.U(7.W)), IType.I), Mux(is_jal.asBool,immExtract(Cat(io.uop.bits.instr_, 0.U(7.W)), IType.J),immExtract(Cat(io.uop.bits.instr_, 0.U(7.W)), IType.B))),
       OprSel.REG -> reg,
       OprSel.PC -> io.uop.bits.instr_addr,
       OprSel.Z -> 0.U,
@@ -53,7 +53,7 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
   // 分支方向判断
   val actual_direction = Wire(BranchPred())
   val func3 = Wire(UInt(3.W))
-  func3 := io.uop.bits.instr(7, 5)
+  func3 := io.uop.bits.instr_(7, 5)
   val temp = MuxLookup(func3, false.B)(
     Seq(
       "b000".U  -> (rs1 === rs2),
@@ -130,7 +130,7 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
   io.uop.ready := true.B // BranchFU通常单周期完成
 
   // Debugging
-  out.debug := DebugRegNext(io.uop.bits.debug, io.uop.valid)
+  out.debug(io.uop)
 }
 
 

@@ -13,28 +13,13 @@ class EXUIO(fu_num: Int)(implicit p: Parameters) extends Bundle{
   
   val serialised_uop = Flipped(Valid(new EXUISSUE_EXU_uop))
 
-  // val wb = (Vec(p.FU_NUM, Valid(new WB_uop())))
-  
-  // val branch_info = (new FUBranchInfo())
-  //val rob_signal = Flipped(new ROBSignal())
   val rob_controlsignal = Flipped(Valid(new ROBControlSignal)) //来自于ROB的控制信号
-  //flush = rob_commitsignal(0).valid && rob_commitsignal(0).bits.mispred
-  // Should be removed in place of more general readys
-  //反馈给exu_issue queue的信号
-  // val mul_ready = (Bool())
-  // val div_ready = (Bool())
-
-  // val wb_uop = Vec(fu_num, Valid(new WB_uop()))
+  
   //写回信号
   val wb_uop = Vec(fu_num, Valid(new WB_uop()))
   
   val bu_signals = Valid(new BU_uop)
   val serialised_wb_uop = Valid(new WB_uop())
-  // val bu_wb_uop = Vec(p.BU_NUM, Valid(new BU_WB_uop()))
-  // val mul_wb_uop = Vec(p.MUL_NUM, Valid(new ALU_WB_uop()))
-  // val divrem_wb_uop = Vec(p.DIV_NUM, Valid(new ALU_WB_uop()))
-  
-  // val serialised_wb_uop = Valid(new ALU_WB_uop())
 }
 
 //把exu的各个fu封装起来的顶层模块

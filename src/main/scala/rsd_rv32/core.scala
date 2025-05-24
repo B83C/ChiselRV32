@@ -51,12 +51,32 @@ class Core(implicit p: Parameters) extends CustomModule {
   // dispatch.io := DontCare
   val rob = Module(new ROB)
 
-
   val ld_issue = Module(new ld_issue_queue(p.FU_NUM))
   val st_issue = Module(new st_issue_queue(p.FU_NUM))
   val exu_issue = Module(new exu_issue_queue(p.FU_NUM, exu.fus_mapping))
 
   // val lsu = Module(new LSU)
+
+  val prf_busys = RegInit(VecInit(Seq.fill(p.PRF_DEPTH)(false.B)))
+
+  val dummy_wb = Wire(Valid(new WB_uop))
+  dummy_wb := DontCare 
+  val dummy = Wire(Vec(p.CORE_WIDTH, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))))
+  dummy := DontCare 
+  dummy(0).valid := false.B
+  dummy(1).valid := false.B
+  val wb_uops = VecInit(exu.io.wb_uop ++ Seq(dummy_wb, dummy_wb, exu.io.serialised_wb_uop))
+
+  dispatch.io.dis_uop.bits.foreach{ dispatched_uop => {
+    when(dispatched_uop.valid && dispatched_uop.bits.pdst =/= 0.U) {
+      prf_busys(dispatched_uop.bits.pdst) := true.B
+    }
+  }}
+  wb_uops.foreach{wb_uop => {
+    when(wb_uop.valid && wb_uop.bits.pdst_value.valid) {
+      prf_busys(wb_uop.bits.pdst) := false.B
+    }
+  }}
 
 
   mem.io.reset := reset
@@ -64,8 +84,6 @@ class Core(implicit p: Parameters) extends CustomModule {
   mem.io.if_mem.instAddr := fetch.io.instr_addr >> 2.U
 
   fetch.io.instr := mem.io.mem_id.inst
-  fetch.io.id_ready := decode.io.id_ready
-  // TODO: won't work but had to make it compile first
   fetch.io.target_PC := branch_predictor.io.target_PC 
   fetch.io.btb_hit := branch_predictor.io.btb_hit 
   fetch.io.branch_pred := branch_predictor.io.branch_pred.reduce(_ || _)
@@ -76,26 +94,16 @@ class Core(implicit p: Parameters) extends CustomModule {
   branch_predictor.io.rob_commitsignal := rob.io.rob_commitsignal
   branch_predictor.io.instr_addr := fetch.io.instr_addr 
 
-  decode.io.id_uop := fetch.io.id_uop
-  decode.io.rename_ready := rename.io.rename_ready
+  decode.io.id_uop :<>= fetch.io.id_uop
   decode.io.rob_controlsignal := rob.io.rob_controlsignal
 
-  rename.io.rename_uop := decode.io.rename_uop
-  rename.io.dis_ready := dispatch.io.dis_uop.ready
+  rename.io.rename_uop :<>= decode.io.rename_uop
   rename.io.rob_controlsignal := rob.io.rob_controlsignal
   rename.io.rob_commitsignal := rob.io.rob_commitsignal
 
-  dispatch.io.dis_uop.bits := rename.io.dis_uop
-  dispatch.io.dis_uop.valid := rename.io.dis_ready
+  dispatch.io.dis_uop :<>= rename.io.dis_uop
   dispatch.io.rob_controlsignal := rob.io.rob_controlsignal
 
-  val dummy_wb = Wire(Valid(new WB_uop))
-  dummy_wb := DontCare 
-  val dummy = Wire(Vec(p.CORE_WIDTH, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))))
-  dummy := DontCare 
-  dummy(0).valid := false.B
-  dummy(1).valid := false.B
-  // dispatch.io := DontCare
   dispatch.io.stq_head := 0.U
   dispatch.io.stq_tail := 0.U
   dispatch.io.stq_full := 0.U
@@ -103,26 +111,24 @@ class Core(implicit p: Parameters) extends CustomModule {
   dispatch.io.rob_empty := rob.io.rob_empty
 
   rob.io.rob_uop :<>= dispatch.io.rob_uop
-  rob.io.wb_uop := VecInit(exu.io.wb_uop ++ Seq(dummy_wb, dummy_wb, exu.io.serialised_wb_uop))
+  rob.io.wb_uop := wb_uops
   rob.io.bu_uop := exu.io.bu_signals
 
-  val prf_valid = Wire(Vec(p.PRF_DEPTH, Bool()))
-
+  ld_issue.io.prf_busys := prf_busys
   ld_issue.io.load_uop.ready := true.B
-  ld_issue.io.prf_valid := prf_valid
-  ld_issue.io.wb_uop := VecInit(exu.io.wb_uop ++ Seq(dummy_wb, dummy_wb, exu.io.serialised_wb_uop))
+  ld_issue.io.wb_uop := wb_uops
   ld_issue.io.st_issue_busy_snapshot := st_issue.io.st_issue_busy_snapshot
   // TODO
   ld_issue.io.st_issue_busy_dispatch := Mux(dispatch.io.st_issued_index.valid, (1.U(p.STISSUE_DEPTH.W) << dispatch.io.st_issued_index.bits)(p.STISSUE_DEPTH -1, 0), 0.U).asBools
   ld_issue.io.rob_controlsignal := rob.io.rob_controlsignal
   ld_issue.io.st_issued_index := st_issue.io.st_issued_index
 
+  st_issue.io.prf_busys := prf_busys
   st_issue.io.store_uop.ready := true.B
-  st_issue.io.prf_valid := prf_valid
-  st_issue.io.wb_uop := VecInit(exu.io.wb_uop ++ Seq(dummy_wb, dummy_wb, exu.io.serialised_wb_uop))
+  st_issue.io.wb_uop := wb_uops
   st_issue.io.rob_controlsignal := rob.io.rob_controlsignal
 
-  exu_issue.io.prf_valid := prf_valid
+  exu_issue.io.prf_busys := prf_busys
   exu_issue.io.wb_uop := VecInit(exu.io.wb_uop ++ Seq(dummy_wb, dummy_wb, exu.io.serialised_wb_uop))
   exu_issue.io.rob_controlsignal := rob.io.rob_controlsignal
 
@@ -149,7 +155,7 @@ class Core(implicit p: Parameters) extends CustomModule {
   serialised_uop_prfs.valid := serialised_uop.valid
 
   val execute_prf_reads = (execute_uop.map(_.bits) :+ serialised_uop_exu.bits).zip(exu_issue.io.prf_raddr :+ serialised_uop_prfs).map{case (uop, prf_raddr) => {
-    Seq(ReadValueRequest( uop.ps1_value, prf_raddr.bits(0), prf_raddr.valid )) ++  Seq(ReadValueRequest( uop.ps2_value, prf_raddr.bits(1), prf_raddr.valid))
+    Seq(ReadValueRequest(uop.ps1_value, prf_raddr.bits(0), prf_raddr.valid )) ++  Seq(ReadValueRequest( uop.ps2_value, prf_raddr.bits(1), prf_raddr.valid))
   }}.reduce(_ ++ _)
   val load_prf_reads = VecInit(load_uop.bits).zip(VecInit(ld_issue.io.prf_raddr)).map{case (uop, prf_raddr) => {
     Seq(ReadValueRequest(uop.ps1_value, prf_raddr.bits, prf_raddr.valid))
@@ -162,11 +168,9 @@ class Core(implicit p: Parameters) extends CustomModule {
     (execute_prf_reads ++ load_prf_reads ++ store_prf_reads)
   val prf = Module(new PRF(read_requests.length))
   prf.io.read_requests :<>= VecInit(read_requests)
-  prf.io.amt := rename.io.amt
-  prf.io.wb_uop := VecInit(exu.io.wb_uop ++ Seq(dummy_wb, dummy_wb, exu.io.serialised_wb_uop))
+  prf.io.wb_uop := wb_uops
   prf.io.rob_controlsignal := rob.io.rob_controlsignal
   prf.io.rob_commitsignal := rob.io.rob_commitsignal
-  prf_valid := prf.io.prf_valid
 
   exu.io.execute_uop :<>= execute_uop
   exu.io.serialised_uop := serialised_uop_exu

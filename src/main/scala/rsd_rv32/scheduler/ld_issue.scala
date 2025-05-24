@@ -16,13 +16,15 @@ class ld_issue_IO(fu_num: Int)(implicit p: Parameters) extends CustomBundle {
     val prf_raddr = Valid(UInt(log2Ceil(p.PRF_DEPTH).W)) //PRF读地址1
 
     //监听PRF的valid信号用于更新ready状态
-    val prf_valid = Flipped(Vec(p.PRF_DEPTH, Bool())) //PRF的valid信号
+    // val prf_valid = Flipped(Vec(p.PRF_DEPTH, Bool())) //PRF的valid信号
 //    //监听FU后级间寄存器内的物理寄存器ready信号
 //    val wb_uop2 = Flipped((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop()))))  //来自alu、mul、div、load pipeline的uop
     //val ldu_wb_uop2 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
     //监听FU处物理寄存器的ready信号
     // TODO
     val wb_uop = Flipped(Vec(fu_num, Valid(new WB_uop()))) //来自所有FU的WB
+
+    val prf_busys = Flipped(Vec(p.PRF_DEPTH, Bool())) // 表示在队列内busy的pdst
 
     //输出至Dispatch Unit的信号
     val ld_issued_index = (Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W))) //更新IQ Freelist
@@ -42,7 +44,7 @@ class ld_issue_IO(fu_num: Int)(implicit p: Parameters) extends CustomBundle {
 class ld_issue_content(implicit p: Parameters) extends Bundle {
     val ps = UInt(log2Ceil(p.PRF_DEPTH).W) // 操作数的物理寄存器地址 
 
-    val busy = Bool() // 表示有效
+    val waiting = Bool() // 表示有效
     val ps_ready = Bool() // 源操作数的ready信号
     val st_busy = Vec(p.STISSUE_DEPTH, Bool()) // 载入时是st_issue_queue内容busy表的快照，并由后续st_issued_index更新
 }
@@ -68,16 +70,16 @@ class ld_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
     dis_uop.foreach { uop =>
         when(VALID && uop.valid)  {
             payload(uop.bits.iq_index) := uop.bits
-            issue_queue(uop.bits.iq_index).busy := true.B
+            issue_queue(uop.bits.iq_index).waiting := true.B
             issue_queue(uop.bits.iq_index).ps := uop.bits.ps1
             issue_queue(uop.bits.iq_index).st_busy := VecInit((io.st_issue_busy_dispatch.asUInt | io.st_issue_busy_snapshot.asUInt).asBools)
 
             // 因为ps可能在dispatch的时候就就绪了(信号来自WB)
-            issue_queue(uop.bits.iq_index).ps_ready := io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst_value.valid && wb_uop.bits.pdst === uop.bits.ps1)
+            issue_queue(uop.bits.iq_index).ps_ready := uop.bits.ps1 === 0.U || !io.prf_busys(uop.bits.ps1) || io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst_value.valid && wb_uop.bits.pdst === uop.bits.ps1)
         }
     }
     issue_queue.foreach(iq => {
-        when(iq.busy && io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst_value.valid && wb_uop.bits.pdst === iq.ps)) {
+        when(iq.waiting && io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst_value.valid && wb_uop.bits.pdst === iq.ps)) {
             iq.ps_ready := true.B
         }
         when(io.st_issued_index.valid) {
@@ -85,10 +87,16 @@ class ld_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
         }
     })
 
-    val ready_vec = VecInit(issue_queue.map(iq => iq.busy && iq.ps_ready && !iq.st_busy.reduce(_ || _)))
+    val ready_vec = VecInit(issue_queue.map(iq => iq.waiting && iq.ps_ready && !iq.st_busy.reduce(_ || _)))
     val selected_entry = PriorityMux(ready_vec.zip(issue_queue))
     val selected_payload = PriorityMux(ready_vec.zip(payload))
     val selection_valid = ready_vec.asUInt =/= 0.U
+
+    val sel_oh = PriorityEncoderOH(ready_vec)
+    val sel_ind = OHToUInt(sel_oh) 
+    when(selection_valid) {
+        issue_queue(sel_ind).waiting := false.B
+    }
 
     val selected_payload_coerced = Wire(new LDISSUE_LDPIPE_uop)
     (selected_payload_coerced: Data).waiveAll :<>= (selected_payload: Data).waiveAll
@@ -100,10 +108,10 @@ class ld_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
     io.ld_issued_index.valid := selection_valid
 
     // 外接一个读取prf的模块
-    io.prf_raddr.bits := selected_entry.ps
-    io.prf_raddr.valid := selection_valid
+    io.prf_raddr.bits := RegEnable(selected_entry.ps, selection_valid)
+    io.prf_raddr.valid:= RegNext(selection_valid)
 
     // Debugging
     import chisel3.experimental.BundleLiterals._
-    io.load_uop.bits.debug := RegNext(Mux(selection_valid, selected_payload.debug, 0.U.asTypeOf(new InstrDebug)))
+    io.load_uop.bits.debug(selected_payload, selection_valid)
 }

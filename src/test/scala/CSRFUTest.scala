@@ -30,7 +30,7 @@ class CSRFUTest extends AnyFreeSpec with Matchers with CSRConsts {
       println("CSR Reset!")
 
       c.io.uop.valid.poke(true.B)
-      c.io.uop.bits.instr.poke(Truncate(I(
+      c.io.uop.bits.instr_.poke(Truncate(I(
         imm = mtime_addr.U,
         rs1 = 1.U,
         funct3 = CSRRW, 
@@ -55,7 +55,7 @@ class CSRFUTest extends AnyFreeSpec with Matchers with CSRConsts {
 
       c.io.uop.valid.poke(true.B)
       c.io.uop.bits.ps1_value.poke(0x1234.U) //Should not go through
-      c.io.uop.bits.instr.poke(Truncate(I(
+      c.io.uop.bits.instr_.poke(Truncate(I(
         imm = mtime_addr.U,
         rs1 = next_clock_imm.U,
         funct3 = CSRRWI, 
@@ -92,7 +92,7 @@ class CSRFUTest extends AnyFreeSpec with Matchers with CSRConsts {
 
       println(s"rd0 starts here")
       c.io.uop.valid.poke(true.B)
-      c.io.uop.bits.instr.poke(Truncate(I(
+      c.io.uop.bits.instr_.poke(Truncate(I(
         imm = mtime_addr.U,
         rs1 = 1.U,
         funct3 = CSRRW, 
@@ -112,7 +112,7 @@ class CSRFUTest extends AnyFreeSpec with Matchers with CSRConsts {
       c.io.uop.valid.poke(false.B)
       c.out.valid.expect(false.B)
 
-      c.io.uop.bits.instr.poke(Truncate(I(
+      c.io.uop.bits.instr_.poke(Truncate(I(
         imm = mtime_addr.U,
         rs1 = 1.U,
         funct3 = CSRRW, 
@@ -141,7 +141,7 @@ class CSRFUTest extends AnyFreeSpec with Matchers with CSRConsts {
       c.io.reset.poke(false.B)
 
       c.io.uop.valid.poke(true.B)
-      c.io.uop.bits.instr.poke(Truncate(I(
+      c.io.uop.bits.instr_.poke(Truncate(I(
         imm = mtime_addr.U,
         rs1 = 1.U,
         funct3 = CSRRS, 
@@ -163,7 +163,7 @@ class CSRFUTest extends AnyFreeSpec with Matchers with CSRConsts {
       c.out.bits.pdst.expect(2.U)
       c.out.valid.expect(true.B)
 
-      c.io.uop.bits.instr.poke(Truncate(I(
+      c.io.uop.bits.instr_.poke(Truncate(I(
         imm = mtime_addr.U,
         rs1 = 1.U,
         funct3 = CSRRS, 

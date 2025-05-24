@@ -6,12 +6,15 @@ import rsd_rv32.common._
 import rsd_rv32.scheduler._
 
 class Decode_IO(implicit p: Parameters) extends CustomBundle {
-  // with IF
-  val id_uop = Vec(p.CORE_WIDTH, Flipped(Valid(new IF_ID_uop())))
-  val id_ready = Bool() // ID是否准备好接收指令
-  // with Rename
-  val rename_uop = Vec(p.CORE_WIDTH, Valid(new ID_RENAME_uop()))
-  val rename_ready = Flipped(Bool()) // Rename是否准备好接收指令
+  // 通过Decoupled向fetch施压，这样实现比较正确
+  // 其中外部valid表示fetch是否正在发送
+  // 内部的valid表示指令是否有效
+  // 不同层级表示的意义有所不同
+  // 多余的valid会被优化掉
+  // from IF
+  val id_uop = Flipped(Decoupled(Vec(p.CORE_WIDTH, Valid(new IF_ID_uop()))))
+  // to Rename
+  val rename_uop = Decoupled(Vec(p.CORE_WIDTH, Valid(new ID_RENAME_uop())))
   // with ROB
   val rob_controlsignal = Flipped(Valid(new ROBControlSignal)) //来自于ROB的控制信号
 }
@@ -60,135 +63,118 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
   //val rob_flush = io.rob_commitsignal.map(_.valid)reduce(_||_)  //是否要flush
   //flush信号
   val rob_flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
-  io.id_ready := io.rename_ready && !rob_flush
-  //级间流水寄存器
-  val stage_reg = Module(new ID_Rename_Stage_reg())
-  stage_reg.io.rename_ready := io.rename_ready
-  stage_reg.io.rob_flush := rob_flush
-  io.rename_uop := stage_reg.io.rename_uop
-  when(rob_flush) {
-    stage_reg.io.stage_reg_uop := 0.U.asTypeOf(Vec(p.CORE_WIDTH, Valid(new ID_RENAME_uop())))
-  }.otherwise {
-    for (i <- 0 until p.CORE_WIDTH) {
-      val instr = io.id_uop(i).bits.instr
-      //传递已有变量
-      stage_reg.io.stage_reg_uop(i).valid := io.id_uop(i).valid
-      stage_reg.io.stage_reg_uop(i).bits.instr := instr(31, 7) //之前有规定是拼接吗
-      stage_reg.io.stage_reg_uop(i).bits.instr_addr := io.id_uop(i).bits.instr_addr
-      stage_reg.io.stage_reg_uop(i).bits.target_PC := io.id_uop(i).bits.target_PC
-      stage_reg.io.stage_reg_uop(i).bits.GHR := io.id_uop(i).bits.GHR
-      stage_reg.io.stage_reg_uop(i).bits.branch_pred := io.id_uop(i).bits.branch_pred
-      stage_reg.io.stage_reg_uop(i).bits.btb_hit := io.id_uop(i).bits.btb_hit
-      
+  
+  val input_ready = io.rename_uop.ready
+  io.id_uop.ready := input_ready
+  
+  val output_valid = io.id_uop.valid && input_ready
+  io.rename_uop.valid := RegNext(output_valid)
 
-      //切割instr
-      val opcode = instr(6, 0)
-      val rd = instr(11, 7)
-      val func3 = instr(14, 12)
-      val rs1 = instr(19, 15)
-      val rs2 = instr(24, 20)
-      val func7 = instr(31, 25)
+  io.id_uop.bits.zip(io.rename_uop.bits).foreach{ case (id, rename_out) => {
+    val instr_valid = id.valid
+    val to_rename = Wire(new ID_RENAME_uop) 
+    (to_rename: Data).waiveAll :<>= (id.bits: Data).waiveAll
 
-      //区分InstrType
-      val instr_type = WireDefault(InstrType(), InstrType.ALU)
-      val opr1_sel = WireDefault(OprSel(), OprSel.Z)
-      val opr2_sel = WireDefault(OprSel(), OprSel.Z)
-      stage_reg.io.stage_reg_uop(i).bits.instr_type := instr_type
-      stage_reg.io.stage_reg_uop(i).bits.fu_signals.opr1_sel := opr1_sel
-      stage_reg.io.stage_reg_uop(i).bits.fu_signals.opr2_sel := opr2_sel
-      switch(opcode) {
+    // _后缀表示opcode被截
+    to_rename.instr_ := id.bits.instr(31, 7)
 
-        is("b0110011".U) {
-          when(func7 === "b0000001".U) {
-            when(func3(2) === 0.U) {
-              instr_type := InstrType.MUL
-            }.elsewhen(func3(2) === 1.U) {
-              instr_type := InstrType.DIV_REM
-            }.otherwise {
-              instr_type := InstrType.ALU
-            }
+    val dis = Instr.disassemble(id.bits.instr)
+    val instr_type = WireDefault(InstrType(), InstrType.ALU)
+    val opr1_sel = WireDefault(OprSel(), OprSel.Z)
+    val opr2_sel = WireDefault(OprSel(), OprSel.Z)
+    
+    to_rename.instr_type := instr_type
+    to_rename.fu_signals.opr1_sel := opr1_sel
+    to_rename.fu_signals.opr2_sel := opr2_sel
+   
+    switch(dis.opcode) {
+      is("b0110011".U) {
+        when(dis.funct7 === "b0000001".U) {
+          when(dis.funct3(2) === 0.U) {
+            instr_type := InstrType.MUL
+          }.elsewhen(dis.funct3(2) === 1.U) {
+            instr_type := InstrType.DIV_REM
           }.otherwise {
             instr_type := InstrType.ALU
           }
-          //immExt := 0.U
-          opr1_sel := OprSel.REG
-          opr2_sel := OprSel.REG
-        }
-
-        is("b0010011".U) { //REG-IMM-ALU
+        }.otherwise {
           instr_type := InstrType.ALU
-          //immExt := Cat(Fill(20, immI(11)), immI)
-          opr1_sel := OprSel.REG
-          opr2_sel := OprSel.IMM
         }
+        //immExt := 0.U
+        opr1_sel := OprSel.REG
+        opr2_sel := OprSel.REG
+      }
 
-        is("b0000011".U) { //Load
-          instr_type := InstrType.LD
-          //immExt := Cat(Fill(20, immI(11)), immI)
-          opr1_sel := OprSel.REG
-          opr2_sel := OprSel.IMM
-        }
+      is("b0010011".U) { //REG-IMM-ALU
+        instr_type := InstrType.ALU
+        //immExt := Cat(Fill(20, immI(11)), immI)
+        opr1_sel := OprSel.REG
+        opr2_sel := OprSel.IMM
+      }
 
-        is("b0100011".U) { //Store
-          instr_type := InstrType.ST
-          //immExt := Cat(Fill(20, immS(11)), immS)
-          opr1_sel := OprSel.REG
-          opr2_sel := OprSel.IMM
-        }
+      is("b0000011".U) { //Load
+        instr_type := InstrType.LD
+        //immExt := Cat(Fill(20, immI(11)), immI)
+        opr1_sel := OprSel.REG
+        opr2_sel := OprSel.IMM
+      }
 
-        is("b1100011".U) { //Branch
-          instr_type := InstrType.Branch
-          //immExt := Cat(Fill(19, immB(12)), immB)
-          opr1_sel := OprSel.REG
-          opr2_sel := OprSel.REG
-        }
+      is("b0100011".U) { //Store
+        instr_type := InstrType.ST
+        //immExt := Cat(Fill(20, immS(11)), immS)
+        opr1_sel := OprSel.REG
+        opr2_sel := OprSel.IMM
+      }
 
-        is("b1101111".U) { //JAL
-          instr_type := InstrType.Jump
-          //immExt := Cat(Fill(11, immJ(20)), immJ)
-          opr1_sel := OprSel.PC
-          opr2_sel := OprSel.IMM
-        }
+      is("b1100011".U) { //Branch
+        instr_type := InstrType.Branch
+        //immExt := Cat(Fill(19, immB(12)), immB)
+        opr1_sel := OprSel.REG
+        opr2_sel := OprSel.REG
+      }
 
-        is("b1100111".U) { //JALR
-          instr_type := InstrType.Jump
-          //immExt := Cat(Fill(20, immI(11)), immI)
-          opr1_sel := OprSel.REG
-          opr2_sel := OprSel.IMM
-        }
+      is("b1101111".U) { //JAL
+        instr_type := InstrType.Jump
+        //immExt := Cat(Fill(11, immJ(20)), immJ)
+        opr1_sel := OprSel.PC
+        opr2_sel := OprSel.IMM
+      }
 
-        is("b1110011".U) { //CSR
-          instr_type := InstrType.CSR
-          //immExt := Cat(Fill(20, immI(11)), immI)
-          opr1_sel := OprSel.REG
-          opr2_sel := OprSel.IMM
-        }
+      is("b1100111".U) { //JALR
+        instr_type := InstrType.Jump
+        //immExt := Cat(Fill(20, immI(11)), immI)
+        opr1_sel := OprSel.REG
+        opr2_sel := OprSel.IMM
+      }
 
-        is("b0110111".U) { //LUI
-          instr_type := InstrType.ALU
-          //immExt := immU
-          opr1_sel := OprSel.IMM
-          opr2_sel := OprSel.Z
-        }
+      is("b1110011".U) { //CSR
+        instr_type := InstrType.CSR
+        //immExt := Cat(Fill(20, immI(11)), immI)
+        opr1_sel := OprSel.REG
+        opr2_sel := OprSel.IMM
+      }
 
-        is("b0010111".U) { //AUIPC
-          instr_type := InstrType.ALU
-          //immExt := immU
-          opr1_sel := OprSel.PC
-          opr2_sel := OprSel.IMM
-        }
+      is("b0110111".U) { //LUI
+        instr_type := InstrType.ALU
+        //immExt := immU
+        opr1_sel := OprSel.IMM
+        opr2_sel := OprSel.Z
+      }
 
-      } //switch的后括号
-
+      is("b0010111".U) { //AUIPC
+        instr_type := InstrType.ALU
+        //immExt := immU
+        opr1_sel := OprSel.PC
+        opr2_sel := OprSel.IMM
+      }
     }
-  }
-  
-  // Debugging
-  stage_reg.io.stage_reg_uop.foreach(x => {
-    x.bits.debug := DontCare
-  })
-  io.rename_uop.zip(io.id_uop).foreach{case (x, y) => {
-      x.bits.debug := RegNext(y.bits.debug)
+
+    // TODO
+    rename_out.valid := RegNext(instr_valid && output_valid)
+    rename_out.bits := RegEnable(to_rename, instr_valid && output_valid)
+
+    // Debugging
+    rename_out.bits.debug(id)
   }}
 }
 //  for (i <-0 until p.CORE_WIDTH){

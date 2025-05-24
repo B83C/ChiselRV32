@@ -114,7 +114,7 @@ class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extend
 
   val first_ready_rdata = PriorityMux(ready.zip(rdata))
 
-  val instr = Cat(uop.instr, 0.U(7.W))
+  val instr = Cat(uop.instr_, 0.U(7.W))
   val func3 = instr(14, 12)
   val csr = instr(31, 20)
   // val rd = instr(11, 7)
@@ -169,5 +169,5 @@ class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extend
   }
 
   // Debugging
-  out.debug := DebugRegNext(io.uop.bits.debug, should_output)
+  out.debug(io.uop.bits, should_output)
 }

@@ -49,7 +49,7 @@ class bfu_test extends AnyFlatSpec with ChiselScalatestTester {
       )
 
       c.io.uop.valid.poke(true.B)
-      c.io.uop.bits.instr.poke(InstrHelper.stripOpcode(fullInstr))
+      c.io.uop.bits.instr_.poke(InstrHelper.stripOpcode(fullInstr))
       c.io.uop.bits.instr_type.poke(InstrType.Branch)
       c.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
       c.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
@@ -84,7 +84,7 @@ class bfu_test extends AnyFlatSpec with ChiselScalatestTester {
       )
 
       c.io.uop.valid.poke(true.B)
-      c.io.uop.bits.instr.poke(InstrHelper.stripOpcode(fullInstr))
+      c.io.uop.bits.instr_.poke(InstrHelper.stripOpcode(fullInstr))
       c.io.uop.bits.instr_type.poke(InstrType.Branch)
       c.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
       c.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
@@ -115,7 +115,7 @@ class bfu_test extends AnyFlatSpec with ChiselScalatestTester {
       )
 
       c.io.uop.valid.poke(true.B)
-      c.io.uop.bits.instr.poke(InstrHelper.stripOpcode(fullInstr))
+      c.io.uop.bits.instr_.poke(InstrHelper.stripOpcode(fullInstr))
       c.io.uop.bits.instr_type.poke(InstrType.Jump)
       c.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.PC) // jal 的 opr1 是 PC
 
@@ -148,7 +148,7 @@ class bfu_test extends AnyFlatSpec with ChiselScalatestTester {
       )
 
       c.io.uop.valid.poke(true.B)
-      c.io.uop.bits.instr.poke(InstrHelper.stripOpcode(fullInstr))
+      c.io.uop.bits.instr_.poke(InstrHelper.stripOpcode(fullInstr))
       c.io.uop.bits.instr_type.poke(InstrType.Jump)
       c.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
 

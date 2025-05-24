@@ -179,18 +179,18 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
 
   io.st_cnt := RegNext(PopCount(is_st.asBools))
    
-  val rob_uop_valid = RegNext(input_ready)
-  io.rob_uop.valid := rob_uop_valid
+  val output_valid = input_ready && io.dis_uop.valid
+  io.rob_uop.valid := RegNext(output_valid)
   io.rob_uop.bits := RegEnable(VecInit(io.dis_uop.bits.map{c =>
     val out = Wire(Valid(new DISPATCH_ROB_uop()))
     out.valid := c.valid && input_ready
     (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
     // TODO: bug, maybe instr should not be truncated
-    out.bits.rd := c.bits.instr(4, 0)
+    out.bits.rd := c.bits.instr_(4, 0)
     out
-  }), input_ready)
+  }), output_valid)
 
-  io.exu_issue_uop.valid := RegNext(input_ready && ex_valid)
+  io.exu_issue_uop.valid := RegNext(output_valid && ex_valid)
   io.exu_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_ex.asBools).zip(exu_freelist.io.deq_request).zipWithIndex.map{case (((c, v), fl), rob_inner_ind) =>
     val out = Wire(Valid(new DISPATCH_EXUISSUE_uop()))
     out.valid := c.valid && v && fl.valid
@@ -200,9 +200,9 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
     out.bits.rob_index := io.rob_index
     out.bits.rob_inner_index := rob_inner_ind.U
     out
-  }), input_ready && ex_valid)
+  }), output_valid && ex_valid)
   
-  io.ld_issue_uop.valid := RegNext(input_ready && ld_valid)
+  io.ld_issue_uop.valid := RegNext(output_valid && ld_valid)
   io.ld_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_ld.asBools).zip(ld_freelist.io.deq_request).zipWithIndex.map{case (((c, v), fl), rob_inner_ind) =>
     val out = Wire(Valid(new DISPATCH_LDISSUE_uop()))
     out.valid := c.valid &&  v && fl.valid
@@ -212,9 +212,9 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
     out.bits.rob_index := io.rob_index
     out.bits.rob_inner_index := rob_inner_ind.U
     out
-  }), input_ready && ld_valid)
+  }), output_valid && ld_valid)
   
-  io.st_issue_uop.valid := RegNext(input_ready && st_valid)
+  io.st_issue_uop.valid := RegNext(output_valid && st_valid)
   io.st_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_st.asBools).zip(st_freelist.io.deq_request).zipWithIndex.map{case (((c, v), fl), rob_inner_ind) =>
     val out = Wire(Valid(new DISPATCH_STISSUE_uop()))
 
@@ -225,7 +225,7 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
     out.bits.rob_inner_index := rob_inner_ind.U
     out.bits.stq_index := io.stq_head //TODO: Check on its validity
     out
-  }), input_ready && st_valid)
+  }), output_valid && st_valid)
 
   when(should_kill) {
     io.exu_issue_uop.valid := 0.U
@@ -265,14 +265,11 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
 
   // Debugging
   import chisel3.experimental.BundleLiterals._
-  io.exu_issue_uop.bits.zip(io.dis_uop.bits).zip(is_ex.asBools).foreach{case ((x, y), z) => {
-      x.bits.debug := RegNext(Mux(z, y.bits.debug, 0.U.asTypeOf(new InstrDebug)))
-  }}
-  io.ld_issue_uop.bits.zip(io.dis_uop.bits).zip(is_ld.asBools).foreach{case ((x, y), z) => {
-      x.bits.debug := RegNext(Mux(z, y.bits.debug, 0.U.asTypeOf(new InstrDebug)))
-  }}
-  io.st_issue_uop.bits.zip(io.dis_uop.bits).zip(is_st.asBools).foreach{case ((x, y), z) => {
-      x.bits.debug := RegNext(Mux(z, y.bits.debug, 0.U.asTypeOf(new InstrDebug)))
+  (io.exu_issue_uop.bits.zip(io.dis_uop.bits).zip(is_ex.asBools)
+    ++ io.ld_issue_uop.bits.zip(io.dis_uop.bits).zip(is_ld.asBools)
+    ++ io.st_issue_uop.bits.zip(io.dis_uop.bits).zip(is_st.asBools)
+  ).foreach{case ((x, y), z) => {
+      x.bits.debug(y.bits, z)
   }}
 }
 

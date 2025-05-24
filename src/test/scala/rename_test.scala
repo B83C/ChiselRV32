@@ -25,8 +25,8 @@ class MyModuleTest extends AnyFlatSpec with ChiselScalatestTester with Matchers 
             c.io.rename_uop(1).valid.poke(true.B)
             c.io.rename_uop(0).bits.instr_type.poke(InstrType.ALU)
             c.io.rename_uop(1).bits.instr_type.poke(InstrType.ALU)
-            c.io.rename_uop(0).bits.instr.poke(Constants.and1.U)
-            c.io.rename_uop(1).bits.instr.poke(Constants.and2.U)
+            c.io.rename_uop(0).bits.instr_.poke(Constants.and1.U)
+            c.io.rename_uop(1).bits.instr_.poke(Constants.and2.U)
 
             c.io.dis_ready.poke(true.B)
 
@@ -37,13 +37,13 @@ class MyModuleTest extends AnyFlatSpec with ChiselScalatestTester with Matchers 
             c.clock.step()
 
             c.io.rename_uop(1).bits.instr_type.poke(InstrType.ST)
-            c.io.rename_uop(1).bits.instr.poke(Constants.sb.U)
+            c.io.rename_uop(1).bits.instr_.poke(Constants.sb.U)
 
             println("cycle 2")
             c.clock.step()
 
             c.io.rename_uop(0).bits.instr_type.poke(InstrType.Branch)
-            c.io.rename_uop(0).bits.instr.poke(Constants.beq.U)
+            c.io.rename_uop(0).bits.instr_.poke(Constants.beq.U)
 
             c.io.rename_uop(1).valid.poke(false.B)
 
@@ -62,7 +62,7 @@ class MyModuleTest extends AnyFlatSpec with ChiselScalatestTester with Matchers 
 
             c.io.rename_uop(1).valid.poke(true.B)
             c.io.rename_uop(1).bits.instr_type.poke(InstrType.ALU)
-            c.io.rename_uop(1).bits.instr.poke(Constants.and1.U)
+            c.io.rename_uop(1).bits.instr_.poke(Constants.and1.U)
 
             println("cycle 4")
             c.clock.step()

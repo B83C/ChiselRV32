@@ -87,7 +87,7 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   // 操作数选择逻辑
   def Sel(sel: OprSel.Type, reg: UInt) = {
     MuxLookup(sel, 0.U)(Seq(
-      OprSel.IMM -> immExtract(Cat(io.uop.bits.instr, 0.U(7.W)), IType.I),
+      OprSel.IMM -> immExtract(Cat(io.uop.bits.instr_, 0.U(7.W)), IType.I),
       OprSel.REG -> reg,
       OprSel.PC -> io.uop.bits.instr_addr,
       OprSel.Z -> 0.U,
@@ -98,7 +98,7 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   boothMul.io.in.num_2 := 0.S(32.W)
 
   // 指令解码
-  val instr = io.uop.bits.instr
+  val instr = io.uop.bits.instr_
   // 从指令中提取func3字段(R-type指令的14-12位)
   val func3 = instr(7,5)
   // 解码乘法类型
@@ -179,6 +179,6 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   io.uop.ready := (state === s_idle) && !reset.asBool
 
   // Debugging
-  out.debug := DebugRegNext(io.uop.bits.debug, out_valid)
+  out.debug(io.uop.bits, out_valid)
 }
 

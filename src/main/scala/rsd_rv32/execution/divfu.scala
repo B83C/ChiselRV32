@@ -70,7 +70,7 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   // 操作数选择逻辑
   def Sel(sel: OprSel.Type, reg: UInt) = {
     MuxLookup(sel, 0.U)(Seq(
-      OprSel.IMM -> immExtract(Cat(io.uop.bits.instr, 0.U(7.W)), IType.I),
+      OprSel.IMM -> immExtract(Cat(io.uop.bits.instr_, 0.U(7.W)), IType.I),
       OprSel.REG -> reg,
       OprSel.PC -> io.uop.bits.instr_addr,
       OprSel.Z -> 0.U,
@@ -78,7 +78,7 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   }
 
   // 指令解码 (从func3字段获取操作类型)
-  val instr = io.uop.bits.instr
+  val instr = io.uop.bits.instr_
   val func3 = instr(7,5) // R-type指令的func3字段
   val is_div    = func3 === 4.U  // DIV
   val is_divu   = func3 === 5.U  // DIVU
@@ -198,5 +198,5 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   io.uop.ready := (state === s_idle)
   
   // Debugging
-  out.debug := DebugRegNext(io.uop.bits.debug, out_valid)
+  out.debug(io.uop.bits, out_valid)
 }

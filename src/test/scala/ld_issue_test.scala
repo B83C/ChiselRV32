@@ -92,7 +92,7 @@ class ld_issue_test extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.rob_commitsignal(0).bits.mispred.poke(1.U)
       dut.clock.step(1)
       for (i <- 0 until 5){
-        dut.io.queue(i).busy.expect(0.U)
+        dut.io.queue(i).waiting.expect(0.U)
       }
       dut.clock.step(1)
       println("test pass")

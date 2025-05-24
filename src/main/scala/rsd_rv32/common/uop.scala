@@ -120,7 +120,7 @@ class ID_RENAME_uop(implicit p: Parameters) extends uop {
 
     //opcode is compiled into fu specific control signals
     val instr_type = InstrType() 
-    val instr = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode
+    val instr_ = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode
     val fu_signals = new FUSignals() 
 
     val instr_addr = UInt(p.XLEN.W)
@@ -157,7 +157,7 @@ class DISPATCH_ROB_uop(implicit p: Parameters) extends uop {
 
 class DISPATCH_EXUISSUE_uop(implicit p: Parameters) extends uop {
     override def prf_read_counts: Int = 2
-    val instr = UInt((p.XLEN-7).W) //EXU need it to get imm,func,etc
+    val instr_ = UInt((p.XLEN-7).W) //EXU need it to get imm,func,etc
     val instr_addr = UInt(p.XLEN.W)
 
     val instr_type = InstrType()
@@ -178,7 +178,7 @@ class DISPATCH_EXUISSUE_uop(implicit p: Parameters) extends uop {
 
 class DISPATCH_LDISSUE_uop(implicit p: Parameters) extends uop {
     override def prf_read_counts: Int = 1
-    val instr = UInt((p.XLEN-7).W) //Load Pipeline need it to get imm,func,etc
+    val instr_ = UInt((p.XLEN-7).W) //Load Pipeline need it to get imm,func,etc
     
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
@@ -192,7 +192,7 @@ class DISPATCH_LDISSUE_uop(implicit p: Parameters) extends uop {
 
 class DISPATCH_STISSUE_uop(implicit p: Parameters) extends uop {
     override def prf_read_counts: Int = 2
-    val instr = UInt((p.XLEN-7).W) //Store Pipeline need it to get imm,func
+    val instr_ = UInt((p.XLEN-7).W) //Store Pipeline need it to get imm,func
     
     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps2 = UInt(log2Ceil(p.PRF_DEPTH).W)
@@ -206,7 +206,7 @@ class DISPATCH_STISSUE_uop(implicit p: Parameters) extends uop {
 
 class EXUISSUE_EXU_uop(implicit p: Parameters) extends uop {
     override def prf_read_counts: Int = 2
-    val instr = UInt((p.XLEN-7).W)
+    val instr_ = UInt((p.XLEN-7).W)
     val instr_addr = UInt((p.XLEN).W)
 
     val instr_type = InstrType()
@@ -227,7 +227,7 @@ class EXUISSUE_EXU_uop(implicit p: Parameters) extends uop {
 
 class STISSUE_STPIPE_uop(implicit p: Parameters) extends uop {
     override def prf_read_counts: Int = 2
-    val instr = UInt((p.XLEN-7).W)
+    val instr_ = UInt((p.XLEN-7).W)
 
     val ps1_value = UInt(p.XLEN.W)
     val ps2_value = UInt(p.XLEN.W)
@@ -239,7 +239,7 @@ class STISSUE_STPIPE_uop(implicit p: Parameters) extends uop {
 
 class LDISSUE_LDPIPE_uop(implicit p: Parameters) extends uop {
     override def prf_read_counts: Int = 1
-    val instr = UInt((p.XLEN-7).W)
+    val instr_ = UInt((p.XLEN-7).W)
 
     val ps1_value = UInt(p.XLEN.W)
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
@@ -307,5 +307,21 @@ class STPIPE_WB_uop(implicit p: Parameters) extends uop {
 class InstrDebug(implicit p: Parameters) extends Bundle {
     val instr = UInt(p.XLEN.W)
     val pc = UInt(p.XLEN.W)
+
+    def apply(payload: uop, valid: Bool): Unit = {
+        this := RegNext(Mux(valid, payload.debug, 0.U.asTypeOf(this.cloneType)))
+    }
+    def apply(payload: Valid[uop]): Unit = {
+        this := RegNext(Mux(payload.valid, payload.bits.debug, 0.U.asTypeOf(this.cloneType)))
+    }
+    def apply(payload: DecoupledIO[uop]): Unit = {
+        this := RegNext(Mux(payload.valid, payload.bits.debug, 0.U.asTypeOf(this.cloneType)))
+    }
+    def apply(instr: UInt, pc: UInt, valid: Bool): Unit = {
+        val temp = Wire(this.cloneType)
+        temp.instr := instr
+        temp.pc := pc
+        this := RegNext(Mux(valid, temp, 0.U.asTypeOf(this.cloneType)))
+    }
 }
 

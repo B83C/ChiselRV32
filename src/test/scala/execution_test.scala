@@ -113,7 +113,7 @@ class ALUTest extends AnyFlatSpec with ChiselScalatestTester {
       dut =>
       // 准备LUI指令(u型立即数)
       val luiInstr = "b0000000000001010100000000".U(25.W)
-      dut.io.uop.bits.instr.poke(luiInstr)
+      dut.io.uop.bits.instr_.poke(luiInstr)
       dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.IMM)
       dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.Z)
       dut.io.uop.valid.poke(true.B)
@@ -128,7 +128,7 @@ class ALUTest extends AnyFlatSpec with ChiselScalatestTester {
   "ALFU" should "correctly handle AUIPC instruction" in {
     test(new ALUFU) { dut =>
       val auipcInstr = "b0000000000010101000000000".U(25.W) // imm=0x10101 (20位)
-      dut.io.uop.bits.instr.poke(auipcInstr)
+      dut.io.uop.bits.instr_.poke(auipcInstr)
       dut.io.uop.bits.instr_addr.poke("h10000000".U)
 
       // 设置操作数选择
@@ -153,7 +153,7 @@ class ALUTest extends AnyFlatSpec with ChiselScalatestTester {
     test(new ALUFU) { dut =>
       // 准备ADD指令
       val addInstr = "b0000000000100000100000011".U(25.W)
-      dut.io.uop.bits.instr.poke(addInstr)
+      dut.io.uop.bits.instr_.poke(addInstr)
       dut.io.uop.bits.ps1_value.poke(5.U)
       dut.io.uop.bits.ps2_value.poke(3.U)
       dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
@@ -170,7 +170,7 @@ class ALUTest extends AnyFlatSpec with ChiselScalatestTester {
     test(new ALUFU) { dut =>
       // 第一个操作: ADD
       val addInstr = "b0000000000100000100000011".U(25.W)
-      dut.io.uop.bits.instr.poke(addInstr)
+      dut.io.uop.bits.instr_.poke(addInstr)
       dut.io.uop.bits.ps1_value.poke(10.U)
       dut.io.uop.bits.ps2_value.poke(5.U)
       dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
@@ -181,7 +181,7 @@ class ALUTest extends AnyFlatSpec with ChiselScalatestTester {
 
       // 第二个操作: SUB
       val subInstr = "b0100000000100000100000100".U(25.W)
-      dut.io.uop.bits.instr.poke(subInstr)
+      dut.io.uop.bits.instr_.poke(subInstr)
       dut.io.uop.bits.ps1_value.poke(10.U)
       dut.io.uop.bits.ps2_value.poke(5.U)
       dut.clock.step()
@@ -207,7 +207,7 @@ class MULFUTest extends AnyFlatSpec with ChiselScalatestTester {
   "MULFU" should "correctly handle MUL operations" in {
     test(new MULFU) { dut =>
       // 设置25位指令字段：func3=000(MUL), rs2=2, rs1=1, rd=0
-      dut.io.uop.bits.instr.poke("b0000001_00010_00001_000_00000".U)
+      dut.io.uop.bits.instr_.poke("b0000001_00010_00001_000_00000".U)
       dut.io.uop.bits.ps1_value.poke(5.U) // 操作数1 = 5
       dut.io.uop.bits.ps2_value.poke(3.U) // 操作数2 = 3
       dut.io.uop.bits.instr_type.poke(InstrType.MUL)
@@ -226,7 +226,7 @@ class MULFUTest extends AnyFlatSpec with ChiselScalatestTester {
   "MULFU" should "正确执行MULH操作" in {
     test(new MULFU) { dut =>
       // func3=001(MULH)
-      dut.io.uop.bits.instr.poke("b0000001_00010_00001_001_00000".U)
+      dut.io.uop.bits.instr_.poke("b0000001_00010_00001_001_00000".U)
       dut.io.uop.bits.ps1_value.poke("h80000000".U) // -2^31
       dut.io.uop.bits.ps2_value.poke("h80000000".U) // -2^31
       dut.io.uop.bits.instr_type.poke(InstrType.MUL)
@@ -244,7 +244,7 @@ class MULFUTest extends AnyFlatSpec with ChiselScalatestTester {
   "MULFU" should "正确处理背靠背乘法" in {
     test(new MULFU) { dut =>
       // 第一个乘法
-      dut.io.uop.bits.instr.poke("b0000001_00010_00001_000_00000".U)
+      dut.io.uop.bits.instr_.poke("b0000001_00010_00001_000_00000".U)
       dut.io.uop.bits.ps1_value.poke(5.U)
       dut.io.uop.bits.ps2_value.poke(3.U)
       dut.io.uop.bits.instr_type.poke(InstrType.MUL)
@@ -258,7 +258,7 @@ class MULFUTest extends AnyFlatSpec with ChiselScalatestTester {
       dut.out.bits.pdst_value.expect(15.U)
 
       // 立即开始第二个乘法
-      dut.io.uop.bits.instr.poke("b0000001_00011_00010_000_00001".U)
+      dut.io.uop.bits.instr_.poke("b0000001_00011_00010_000_00001".U)
       dut.io.uop.bits.ps1_value.poke(7.U)
       dut.io.uop.bits.ps2_value.poke(6.U)
 
@@ -306,7 +306,7 @@ class DIVFUTest extends AnyFlatSpec with ChiselScalatestTester {
   "DIVFU" should "correctly perform signed division (DIV)" in {
     test(new DIVFU) { dut =>
       // 构造指令
-      dut.io.uop.bits.instr.poke("b0000001_00010_00001_100_00000".U)
+      dut.io.uop.bits.instr_.poke("b0000001_00010_00001_100_00000".U)
       dut.io.uop.bits.instr_type.poke(InstrType.DIV_REM)
 
       // 测试1: 10 / 3 = 3
@@ -370,7 +370,7 @@ class DIVFUTest extends AnyFlatSpec with ChiselScalatestTester {
 }
   "DIVFU" should "correctly perform unsigned division (DIVU)" in {
     test(new DIVFU) { dut =>
-      dut.io.uop.bits.instr.poke("b0000001_00010_00001_101_00000".U)
+      dut.io.uop.bits.instr_.poke("b0000001_00010_00001_101_00000".U)
       dut.io.uop.bits.fu_signals.opr1_sel.poke(OprSel.REG)
       dut.io.uop.bits.fu_signals.opr2_sel.poke(OprSel.REG)
       dut.io.uop.bits.instr_type.poke(InstrType.DIV_REM)

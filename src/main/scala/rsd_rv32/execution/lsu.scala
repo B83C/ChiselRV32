@@ -133,7 +133,7 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
 
 
 
-  val instr = io.load_uop.bits.instr
+  val instr = io.load_uop.bits.instr_
   val ps1_value = io.load_uop.bits.ps1_value
 
 
@@ -331,7 +331,7 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
   val instr = Wire(UInt((p.XLEN - 7).W))
   val ps1_value = Wire(UInt(p.XLEN.W))
 
-  instr := io.store_uop.bits.instr
+  instr := io.store_uop.bits.instr_
   ps1_value := io.store_uop.bits.ps1_value
   
   val imm_high = instr(24, 18)

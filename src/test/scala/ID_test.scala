@@ -36,7 +36,7 @@ class DecodeUnitTest extends AnyFlatSpec with ChiselScalatestTester {
 
       for (i <- 0 until p.CORE_WIDTH) {
         c.io.rename_uop(i).valid.expect(true.B)
-        c.io.rename_uop(i).bits.instr.expect(instr(31, 7))
+        c.io.rename_uop(i).bits.instr_.expect(instr(31, 7))
         c.io.rename_uop(i).bits.instr_type.expect(InstrType.ALU)
         c.io.rename_uop(i).bits.fu_signals.opr1_sel.expect(OprSel.REG)
         c.io.rename_uop(i).bits.fu_signals.opr2_sel.expect(OprSel.IMM)

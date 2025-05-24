@@ -35,10 +35,10 @@ class exu_issue_test extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.exu_issue_uop.bits(1).valid.poke(0.U)
       dut.io.exu_issue_uop.bits(1).bits.iq_index.poke(1.U)
       dut.clock.step()
-      dut.io.queue(2).busy.expect(1.U)
-      dut.io.queue(1).busy.expect(0.U)
+      dut.io.queue(2).waiting.expect(1.U)
+      dut.io.queue(1).waiting.expect(0.U)
       dut.clock.step()
-      dut.io.queue(2).busy.expect(0.U)
+      dut.io.queue(2).waiting.expect(0.U)
       dut.clock.step()
       //储存
       println("the case that can't issue")
@@ -51,10 +51,10 @@ class exu_issue_test extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.exu_issue_uop.bits(1).valid.poke(0.U)
       dut.io.exu_issue_uop.bits(1).bits.iq_index.poke(1.U)
       dut.clock.step()
-      dut.io.queue(2).busy.expect(1.U)
-      dut.io.queue(1).busy.expect(0.U)
+      dut.io.queue(2).waiting.expect(1.U)
+      dut.io.queue(1).waiting.expect(0.U)
       dut.clock.step()
-      dut.io.queue(2).busy.expect(1.U)
+      dut.io.queue(2).waiting.expect(1.U)
       dut.clock.step()
       //一次性接收两条条目
       println("the case that receive 2 content")
@@ -171,7 +171,7 @@ class exu_issue_test extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.rob_commitsignal(0).bits.mispred.poke(1.U)
       dut.clock.step(2)
       for (i <- 0 until 5){
-        dut.io.queue(i).busy.expect(0.U)
+        dut.io.queue(i).waiting.expect(0.U)
       }
       println("test pass")
     }
