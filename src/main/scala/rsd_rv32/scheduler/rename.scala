@@ -117,6 +117,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
   }} 
   
   // 来自ROB的commit
+  // 我发现chisel会自动处理写入冲突的问题，最后的赋值才是有效的
   io.rob_commitsignal.bits.zip(prf_freelist.io.enq_request).foreach{ case (commit, prf_enq) => {
     val wb_valid =  commit.valid && io.rob_commitsignal.valid && commit.wb
     prf_enq.valid := wb_valid

@@ -100,7 +100,7 @@ class ld_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
 
     val selected_payload_coerced = Wire(new LDISSUE_LDPIPE_uop)
     (selected_payload_coerced: Data).waiveAll :<>= (selected_payload: Data).waiveAll
-    selected_payload_coerced.ps1_value := DontCare
+    selected_payload_coerced.ps1_value := 1.U
     io.load_uop.valid := RegNext(selection_valid)
     io.load_uop.bits := RegEnable(selected_payload_coerced, selection_valid)
 

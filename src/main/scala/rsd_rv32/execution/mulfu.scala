@@ -70,7 +70,11 @@ class BoothMultiplier extends Module {
 
 
 class MULFU(implicit p: Parameters) extends FunctionalUnit() {
-  override def supportedInstrTypes = Set(InstrType.MUL)
+  override val properties = FUProps(
+    Set(InstrType.MUL),
+    bufferedInput = false,
+    bufferedOutput = false
+  )
 
   val boothMul = Module(new BoothMultiplier())
 
@@ -87,9 +91,9 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   // 操作数选择逻辑
   def Sel(sel: OprSel.Type, reg: UInt) = {
     MuxLookup(sel, 0.U)(Seq(
-      OprSel.IMM -> immExtract(Cat(io.uop.bits.instr_, 0.U(7.W)), IType.I),
+      OprSel.IMM -> immExtract(Cat(input.bits.instr_, 0.U(7.W)), IType.I),
       OprSel.REG -> reg,
-      OprSel.PC -> io.uop.bits.instr_addr,
+      OprSel.PC -> input.bits.instr_addr,
       OprSel.Z -> 0.U,
     ))
   }
@@ -98,7 +102,7 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   boothMul.io.in.num_2 := 0.S(32.W)
 
   // 指令解码
-  val instr = io.uop.bits.instr_
+  val instr = input.bits.instr_
   // 从指令中提取func3字段(R-type指令的14-12位)
   val func3 = instr(7,5)
   // 解码乘法类型
@@ -113,10 +117,10 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
     is(s_idle) {
       when(reset.asBool) {
         state := s_idle
-    }.elsewhen(io.uop.valid && io.uop.bits.instr_type === InstrType.MUL) {
+    }.elsewhen(input.valid && input.bits.instr_type === InstrType.MUL) {
         // 锁存操作数
-        val op1 = Sel(io.uop.bits.fu_signals.opr1_sel, io.uop.bits.ps1_value).asSInt
-        val op2 = Sel(io.uop.bits.fu_signals.opr2_sel, io.uop.bits.ps2_value).asSInt
+        val op1 = Sel(input.bits.fu_signals.opr1_sel, input.bits.ps1_value).asSInt
+        val op2 = Sel(input.bits.fu_signals.opr2_sel, input.bits.ps2_value).asSInt
 
         // 仍然更新寄存器用于后续状态
         op1Reg := op1
@@ -168,17 +172,17 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   val out_valid = (state === s_done) && !reset.asBool
   val out = Wire(new WB_uop)
   // 输出连接
-  (out: Data).waiveAll :<= (io.uop.bits: Data).waiveAll
+  (out: Data).waiveAll :<= (input.bits: Data).waiveAll
   out.pdst_value.valid := true.B
   out.pdst_value.bits := resultReg
 
-  io.out.bits := RegEnable(out, out_valid)
-  io.out.valid := RegNext(out_valid)
+  output.bits := out
+  output.valid := out_valid
 
   // 流控制
-  io.uop.ready := (state === s_idle) && !reset.asBool
+  input.ready := !input.valid && (state === s_idle) && !reset.asBool
 
   // Debugging
-  out.debug(io.uop.bits, out_valid)
+  out.debug(input.bits, out_valid)
 }
 

@@ -19,15 +19,14 @@ class Fetch_IO(implicit p: Parameters) extends CustomBundle {
     val rob_controlsignal = Flipped(Valid(new ROBControlSignal)) //来自于ROB的控制信号
     
     // with BranchPredictor
-    // instr_addr上面已写
-    val target_PC = Flipped(UInt(p.XLEN.W)) //预测的下个cycle取指的目标地址
-    val btb_hit = Flipped(Vec(p.CORE_WIDTH, Bool())) //1代表hit，0相反；将最年长的命中BTB的置为1，其余为0
-    val branch_pred = Flipped(Bool()) //branch指令的BHT的预测结果；1代表跳转，0相反
-    val GHR = Flipped(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照
+    val predicted_next_pc = Flipped(UInt(p.XLEN.W)) //预测的下个cycle取指的目标地址
+    val instr_mask = Flipped(Vec(p.CORE_WIDTH, Bool())) // 指令屏蔽位
+    val should_branch = Flipped(Bool()) //branch指令的BHT的预测结果；1代表跳转，0相反
+    val ghr = Flipped(UInt(p.GHR_WIDTH.W)) //作出预测时的全局历史寄存器快照
 }
 
 object FetchState extends ChiselEnum {
-    val rst, entry_pc, running, stopped = Value
+    val rst, awaiting_instr, running, stopped = Value
 }
 
 // Currently the FetchUnit consists of three stages:
@@ -54,8 +53,8 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     val rob_flush_pc = DontCare
 
     //分支预测
-    val whether_take_bp = io.branch_pred
-    val bp_target = io.target_PC
+    val whether_take_bp = io.should_branch
+    val bp_target = io.predicted_next_pc
 
     //决定下个pc(ROB>BP>default)
     pc_next := Mux(rob_flush_valid, rob_flush_pc,
@@ -64,8 +63,8 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     //更新PC寄存器
     when(!reset.asBool) {
         when(core_state === rst) {
-            core_state := entry_pc
-        }.elsewhen(core_state === entry_pc) {
+            core_state := awaiting_instr
+        }.elsewhen(core_state === awaiting_instr) {
             core_state := running
         }
         when(io.id_uop.ready && core_state =/= rst){
@@ -76,37 +75,45 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
 
     //为对齐时序而延迟一周期的内容
     val rob_flush_valid_delayed = RegNext(rob_flush_valid)
-    val PC_delayed = RegNext(pc_aligned)
-    val btb_hit_delayed = RegNext(io.btb_hit)
-    val GHR_delayed = RegNext(io.GHR)
-    val branch_pred_delayed = RegNext(io.branch_pred)
-    val target_PC_delayed = RegNext(io.target_PC)
+    
+    // val PC_delayed = RegNext(pc_aligned)
+    // val GHR_delayed = RegNext(io.ghr)
+    // val branch_pred_delayed = RegNext(io.should_branch)
+    // val target_PC_delayed = RegNext(io.predicted_next_pc)
 
-   
-    for (i <- 0 until p.CORE_WIDTH) {
+    val packet_first_valid_slot = pc_reg(log2Ceil(p.CORE_WIDTH - 1) + 2 , 2)
+    val instr_valid = Reg(UInt(p.CORE_WIDTH.W))
+    
+    instr_valid := (~0.U(p.CORE_WIDTH.W) << packet_first_valid_slot)(p.CORE_WIDTH - 1, 0)
+    val current_pc_aligned = RegNext(pc_aligned)
+    
+    val instr_mask = RegNext(io.instr_mask)
+    val ghr = RegNext(io.ghr)
+    val should_branch = RegNext(io.should_branch)
+    val predicted_next_pc = RegNext(io.predicted_next_pc)
+
+    io.id_uop.bits.zip(io.instr).zip(instr_valid.asBools).zip(instr_mask).zipWithIndex.foreach{case ((((id_uop, instr), valid), masked), i) => {
         val uop = Wire(new IF_ID_uop())
-        val current_pc = PC_delayed + (i.U << 2)
-        
+        val current_pc = current_pc_aligned + (i.U << 2)
+    
         uop.debug := DontCare 
-        uop.instr := io.instr(i)
+        uop.instr := instr
         uop.instr_addr := current_pc
-        
-        uop.target_PC := target_PC_delayed
-        uop.GHR := GHR_delayed
-        uop.branch_pred := Mux(branch_pred_delayed, BranchPred.T, BranchPred.NT)
-        uop.btb_hit := Mux(btb_hit_delayed(i), BTBHit.H, BTBHit.NH)
-        
-        val is_valid = (!rob_flush_valid_delayed) && io.id_uop.ready &&
-          (!(btb_hit_delayed(i) && branch_pred_delayed)) && core_state === running
+    
+        uop.predicted_next_pc := predicted_next_pc
+        uop.ghr := ghr
+        uop.branch_taken := should_branch
+        // uop.btb_hit := Mux(btb_hit_delayed(i), BTBHit.H, BTBHit.NH)
+    
+        val is_valid = valid && !masked 
 
         // TODO
         io.id_uop.bits(i).valid := RegNext(is_valid)
         io.id_uop.bits(i).bits := RegEnable(uop, is_valid)
-
-        io.id_uop.valid := RegNext(is_valid)
         
         // Debugging
         io.id_uop.bits(i).bits.debug(io.instr(i), current_pc, is_valid)
-    }
+    }}
+    io.id_uop.valid := RegNext(core_state === running)
 }
 

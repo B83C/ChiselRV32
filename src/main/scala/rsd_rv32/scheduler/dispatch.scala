@@ -30,9 +30,9 @@ class Dispatcher_IO(exu_fu_num: Int)(implicit p:Parameters) extends CustomBundle
   val ld_issued_index = Flipped(Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W)))//本周期Load Issue queue发出指令对应的issue queue ID，用于更新issue queue freelist
   // with sq
   val stq_full = Flipped(Bool()) // Store Queue空标志(0表示非满，1表示满)
-  val stq_head = Flipped(UInt(log2Ceil(p.STQ_DEPTH).W)) //store queue头部指针
+  // val stq_head = Flipped(UInt(log2Ceil(p.STQ_DEPTH).W)) //store queue头部指针
   val stq_tail = Flipped(UInt(log2Ceil(p.STQ_DEPTH).W)) //store queue尾部指针，指向入队处
-  val st_cnt = (UInt(log2Ceil(p.CORE_WIDTH + 1).W)) //本cycle派遣store指令的数量
+  val st_inc = Valid(UInt(log2Ceil(p.CORE_WIDTH + 1).W)) //本cycle派遣store指令的数量
 }
 
 // ooo_mode (Out of order) 表示乱序执行状态
@@ -177,9 +177,12 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
   val ld_valid = is_ld =/= 0.U
   val ex_valid = is_ex =/= 0.U
 
-  io.st_cnt := RegNext(PopCount(is_st.asBools))
    
   val output_valid = input_ready && io.dis_uop.valid
+  
+  io.st_inc.bits := RegNext(PopCount(is_st.asBools))
+  io.st_inc.valid := RegNext(output_valid)
+  
   io.rob_uop.valid := RegNext(output_valid)
   io.rob_uop.bits := RegEnable(VecInit(io.dis_uop.bits.map{c =>
     val out = Wire(Valid(new DISPATCH_ROB_uop()))
@@ -203,12 +206,14 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
   }), output_valid && ex_valid)
   
   io.ld_issue_uop.valid := RegNext(output_valid && ld_valid)
+  var stq_tail_offset = 0.U
   io.ld_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_ld.asBools).zip(ld_freelist.io.deq_request).zipWithIndex.map{case (((c, v), fl), rob_inner_ind) =>
     val out = Wire(Valid(new DISPATCH_LDISSUE_uop()))
     out.valid := c.valid &&  v && fl.valid
     (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
     out.bits.iq_index := fl.bits
-    out.bits.stq_tail := io.stq_tail //TODO: Check on its validity
+    // TODO
+    out.bits.stq_tail := io.stq_tail + stq_tail_offset//TODO: Check on its validity
     out.bits.rob_index := io.rob_index
     out.bits.rob_inner_index := rob_inner_ind.U
     out
@@ -218,12 +223,15 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
   io.st_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_st.asBools).zip(st_freelist.io.deq_request).zipWithIndex.map{case (((c, v), fl), rob_inner_ind) =>
     val out = Wire(Valid(new DISPATCH_STISSUE_uop()))
 
-    out.valid := c.valid &&  v && fl.valid
+    val valid = c.valid &&  v && fl.valid
+    out.valid := valid
     (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
     out.bits.iq_index := fl.bits
     out.bits.rob_index := io.rob_index
     out.bits.rob_inner_index := rob_inner_ind.U
-    out.bits.stq_index := io.stq_head //TODO: Check on its validity
+    // TODO stupidest thing ever seen
+    out.bits.stq_index := stq_tail_offset + io.stq_tail //TODO: Check on its validity
+    stq_tail_offset = stq_tail_offset + valid.asUInt
     out
   }), output_valid && st_valid)
 

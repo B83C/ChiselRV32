@@ -50,7 +50,11 @@ class Divider extends Module {
 
 
 class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
-  override def supportedInstrTypes = Set(InstrType.DIV_REM)
+  override val properties = FUProps(
+    Set(InstrType.DIV_REM),
+    bufferedInput = false,
+    bufferedOutput = true
+  )
 
   val divider = Module(new Divider())
 
@@ -70,15 +74,15 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   // 操作数选择逻辑
   def Sel(sel: OprSel.Type, reg: UInt) = {
     MuxLookup(sel, 0.U)(Seq(
-      OprSel.IMM -> immExtract(Cat(io.uop.bits.instr_, 0.U(7.W)), IType.I),
+      OprSel.IMM -> immExtract(Cat(input.bits.instr_, 0.U(7.W)), IType.I),
       OprSel.REG -> reg,
-      OprSel.PC -> io.uop.bits.instr_addr,
+      OprSel.PC -> input.bits.instr_addr,
       OprSel.Z -> 0.U,
     ))
   }
 
   // 指令解码 (从func3字段获取操作类型)
-  val instr = io.uop.bits.instr_
+  val instr = input.bits.instr_
   val func3 = instr(7,5) // R-type指令的func3字段
   val is_div    = func3 === 4.U  // DIV
   val is_divu   = func3 === 5.U  // DIVU
@@ -94,15 +98,15 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   // 状态机转换
   switch(state) {
     is(s_idle) {
-      when(io.uop.valid && (io.uop.bits.instr_type === InstrType.DIV_REM)) {
+      when(input.valid && (input.bits.instr_type === InstrType.DIV_REM)) {
         // 锁存操作数、操作类型和uop信息
-        val op1 = Sel(io.uop.bits.fu_signals.opr1_sel, io.uop.bits.ps1_value).asSInt
-        val op2 = Sel(io.uop.bits.fu_signals.opr2_sel, io.uop.bits.ps2_value).asSInt
+        val op1 = Sel(input.bits.fu_signals.opr1_sel, input.bits.ps1_value).asSInt
+        val op2 = Sel(input.bits.fu_signals.opr2_sel, input.bits.ps2_value).asSInt
 
         // 仍然更新寄存器用于后续状态
         op1Reg := op1
         op2Reg := op2
-        uopReg := io.uop.bits
+        uopReg := input.bits
 //
         // 设置除法器输入（根据不同类型处理符号扩展）
 //        val dividend = Mux(is_div || is_rem, op1Reg.abs.asUInt, op1Reg.asUInt)
@@ -191,12 +195,12 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   out.pdst_value.valid := true.B
   out.pdst_value.bits := resultReg
 
-  io.out.bits := RegEnable(out, out_valid)
-  io.out.valid := RegNext(out_valid)
+  output.bits := out
+  output.valid := out_valid
 
   // 流控制
-  io.uop.ready := (state === s_idle)
+  input.ready := (state === s_idle)
   
   // Debugging
-  out.debug(io.uop.bits, out_valid)
+  out.debug(input.bits, out_valid)
 }

@@ -41,6 +41,7 @@ case class Parameters(
 object IType extends Enumeration {
   type Type = Value
   val
+    R,
      I,
      S,
      B,

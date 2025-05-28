@@ -3,6 +3,7 @@ package rsd_rv32.common
 import chisel3._
 import chisel3.util._
 import rsd_rv32.common._
+import rsd_rv32.scheduler._
 
 package object Utils {
   def is_in[T, R](result: R, allowed: T*)(implicit value: T): Option[R] =
@@ -34,7 +35,6 @@ package object Utils {
     val value = Flipped(genT.cloneType)
     val addr  = genQ.cloneType
     val valid = Bool()
-    // override def cloneType: this.type = new ReadValueRequest(genT, genQ).asInstanceOf[this.type]
   }
 
   object ReadValueRequest {
@@ -49,11 +49,6 @@ package object Utils {
         req
     }
   }
-  // case class ReadValueRequest[T <: Data, Q <: Data](data: T, addr_type: Q) extends Bundle {
-  //   val value = Flipped(data)
-  //   val addr = addr_type
-  //   val valid = Bool()
-  // }
 }
   
 // Helper tool to generate RiscV instructions
@@ -172,6 +167,7 @@ object Instr {
     val funct7 = instr(31, 25)
 
     val imm = instr_type match {
+      case IType.R => 0.U
       case IType.I => instr(31,20)
       case IType.S => Cat(instr(31,25),instr(11,7))
       case IType.B => Cat(instr(31), instr(7), instr(30, 25), instr(11, 8), 0.U(1.W))

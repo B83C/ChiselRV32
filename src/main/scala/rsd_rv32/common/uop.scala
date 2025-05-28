@@ -7,17 +7,10 @@ object InstrType extends ChiselEnum {
     val ALU, Branch, Jump, LD, ST, CSR, MUL, DIV_REM = Value
 }
 
-object BranchPred extends ChiselEnum {
-    val T, NT = Value
-}
-
 /*object JumpType extends ChiselEnum {
     val JAL, JALR = Value
 }*/
 
-object BTBHit extends ChiselEnum{
-    val H, NH = Value
-}
 
 object OprSel extends ChiselEnum {
     val IMM, REG, PC, Z = Value
@@ -110,10 +103,9 @@ abstract class uop(implicit p: Parameters) extends CustomBundle {
 class IF_ID_uop(implicit p: Parameters) extends uop {
     val instr = UInt(p.XLEN.W) 
     val instr_addr = UInt(p.XLEN.W) //needed by rob, BU, ALU
-    val target_PC = UInt(p.XLEN.W) //needed by BU
-    val GHR = UInt(p.GHR_WIDTH.W) //needed by rob
-    val branch_pred = BranchPred() //needed by BU
-    val btb_hit = BTBHit() //needed by rob
+    val predicted_next_pc = UInt(p.XLEN.W) //needed by BU
+    val ghr = UInt(p.GHR_WIDTH.W) //needed by rob
+    val branch_taken = Bool() //needed by BU
 }
 
 class ID_RENAME_uop(implicit p: Parameters) extends uop {
@@ -124,10 +116,10 @@ class ID_RENAME_uop(implicit p: Parameters) extends uop {
     val fu_signals = new FUSignals() 
 
     val instr_addr = UInt(p.XLEN.W)
-    val target_PC = UInt(p.XLEN.W)
-    val GHR = UInt(p.GHR_WIDTH.W)
-    val branch_pred = BranchPred()
-    val btb_hit = BTBHit()
+    val predicted_next_pc = UInt(p.XLEN.W)
+    val ghr = UInt(p.GHR_WIDTH.W)
+    val branch_taken = Bool()
+    // val btb_hit = BTBHit()
 }
 
 //继承ID_RENAME的uop
@@ -147,9 +139,9 @@ class DISPATCH_ROB_uop(implicit p: Parameters) extends uop {
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val rd = UInt(5.W)
 
-    val GHR = UInt(p.GHR_WIDTH.W)
+    val ghr = UInt(p.GHR_WIDTH.W)
     //val branch_pred = BranchPred()
-    val btb_hit = BTBHit()
+    // val btb_hit = BTBHit()
     
     //val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
     //val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
@@ -163,8 +155,8 @@ class DISPATCH_EXUISSUE_uop(implicit p: Parameters) extends uop {
     val instr_type = InstrType()
     val fu_signals = new FUSignals()
 
-    val branch_pred = BranchPred()
-    val target_PC = UInt(p.XLEN.W)
+    val branch_taken = Bool()
+    val predicted_next_pc = UInt(p.XLEN.W)
 
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
     val ps1 = UInt(log2Ceil(p.PRF_DEPTH).W)
@@ -215,8 +207,8 @@ class EXUISSUE_EXU_uop(implicit p: Parameters) extends uop {
     val ps1_value = UInt(p.XLEN.W)
     val ps2_value = UInt(p.XLEN.W)
 
-    val branch_pred = BranchPred()
-    val target_PC = UInt(p.XLEN.W)
+    val branch_taken = Bool()
+    val predicted_next_pc = UInt(p.XLEN.W)
 
     val pdst = UInt(log2Ceil(p.PRF_DEPTH).W)
 
@@ -280,7 +272,7 @@ class BU_uop(implicit p: Parameters) extends Bundle {
     //writeback to ROB
     val mispred = Bool() //1 if mispred, 0 otherwise
     val target_PC = UInt(p.XLEN.W)
-    val branch_direction = BranchPred()
+    val branch_taken = Bool()
 
     val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
     val rob_inner_index = UInt(log2Ceil(p.CORE_WIDTH).W)
@@ -307,6 +299,10 @@ class STPIPE_WB_uop(implicit p: Parameters) extends uop {
 class InstrDebug(implicit p: Parameters) extends Bundle {
     val instr = UInt(p.XLEN.W)
     val pc = UInt(p.XLEN.W)
+
+    def apply(): Unit = {
+        this := DontCare 
+    }
 
     def apply(payload: uop, valid: Bool): Unit = {
         this := RegNext(Mux(valid, payload.debug, 0.U.asTypeOf(this.cloneType)))

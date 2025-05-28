@@ -92,6 +92,7 @@ class mem(mem_path: String, memDepth: Int, instWidth: Int) extends CustomModule 
   }
 
   loadMemoryFromFile(memInside, mem_path, MemoryLoadFileType.Hex)
+  // loadMemoryFromFile(memInside, mem_path, MemoryLoadFileType.Hex)
 
   def readMemFile(file: String): Seq[Vec[UInt]] = {
     println(s"Reading from : ${file}")

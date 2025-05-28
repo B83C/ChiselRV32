@@ -44,8 +44,8 @@ class exu_issue_content(implicit p: Parameters) extends Bundle {
     val ps_ready = Vec(2, Bool()) // 源操作数的ready信号
 }
 
-class exu_issue_queue(fu_num: Int, fus: EXU.InstrTypeSets)(implicit p: Parameters) extends CustomModule {
-    val io = IO(new exu_issue_IO(fus.length, fu_num))
+class exu_issue_queue(fu_num: Int, fus_props: Seq[FUProps])(implicit p: Parameters) extends CustomModule {
+    val io = IO(new exu_issue_IO(fus_props.length, fu_num))
     val VALID = io.exu_issue_uop.valid
     val dis_uop = io.exu_issue_uop.bits
 
@@ -79,12 +79,13 @@ class exu_issue_queue(fu_num: Int, fus: EXU.InstrTypeSets)(implicit p: Parameter
     import InstrType._
 
     var mask = 0.U(p.ISSUE_DEPTH.W)
-    fus.reduce(_ ++ _).zip(io.prf_raddr).foreach{case (t, prf_raddr) => {
-        val exu_port = EXU.get_mapping_of_fus_that_support(fus)(t)(io.execute_uop)
-        val exu_issued_index_port = EXU.get_mapping_of_fus_that_support(fus)(t)(io.exu_issued_index)
+    fus_props.map(x => x.supportedInstr).reduce(_ ++ _).foreach{case instr_type => {
+        val exu_port = EXU.get_mapping_of_fus_that_support(fus_props)(instr_type)(io.execute_uop)
+        val prf_read_port = EXU.get_mapping_of_fus_that_support(fus_props)(instr_type)(io.prf_raddr)
+        val exu_issued_index_port = EXU.get_mapping_of_fus_that_support(fus_props)(instr_type)(io.exu_issued_index)
 
-        val ready_vec = VecInit(issue_queue.map(iq => iq.waiting && iq.ps_ready.reduce(_ && _) && iq.instr_type === t))
-        exu_port.zip(exu_issued_index_port).foreach{case (exu_uop, issued_ind) =>
+        val ready_vec = VecInit(issue_queue.map(iq => iq.waiting && iq.ps_ready.reduce(_ && _) && iq.instr_type === instr_type))
+        exu_port.zip(exu_issued_index_port).zip(prf_read_port).foreach{case ((exu_uop, issued_ind), prf_raddr) =>
             val ready_vec_masked = ready_vec.asUInt & ~mask
             val sel_oh = PriorityEncoderOH(ready_vec_masked.asBools)
             val sel_ind = OHToUInt(sel_oh) 

@@ -8,24 +8,17 @@ import rsd_rv32.common._
 
 //功能单元的抽象类，定义了底层模块端口
 class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
-  override def supportedInstrTypes = Set(InstrType.Branch, InstrType.Jump)
+  override val properties = FUProps(
+    Set(InstrType.Branch, InstrType.Jump),
+    bufferedInput = true,
+    bufferedOutput = false
+  )
+  
   val bu_out = IO(Valid(new BU_uop))
 
-//  val br = Module(new BR())
-//  br.io.rs1 := io.uop.bits.ps1_value
-//  br.io.rs2 := io.uop.bits.ps2_value
-//  br.io.pc := io.uop.bits.instr_addr
-  /* 分支预测结果输出接口
-  val branch_info = Valid(new Bundle {
-    val taken = Bool()
-    val target = UInt(p.XLEN.W)
-  })
-
-   */
-
   // 从uop中提取控制信号
-  val fu_signals = io.uop.bits.fu_signals
-  val instr_type = io.uop.bits.instr_type
+  val fu_signals = input.bits.fu_signals
+  val instr_type = input.bits.instr_type
 
   // 指令类型判断
   val is_conditional = instr_type === InstrType.Branch
@@ -36,9 +29,9 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
 
   def Sel(sel: OprSel.Type, reg: UInt,is_jal: Boolean = false, is_jalr: Boolean = false) = {
     MuxLookup(sel, 0.U)(Seq(
-      OprSel.IMM -> Mux(is_jalr.asBool, immExtract(Cat(io.uop.bits.instr_, 0.U(7.W)), IType.I), Mux(is_jal.asBool,immExtract(Cat(io.uop.bits.instr_, 0.U(7.W)), IType.J),immExtract(Cat(io.uop.bits.instr_, 0.U(7.W)), IType.B))),
+      OprSel.IMM -> Mux(is_jalr.asBool, immExtract(Cat(input.bits.instr_, 0.U(7.W)), IType.I), Mux(is_jal.asBool,immExtract(Cat(input.bits.instr_, 0.U(7.W)), IType.J),immExtract(Cat(input.bits.instr_, 0.U(7.W)), IType.B))),
       OprSel.REG -> reg,
-      OprSel.PC -> io.uop.bits.instr_addr,
+      OprSel.PC -> input.bits.instr_addr,
       OprSel.Z -> 0.U,
     ))
   }
@@ -51,9 +44,9 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
   val imm_b = Sel(OprSel.IMM, 0.U)                   // B-type立即数（默认）
 
   // 分支方向判断
-  val actual_direction = Wire(BranchPred())
+  val actual_taken = Wire(Bool())
   val func3 = Wire(UInt(3.W))
-  func3 := io.uop.bits.instr_(7, 5)
+  func3 := input.bits.instr_(7, 5)
   val temp = MuxLookup(func3, false.B)(
     Seq(
       "b000".U  -> (rs1 === rs2),
@@ -64,11 +57,7 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
       "b111".U -> (rs1 >= rs2),
     )
   )
-  when (is_jal || is_jalr){
-    actual_direction := BranchPred.T
-  }.otherwise{
-    actual_direction := Mux(temp, BranchPred.T, BranchPred.NT)
-  }
+  actual_taken := Mux(input.valid, Mux(is_jal || is_jalr, true.B, temp), false.B)
 
   // 目标地址计算（使用Sel获取的操作数）
   val jal_target = pc + imm_j
@@ -86,8 +75,8 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
 
 
   // 获取比较操作数（通过Sel函数）
-  lazy val ps1 = io.uop.bits.ps1_value
-  lazy val ps2 = io.uop.bits.ps2_value
+  lazy val ps1 = input.bits.ps1_value
+  lazy val ps2 = input.bits.ps2_value
   lazy val rs1 = Sel(OprSel.REG, ps1)
   lazy val rs2 = Sel(OprSel.REG, ps2)
 
@@ -100,37 +89,37 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
   val return_addr = pc + 4.U
 
   // 预测错误判断
-  //val mispred = is_conditional && (actual_direction =/= io.uop.bits.branch_pred || ((actual_direction === BranchPred.T) && actual_target =/= io.uop.bits.target_PC))
-  val mispred = actual_direction =/= io.uop.bits.branch_pred || ((actual_direction === BranchPred.T) && (io.uop.bits.branch_pred === BranchPred.T) && actual_target =/= io.uop.bits.target_PC)
+  //val mispred = is_conditional && (actual_taken=/= input.bits.branch_pred || ((actual_taken=== BranchPred.T) && actual_target =/= input.bits.target_PC))
+  val mispred = actual_taken=/= io.uop.bits.branch_taken || ((actual_taken) && (io.uop.bits.branch_taken) && actual_target =/= io.uop.bits.predicted_next_pc)
 
-  // data_out.instr := io.uop.bits.instr
+  // data_out.instr := input.bits.instr
 
   val bu_uop_out = Wire(new BU_uop)
   val out = Wire(new WB_uop)
   
   // ROB写回信息
-  bu_uop_out.is_conditional := io.uop.bits.instr_type === InstrType.Branch
+  bu_uop_out.is_conditional := input.bits.instr_type === InstrType.Branch
   bu_uop_out.mispred := mispred // 来自之前计算的预测错误信号
   bu_uop_out.target_PC := actual_target // 计算出的实际目标地址
-  bu_uop_out.branch_direction := actual_direction // 实际分支方向
-  (bu_uop_out: Data).waiveAll :<= (io.uop.bits: Data).waiveAll
+  bu_uop_out.branch_taken := actual_taken// 实际分支方向
+  (bu_uop_out: Data).waiveAll :<= (input.bits: Data).waiveAll
 
   // PRF写回信息（JAL/JALR需要）
   out.pdst_value.bits := return_addr // PC+4（JAL/JALR的返回地址）
-  (out: Data).waiveAll :<= (io.uop.bits: Data).waiveAll
+  (out: Data).waiveAll :<= (input.bits: Data).waiveAll
   // Overwrites
-  out.pdst_value.valid := io.uop.bits.instr_type =/= InstrType.Branch // 当指令为jump类型时，写回有效
+  out.pdst_value.valid := input.bits.instr_type =/= InstrType.Branch // 当指令为jump类型时，写回有效
 
   // 输出连接
-  io.out.valid := RegNext(io.uop.valid)
-  bu_out.valid := RegNext(io.uop.valid)
-  io.out.bits := RegEnable(out, io.uop.valid)
-  bu_out.bits := RegEnable(bu_uop_out, io.uop.valid)
+  output.valid := input.valid
+  bu_out.valid := input.valid
+  output.bits := out
+  bu_out.bits := bu_uop_out
   
-  io.uop.ready := true.B // BranchFU通常单周期完成
+  input.ready := true.B // BranchFU通常单周期完成
 
   // Debugging
-  out.debug(io.uop)
+  out.debug := input.bits.debug
 }
 
 
@@ -173,8 +162,8 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
     br_fu.io.req.bits.kill := io.flush
 
     // 连接输出到写回端口
-    io.wb.valid := br_fu.io.io.out.valid
-    io.wb.bits := br_fu.io.io.out.bits
+    io.wb.valid := br_fu.io.output.valid
+    io.wb.bits := br_fu.io.output.bits
 
     // 分支预测接口
     io.pred.taken := br_fu.io.branch_info.get.taken

@@ -123,7 +123,7 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
         instr_type := InstrType.ST
         //immExt := Cat(Fill(20, immS(11)), immS)
         opr1_sel := OprSel.REG
-        opr2_sel := OprSel.IMM
+        opr2_sel := OprSel.REG
       }
 
       is("b1100011".U) { //Branch

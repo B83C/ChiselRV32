@@ -84,12 +84,16 @@ class CSRFU_Default(implicit p: Parameters) extends CSRFU(Seq(
 ))
 
 class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extends FunctionalUnit with CSRConsts {
-  override def supportedInstrTypes = Set(InstrType.CSR)
+  override val properties = FUProps(
+    Set(InstrType.CSR),
+    bufferedInput = false,
+    bufferedOutput = true
+  )
   //TODO
-  io.uop.ready := true.B
+  input.ready := true.B
 
-  val uop = io.uop.bits
-  // (io.out.bits: Data).waiveAll :<>= (uop: Data).waiveAll
+  val uop = input.bits
+  // (output.bits: Data).waiveAll :<>= (uop: Data).waiveAll
 
   // val mcycle = Module(new McycleDevice(p.CSR_MCYCLE_ADDR.U))
   // val mtime  = Module(new MtimeDevice(p.CSR_MTIME_ADDR.U))
@@ -133,8 +137,8 @@ class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extend
   out.pdst_value.valid := should_output
   out.pdst_value.bits := first_ready_rdata
 
-  io.out.bits := RegEnable(out, should_output)
-  io.out.valid := RegNext(should_output)
+  output.bits := out
+  output.valid := should_output
 
   ren := should_output
 
@@ -148,7 +152,7 @@ class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extend
   // val rs1_is_imm = uop.fu_signals.opr1_sel === OprSel.IMM // TODO: This is more appropriate
   val write_value = Mux(rs1_is_imm, rs1, uop.ps1_value)
 
-  when(io.uop.valid) {
+  when(input.valid) {
     when(opr_is(CSRRW) || opr_is(CSRRWI)) {
       printf(cf"CSRRW instr detected csr ${csr}%x immediate ${rs1_is_imm} rs1 ${rs1} is_imm ${rs1_is_imm} write_value ${write_value}, first_ready_rdata ${first_ready_rdata}\n")
       //Util function for assembling and disassembling instruction
@@ -169,5 +173,5 @@ class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extend
   }
 
   // Debugging
-  out.debug(io.uop.bits, should_output)
+  out.debug(input.bits, should_output)
 }

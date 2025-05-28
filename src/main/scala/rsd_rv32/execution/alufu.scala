@@ -8,72 +8,76 @@ import Utils._
 
 //功能单元的抽象类，定义了底层模块端口
 class ALUFU(implicit p: Parameters) extends FunctionalUnit() with ALUConsts  {
-  override def supportedInstrTypes = Set(InstrType.ALU)
+  override val properties = FUProps(
+    Set(InstrType.ALU),
+    bufferedInput = true,
+    bufferedOutput = true
+  )
   // 为了配合上一级的uop，输出按FU区分
   
   val internal_alu = Module(new ALU())
-  val fu_signals = io.uop.bits.fu_signals
+  val fu_signals = input.bits.fu_signals
 
   val is_LUI = fu_signals.opr1_sel === OprSel.IMM
   val is_AUIPC = fu_signals.opr1_sel === OprSel.PC
   
   def Sel(sel: OprSel.Type, reg: UInt) = {
     MuxLookup(sel, 0.U)(Seq(
-      OprSel.IMM -> Mux(is_LUI || is_AUIPC, immExtract(Cat(io.uop.bits.instr_, 0.U(7.W)), IType.U), immExtract(Cat(io.uop.bits.instr_, 0.U(7.W)), IType.I)),
+      OprSel.IMM -> Mux(is_LUI || is_AUIPC, immExtract(Cat(input.bits.instr_, 0.U(7.W)), IType.U), immExtract(Cat(input.bits.instr_, 0.U(7.W)), IType.I)),
       OprSel.REG -> reg,
-      OprSel.PC -> io.uop.bits.instr_addr,
+      OprSel.PC -> input.bits.instr_addr,
       OprSel.Z -> 0.U,
     ))
   }
 
-  internal_alu.io.in1 := Sel(fu_signals.opr1_sel, io.uop.bits.ps1_value)
-  internal_alu.io.in2 := Sel(fu_signals.opr2_sel, io.uop.bits.ps2_value)
+  internal_alu.io.in1 := Sel(fu_signals.opr1_sel, input.bits.ps1_value)
+  internal_alu.io.in2 := Sel(fu_signals.opr2_sel, input.bits.ps2_value)
 
 
   internal_alu.io.fn := Mux(is_AUIPC, ALU_ADD,MuxLookup(fu_signals.opr2_sel, ALU_ADD)(Seq(
     // 立即数指令 (I-type)
-    OprSel.IMM -> MuxLookup(io.uop.bits.instr_(7, 5), ALU_ADD)(Seq(
+    OprSel.IMM -> MuxLookup(input.bits.instr_(7, 5), ALU_ADD)(Seq(
       "b000".U -> ALU_ADD,  // ADDI
       "b001".U -> ALU_SLL,  // SLLI
       "b010".U -> ALU_SLT,  // SLTI
       "b011".U -> ALU_SLTU, // SLTIU
       "b100".U -> ALU_XOR,  // XORI
-      "b101".U -> Mux(io.uop.bits.instr_(23), ALU_SRA, ALU_SRL), // SRAI/SRLI
+      "b101".U -> Mux(input.bits.instr_(23), ALU_SRA, ALU_SRL), // SRAI/SRLI
       "b110".U -> ALU_OR,   // ORI
       "b111".U -> ALU_AND   // ANDI
     )),
     // 寄存器指令 (R-type)
-    OprSel.REG -> MuxLookup(io.uop.bits.instr_(7, 5), ALU_ADD)(Seq(
-      "b000".U -> Mux(io.uop.bits.instr_(23), ALU_SUB, ALU_ADD), // SUB/ADD
+    OprSel.REG -> MuxLookup(input.bits.instr_(7, 5), ALU_ADD)(Seq(
+      "b000".U -> Mux(input.bits.instr_(23), ALU_SUB, ALU_ADD), // SUB/ADD
       "b001".U -> ALU_SLL,  // SLL
       "b010".U -> ALU_SLT,  // SLT
       "b011".U -> ALU_SLTU, // SLTU
       "b100".U -> ALU_XOR,  // XOR
-      "b101".U -> Mux(io.uop.bits.instr_(23), ALU_SRA, ALU_SRL), // SRA/SRL
+      "b101".U -> Mux(input.bits.instr_(23), ALU_SRA, ALU_SRL), // SRA/SRL
       "b110".U -> ALU_OR,   // OR
       "b111".U -> ALU_AND   // AND
     )),
   ))
   )
 
-  io.uop.ready := true.B
+  input.ready := true.B
   
   val out = Wire(new WB_uop)
-  (out: Data).waiveAll :<= (io.uop.bits: Data).waiveAll
+  (out: Data).waiveAll :<= (input.bits: Data).waiveAll
   out.pdst_value.valid := true.B // ALU always writes back
   when (is_LUI){
-    out.pdst_value.bits := (io.uop.bits.instr_(24, 5) << 12.U)
+    out.pdst_value.bits := (input.bits.instr_(24, 5) << 12.U)
   }.elsewhen(is_AUIPC){
-    out.pdst_value.bits := io.uop.bits.instr_addr + (io.uop.bits.instr_(24, 5) << 12.U)
+    out.pdst_value.bits := input.bits.instr_addr + (input.bits.instr_(24, 5) << 12.U)
   }.otherwise{
     out.pdst_value.bits := internal_alu.io.out
   }
 
-  io.out.bits := RegEnable(out, io.uop.valid)
-  io.out.valid := RegNext(io.uop.valid)
+  output.bits := out
+  output.valid := input.valid
   
   // Debugging
-  out.debug(io.uop.bits, io.uop.valid)
+  out.debug(input.bits, input.valid)
 }
 
 // ALU 的 interface

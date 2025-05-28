@@ -34,37 +34,38 @@ class EXU(implicit p: Parameters) extends Module {
   val fus = (bu ++ alu ++ mul ++ div)
   val io = IO(new EXUIO(fus.length))
   fus.zip(io.execute_uop).foreach { case (fu, in_uop) => 
-    fu.io.uop.valid := in_uop.valid
-    fu.io.uop.bits := in_uop.bits
-    in_uop.ready := fu.io.uop.ready
+    fu.input.valid := in_uop.valid
+    fu.input.bits := in_uop.bits
+    in_uop.ready := fu.input.ready
   }
 
   io.bu_signals := bu(0).bu_out
   
-  def fus_mapping: EXU.InstrTypeSets = fus.map(_.supportedInstrTypes)
+  def fus_properties: Seq[FUProps] = fus.map(_.properties)
 
   // Note that checks if instr_type is as subset of any FUs' supported types
-  io.wb_uop := VecInit(fus.map(_.io.out))
+  io.wb_uop := VecInit(fus.map(_.output))
 
   // In-order FUs should deserve better attention
   val csru = Module(new CSRFU_Default)
   //Serialised uop
-  csru.io.uop.bits := io.serialised_uop.bits
-  csru.io.uop.valid := io.serialised_uop.valid
+  csru.input.bits := io.serialised_uop.bits
+  csru.input.valid := io.serialised_uop.valid
   // CSRU should always be ready? 
-  io.serialised_wb_uop := csru.io.out
+  io.serialised_wb_uop := csru.output
 }
 
 object EXU {
 
   type InstrTypeSets = Seq[Set[InstrType.Type]]
-  def get_indicies_of_fus_that_support(instr_type_mapping: Seq[Set[InstrType.Type]])(instr_type: InstrType.Type*): Seq[Int] = {
+ 
+  def get_indicies_of_fus_that_support(instr_type_mapping: Seq[FUProps])(instr_type: InstrType.Type*): Seq[Int] = {
     instr_type_mapping.zipWithIndex.collect{
-      case (x, y) if instr_type.toSet.subsetOf(x) => y
+      case (x, y) if instr_type.toSet.subsetOf(x.supportedInstr) => y
     }
   }
-    
-  def get_mapping_of_fus_that_support[T <: Data](instr_type_mapping: Seq[Set[InstrType.Type]])(instr_type: InstrType.Type*)(vec: Vec[T]): Seq[T] = {
+  
+  def get_mapping_of_fus_that_support[T <: Data](instr_type_mapping: Seq[FUProps])(instr_type: InstrType.Type*)(vec: Vec[T]): Seq[T] = {
    val indices = get_indicies_of_fus_that_support(instr_type_mapping)(instr_type: _*)
 
     require(indices.nonEmpty, s"No functional units all the features: ${instr_type.mkString(", ")}")
