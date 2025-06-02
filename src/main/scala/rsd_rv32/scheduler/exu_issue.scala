@@ -11,19 +11,9 @@ class exu_issue_IO(exu_fu_num: Int, fu_num: Int)(implicit p: Parameters) extends
 
     //发射到ld的输出
     val execute_uop = Vec(exu_fu_num, Decoupled(new EXUISSUE_EXU_uop()))  //发射的指令
-
-    // 来自EXU的ready信号
-    // val readys = Flipped(Vec(exu_fu_num, Bool()))
-
     //PRF
     val prf_raddr = Vec(exu_fu_num, Valid(Vec(2, UInt(log2Ceil(p.PRF_DEPTH).W))))
 
-    //监听PRF的valid信号用于更新ready状态
-    // val prf_valid = Flipped(Vec(p.PRF_DEPTH, Bool())) //PRF的valid信号
-//    //监听FU后级间寄存器内的物理寄存器ready信号
-//    val wb_uop2 = Flipped((Vec(p.FU_NUM - p.BU_NUM - p.STU_NUM, Valid(new ALU_WB_uop()))))  //来自alu、mul、div、load pipeline的uop
-    //val ldu_wb_uop2 = Flipped(Valid(new LDPIPE_WB_uop()))  //来自ldu的uop
-    //监听FU处物理寄存器的ready信号
     // TODO
     val wb_uop = Flipped(Vec(fu_num, Valid(new WB_uop()))) //来自所有FU的WB
 
@@ -49,85 +39,90 @@ class exu_issue_queue(fu_num: Int, fus_props: Seq[FUProps])(implicit p: Paramete
     val VALID = io.exu_issue_uop.valid
     val dis_uop = io.exu_issue_uop.bits
 
-    val issue_queue = RegInit(
-        VecInit(Seq.fill(p.EXUISSUE_DEPTH) (
-            0.U.asTypeOf(new exu_issue_content())
-        ))
-    )
+    val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
 
-    val payload = RegInit(
-        VecInit(Seq.fill(p.EXUISSUE_DEPTH) (
-            0.U.asTypeOf(new DISPATCH_EXUISSUE_uop())
-        ))
-    )
+    withReset(reset.asBool || mispred) {
+        val issue_queue = RegInit(
+            VecInit(Seq.fill(p.EXUISSUE_DEPTH) (
+                0.U.asTypeOf(new exu_issue_content())
+            ))
+        )
 
-    val flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
-    dis_uop.foreach { uop =>
-        when(VALID && uop.valid)  {
-            val uop_ps = VecInit(Seq(uop.bits.ps1, uop.bits.ps2))
-            payload(uop.bits.iq_index) := uop.bits
-            issue_queue(uop.bits.iq_index).waiting := true.B
-            issue_queue(uop.bits.iq_index).ps := uop_ps
-            issue_queue(uop.bits.iq_index).instr_type := uop.bits.instr_type
+        val payload = RegInit(
+            VecInit(Seq.fill(p.EXUISSUE_DEPTH) (
+                0.U.asTypeOf(new DISPATCH_EXUISSUE_uop())
+            ))
+        )
 
-            // 因为ps可能在dispatch的时候就就绪了(信号来自WB)
 
-            issue_queue(uop.bits.iq_index).ps_ready := VecInit(uop_ps.map(ps => ps === 0.U || !io.prf_busys(ps) || io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst_value.valid && wb_uop.bits.pdst === ps)))
-        }
-    }
+        dis_uop.foreach { uop =>
+            when(VALID && uop.valid && !mispred)  {
+                val uop_ps = VecInit(Seq(uop.bits.ps1, uop.bits.ps2))
+                val uop_ps_is_reg = VecInit(Seq(uop.bits.opr1_sel, uop.bits.opr2_sel).map(_ === OprSel.REG))
+                payload(uop.bits.iq_index) := uop.bits
+                issue_queue(uop.bits.iq_index).waiting := true.B
+                issue_queue(uop.bits.iq_index).ps := uop_ps
+                issue_queue(uop.bits.iq_index).instr_type := uop.bits.instr_type
 
-    import InstrType._
+                // 因为ps可能在dispatch的时候就就绪了(信号来自WB)
 
-    var mask = 0.U(p.ISSUE_DEPTH.W)
-    fus_props.map(x => x.supportedInstr).reduce(_ ++ _).foreach{case instr_type => {
-        val exu_port = EXU.get_mapping_of_fus_that_support(fus_props)(instr_type)(io.execute_uop)
-        val prf_read_port = EXU.get_mapping_of_fus_that_support(fus_props)(instr_type)(io.prf_raddr)
-        val exu_issued_index_port = EXU.get_mapping_of_fus_that_support(fus_props)(instr_type)(io.exu_issued_index)
-
-        val ready_vec = VecInit(issue_queue.map(iq => iq.waiting && iq.ps_ready.reduce(_ && _) && iq.instr_type === instr_type))
-        exu_port.zip(exu_issued_index_port).zip(prf_read_port).foreach{case ((exu_uop, issued_ind), prf_raddr) =>
-            val ready_vec_masked = ready_vec.asUInt & ~mask
-            val sel_oh = PriorityEncoderOH(ready_vec_masked.asBools)
-            val sel_ind = OHToUInt(sel_oh) 
-            val selected_entry = issue_queue(sel_ind)
-            val selected_payload = payload(sel_ind)
-            val selection_valid = ready_vec_masked.asUInt =/= 0.U && exu_uop.ready
-
-            val selected_payload_coerced = Wire(new EXUISSUE_EXU_uop)
-            (selected_payload_coerced: Data).waiveAll :<>= (selected_payload: Data).waiveAll
-            selected_payload_coerced.ps1_value := DontCare
-            selected_payload_coerced.ps2_value := DontCare
-
-            when(selection_valid) {
-                issue_queue(sel_ind).waiting := false.B
+                issue_queue(uop.bits.iq_index).ps_ready := VecInit(uop_ps.zip(uop_ps_is_reg).map{case (ps, is_reg) => !is_reg || !io.prf_busys(ps) || io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst.valid && wb_uop.bits.pdst.bits === ps)})
             }
-
-            exu_uop.valid := RegNext(selection_valid)
-            exu_uop.bits := RegEnable(selected_payload_coerced, selection_valid)
-
-            // Assuming that prf read happens asynchronously
-            prf_raddr.bits := RegEnable(selected_entry.ps, selection_valid)
-            prf_raddr.valid:= RegNext(selection_valid)
-
-            // This is when freeing happens synchronously
-            issued_ind.bits := sel_ind
-            issued_ind.valid := selection_valid
-
-            mask = mask | Mux(selection_valid, VecInit(sel_oh).asUInt, 0.U)
-
-            // Debugging
-            import chisel3.experimental.BundleLiterals._
-            exu_uop.bits.debug(selected_payload, selection_valid)
         }
-    }}
+
+        var mask = 0.U(p.ISSUE_DEPTH.W)
+        fus_props.map(x => x.supportedInstr).foreach{case instr_types => {
+            val exu_port = EXU.get_mapping_of_fus_that_support(fus_props)(instr_types)(io.execute_uop)
+            val prf_read_port = EXU.get_mapping_of_fus_that_support(fus_props)(instr_types)(io.prf_raddr)
+            val exu_issued_index_port = EXU.get_mapping_of_fus_that_support(fus_props)(instr_types)(io.exu_issued_index)
+
+            val ready_vec = VecInit(issue_queue.map(iq => iq.waiting && iq.ps_ready.reduce(_ && _) && iq.instr_type.isOneOf(iq.instr_type)))
+            exu_port.zip(exu_issued_index_port).zip(prf_read_port).foreach{case ((exu_uop, issued_ind), prf_raddr) =>
+                val ready_vec_masked = ready_vec.asUInt & ~mask
+                val sel_oh = PriorityEncoderOH(ready_vec_masked.asBools)
+                val sel_ind = OHToUInt(sel_oh) 
+                val selected_entry = issue_queue(sel_ind)
+                val selected_payload = payload(sel_ind)
+                val selection_valid = ready_vec_masked.asUInt =/= 0.U && exu_uop.ready && !mispred
+
+                val selected_payload_coerced = Wire(new EXUISSUE_EXU_uop)
+                (selected_payload_coerced: Data).waiveAll :<>= (selected_payload: Data).waiveAll
+                selected_payload_coerced.ps1_value := DontCare
+                selected_payload_coerced.ps2_value := DontCare
+
+                when(selection_valid) {
+                    selected_entry.waiting := false.B
+                    if(instr_types.contains(InstrType.Branch)) {
+                        printf(cf"branch selected: ${selected_payload.debug.instr}%x instr_type ${selected_payload.instr_type}\n")
+                    }
+                }
+
+                exu_uop.valid := RegNext(selection_valid)
+                exu_uop.bits := RegEnable(selected_payload_coerced, selection_valid)
+
+                // Assuming that prf read happens asynchronously
+                prf_raddr.bits := RegEnable(selected_entry.ps, selection_valid)
+                prf_raddr.valid:= RegNext(selection_valid)
+
+                // This is when freeing happens synchronously
+                issued_ind.bits := sel_ind
+                issued_ind.valid := selection_valid
+
+                mask = mask | Mux(selection_valid, VecInit(sel_oh).asUInt, 0.U)
+
+                // Debugging
+                import chisel3.experimental.BundleLiterals._
+                // exu_uop.bits.debug(selected_payload, selection_valid)
+            }
+        }}
     
-    // Eavesdrop on WB signals from all fus (including LSU)
-    issue_queue.foreach(iq => {
-        iq.ps.zip(iq.ps_ready).foreach{ case (ps, ps_ready) =>
-            when(iq.waiting && io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst_value.valid && wb_uop.bits.pdst === ps)) {
-                ps_ready := true.B
+        // Eavesdrop on WB signals from all fus (including LSU)
+        issue_queue.foreach(iq => {
+            iq.ps.zip(iq.ps_ready).foreach{ case (ps, ps_ready) =>
+                when(!mispred && iq.waiting && io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst.valid && wb_uop.bits.pdst.bits === ps)) {
+                    ps_ready := true.B
+                }
             }
-        }
-    })
-
+        })
+    }
 }
