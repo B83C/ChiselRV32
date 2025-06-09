@@ -6,10 +6,14 @@ import chisel3.util._
 case class Parameters(
   ENTRY_PC: Int = 0x0, 
   XLEN: Int = 32,
+
+  REG_CNT: Int = 32, // Architectural reg counts
+
   //PC_WIDTH: Int = 32,
   CORE_WIDTH: Int = 2,  //Dispatch, Issue, Commit Width
   INSTR_WIDTH: Int = 32,
   GHR_WIDTH: Int = 8,
+  BRANCH_MASK_WIDTH: Int = 8, // Can handle up to 8 in-flight branches 
 
   ALU_NUM: Int = 2,
   BU_NUM: Int = 1,
@@ -38,15 +42,15 @@ case class Parameters(
   CSR_MCYCLE_ADDR: Int = 0xEEF,
 )
 
-object IType extends Enumeration {
-  type Type = Value
+object IType extends ChiselEnum {
   val
     R,
-     I,
-     S,
-     B,
-     U,
-     J
+    I,
+    S,
+    B,
+    U,
+    J,
+    Invalid
      = Value
 }
 
@@ -59,6 +63,13 @@ object FUType extends ChiselEnum {
      CSR
      = Value
 }
+
+object bl {
+  def apply(value: Int) = {
+    log2Ceil(value).W
+  }
+}
+
 
 //为了简化interface的设计，对每个知名的模块定义一个名称，这样使用起来就统一了
 object CpuModuleEnum extends Enumeration {

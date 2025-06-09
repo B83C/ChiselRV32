@@ -71,50 +71,43 @@ class exu_issue_queue(fu_num: Int, fus_props: Seq[FUProps])(implicit p: Paramete
         }
 
         var mask = 0.U(p.ISSUE_DEPTH.W)
-        fus_props.map(x => x.supportedInstr).foreach{case instr_types => {
-            val exu_port = EXU.get_mapping_of_fus_that_support(fus_props)(instr_types)(io.execute_uop)
-            val prf_read_port = EXU.get_mapping_of_fus_that_support(fus_props)(instr_types)(io.prf_raddr)
-            val exu_issued_index_port = EXU.get_mapping_of_fus_that_support(fus_props)(instr_types)(io.exu_issued_index)
+        // fus_props.map(x => x.supportedInstr).foreach{case instr_types => {
+        io.execute_uop.zip(io.exu_issued_index).zip(io.prf_raddr).zip(fus_props).foreach{case (((exu_uop, issued_ind), prf_raddr), fu_prop) =>
+            val ready_vec = VecInit(issue_queue.map(iq => iq.waiting && iq.ps_ready.reduce(_ && _) && iq.instr_type.isOneOf(fu_prop.supportedInstr.toSeq)))
+            val ready_vec_masked = ready_vec.asUInt & ~mask
+            val sel_oh = PriorityEncoderOH(ready_vec_masked.asBools)
+            val sel_ind = OHToUInt(sel_oh) 
+            val selected_entry = issue_queue(sel_ind)
+            val selected_payload = payload(sel_ind)
+            val selection_valid = ready_vec_masked.asUInt =/= 0.U && exu_uop.ready && !mispred
 
-            val ready_vec = VecInit(issue_queue.map(iq => iq.waiting && iq.ps_ready.reduce(_ && _) && iq.instr_type.isOneOf(iq.instr_type)))
-            exu_port.zip(exu_issued_index_port).zip(prf_read_port).foreach{case ((exu_uop, issued_ind), prf_raddr) =>
-                val ready_vec_masked = ready_vec.asUInt & ~mask
-                val sel_oh = PriorityEncoderOH(ready_vec_masked.asBools)
-                val sel_ind = OHToUInt(sel_oh) 
-                val selected_entry = issue_queue(sel_ind)
-                val selected_payload = payload(sel_ind)
-                val selection_valid = ready_vec_masked.asUInt =/= 0.U && exu_uop.ready && !mispred
+            val selected_payload_coerced = Wire(new EXUISSUE_EXU_uop)
+            (selected_payload_coerced: Data).waiveAll :<>= (selected_payload: Data).waiveAll
+            selected_payload_coerced.ps1_value := DontCare
+            selected_payload_coerced.ps2_value := DontCare
 
-                val selected_payload_coerced = Wire(new EXUISSUE_EXU_uop)
-                (selected_payload_coerced: Data).waiveAll :<>= (selected_payload: Data).waiveAll
-                selected_payload_coerced.ps1_value := DontCare
-                selected_payload_coerced.ps2_value := DontCare
-
-                when(selection_valid) {
-                    selected_entry.waiting := false.B
-                    if(instr_types.contains(InstrType.Branch)) {
-                        printf(cf"branch selected: ${selected_payload.debug.instr}%x instr_type ${selected_payload.instr_type}\n")
-                    }
-                }
-
-                exu_uop.valid := RegNext(selection_valid)
-                exu_uop.bits := RegEnable(selected_payload_coerced, selection_valid)
-
-                // Assuming that prf read happens asynchronously
-                prf_raddr.bits := RegEnable(selected_entry.ps, selection_valid)
-                prf_raddr.valid:= RegNext(selection_valid)
-
-                // This is when freeing happens synchronously
-                issued_ind.bits := sel_ind
-                issued_ind.valid := selection_valid
-
-                mask = mask | Mux(selection_valid, VecInit(sel_oh).asUInt, 0.U)
-
-                // Debugging
-                import chisel3.experimental.BundleLiterals._
-                // exu_uop.bits.debug(selected_payload, selection_valid)
+            when(selection_valid) {
+                selected_entry.waiting := false.B
             }
-        }}
+
+            exu_uop.valid := RegNext(selection_valid)
+            exu_uop.bits := RegEnable(selected_payload_coerced, selection_valid)
+
+            // Assuming that prf read happens asynchronously
+            prf_raddr.bits := RegEnable(selected_entry.ps, selection_valid)
+            prf_raddr.valid:= RegNext(selection_valid)
+
+            // This is when freeing happens synchronously
+            issued_ind.bits := sel_ind
+            issued_ind.valid := selection_valid
+
+            mask = mask | Mux(selection_valid, VecInit(sel_oh).asUInt, 0.U)
+
+            // Debugging
+            import chisel3.experimental.BundleLiterals._
+            // exu_uop.bits.debug(selected_payload, selection_valid)
+        }
+        // }}
     
         // Eavesdrop on WB signals from all fus (including LSU)
         issue_queue.foreach(iq => {

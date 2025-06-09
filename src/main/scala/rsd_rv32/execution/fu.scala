@@ -20,6 +20,9 @@ abstract class FunctionalUnit(
   
   val input = io.uop
   val output = io.out
+  
+  // Debugging
+  output.bits.debug := input.bits.debug
   // val input = Wire(Flipped(Decoupled(new EXUISSUE_EXU_uop())))
   // val output = Wire(Valid(new WB_uop()))
   // io.uop.ready := input.ready

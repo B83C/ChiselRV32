@@ -16,25 +16,24 @@ class ALUFU(implicit p: Parameters) extends FunctionalUnit() with ALUConsts  {
   // 为了配合上一级的uop，输出按FU区分
   
   val internal_alu = Module(new ALU())
-  val fu_signals = input.bits.fu_signals
 
-  val is_LUI = fu_signals.opr1_sel === OprSel.IMM
-  val is_AUIPC = fu_signals.opr1_sel === OprSel.PC
+  val is_LUI = input.bits.opr1_sel === OprSel.IMM
+  val is_AUIPC = input.bits.opr1_sel === OprSel.PC
   
   def Sel(sel: OprSel.Type, reg: UInt) = {
-    MuxLookup(sel, 0.U)(Seq(
-      OprSel.IMM -> Mux(is_LUI || is_AUIPC, immExtract(Cat(input.bits.instr_, 0.U(7.W)), IType.U), immExtract(Cat(input.bits.instr_, 0.U(7.W)), IType.I)),
-      OprSel.REG -> reg,
-      OprSel.PC -> input.bits.instr_addr,
-      OprSel.Z -> 0.U,
+    MuxLookup(sel, 0.S(32.W))(Seq(
+      OprSel.IMM -> Mux(is_LUI || is_AUIPC, immExtract(Cat(input.bits.instr_, 0.U(7.W)), IType.U), immExtract(Cat(input.bits.instr_, 0.U(7.W)), IType.I)).asSInt,
+      OprSel.REG -> reg.asSInt,
+      OprSel.PC -> input.bits.instr_addr.asSInt,
+      OprSel.Z -> 0.S(32.W),
     ))
   }
 
-  internal_alu.io.in1 := Sel(fu_signals.opr1_sel, input.bits.ps1_value)
-  internal_alu.io.in2 := Sel(fu_signals.opr2_sel, input.bits.ps2_value)
+  internal_alu.io.in1 := Sel(input.bits.opr1_sel, input.bits.ps1_value).asUInt
+  internal_alu.io.in2 := Sel(input.bits.opr2_sel, input.bits.ps2_value).asUInt
 
 
-  internal_alu.io.fn := Mux(is_AUIPC, ALU_ADD,MuxLookup(fu_signals.opr2_sel, ALU_ADD)(Seq(
+  internal_alu.io.fn := Mux(is_AUIPC, ALU_ADD,MuxLookup(input.bits.opr2_sel, ALU_ADD)(Seq(
     // 立即数指令 (I-type)
     OprSel.IMM -> MuxLookup(input.bits.instr_(7, 5), ALU_ADD)(Seq(
       "b000".U -> ALU_ADD,  // ADDI
@@ -64,20 +63,16 @@ class ALUFU(implicit p: Parameters) extends FunctionalUnit() with ALUConsts  {
   
   val out = Wire(new WB_uop)
   (out: Data).waiveAll :<= (input.bits: Data).waiveAll
-  out.pdst_value.valid := true.B // ALU always writes back
   when (is_LUI){
-    out.pdst_value.bits := (input.bits.instr_(24, 5) << 12.U)
+    out.pdst_value := (input.bits.instr_(24, 5) << 12.U)
   }.elsewhen(is_AUIPC){
-    out.pdst_value.bits := input.bits.instr_addr + (input.bits.instr_(24, 5) << 12.U)
+    out.pdst_value := input.bits.instr_addr + (input.bits.instr_(24, 5) << 12.U)
   }.otherwise{
-    out.pdst_value.bits := internal_alu.io.out
+    out.pdst_value := internal_alu.io.out
   }
 
   output.bits := out
   output.valid := input.valid
-  
-  // Debugging
-  out.debug(input.bits, input.valid)
 }
 
 // ALU 的 interface

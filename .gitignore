@@ -16,4 +16,10 @@ log
 .bloop
 .ropeproject
 ./Machine.sv
-
+zig-out/*
+zig-out
+.zig-cache/*
+.zig-cache
+.helix
+.cache/*
+compile_commands.json

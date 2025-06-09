@@ -54,64 +54,68 @@ class ld_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
     val VALID = io.ld_issue_uop.valid
     val dis_uop = io.ld_issue_uop.bits
 
-    val issue_queue = RegInit(
-        VecInit(Seq.fill(p.LDISSUE_DEPTH) (
-            0.U.asTypeOf(new ld_issue_content())
-        ))
-    )
+    val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
 
-    val payload = RegInit(
-        VecInit(Seq.fill(p.LDISSUE_DEPTH) (
-            0.U.asTypeOf(new DISPATCH_LDISSUE_uop())
-        ))
-    )
+    withReset(reset.asBool || mispred) {
+        
+        val issue_queue = RegInit(
+            VecInit(Seq.fill(p.LDISSUE_DEPTH) (
+                0.U.asTypeOf(new ld_issue_content())
+            ))
+        )
 
-    val flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
-    dis_uop.foreach { uop =>
-        when(VALID && uop.valid)  {
-            payload(uop.bits.iq_index) := uop.bits
-            issue_queue(uop.bits.iq_index).waiting := true.B
-            issue_queue(uop.bits.iq_index).ps := uop.bits.ps1
-            issue_queue(uop.bits.iq_index).st_busy := VecInit((io.st_issue_busy_dispatch.asUInt | io.st_issue_busy_snapshot.asUInt).asBools)
+        val payload = RegInit(
+            VecInit(Seq.fill(p.LDISSUE_DEPTH) (
+                0.U.asTypeOf(new DISPATCH_LDISSUE_uop())
+            ))
+        )
 
-            // 因为ps可能在dispatch的时候就就绪了(信号来自WB)
-            issue_queue(uop.bits.iq_index).ps_ready := uop.bits.ps1 === 0.U || !io.prf_busys(uop.bits.ps1) || io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst_value.valid && wb_uop.bits.pdst === uop.bits.ps1)
+        dis_uop.foreach { uop =>
+            when(VALID && uop.valid && !mispred)  {
+                payload(uop.bits.iq_index) := uop.bits
+                issue_queue(uop.bits.iq_index).waiting := true.B
+                issue_queue(uop.bits.iq_index).ps := uop.bits.ps1
+                issue_queue(uop.bits.iq_index).st_busy := VecInit((io.st_issue_busy_dispatch.asUInt | io.st_issue_busy_snapshot.asUInt).asBools)
+
+                // 因为ps可能在dispatch的时候就就绪了(信号来自WB)
+                issue_queue(uop.bits.iq_index).ps_ready := uop.bits.ps1 === 0.U || !io.prf_busys(uop.bits.ps1) || io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst.valid && wb_uop.bits.pdst.bits === uop.bits.ps1)
+            }
         }
+        issue_queue.foreach(iq => {
+            when(iq.waiting && io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst.valid && wb_uop.bits.pdst.bits === iq.ps)) {
+                iq.ps_ready := true.B
+            }
+            when(io.st_issued_index.valid) {
+                iq.st_busy(io.st_issued_index.bits) := false.B
+            }
+        })
+
+        val ready_vec = VecInit(issue_queue.map(iq => iq.waiting && iq.ps_ready && !iq.st_busy.reduce(_ || _)))
+        val selected_entry = PriorityMux(ready_vec.zip(issue_queue))
+        val selected_payload = PriorityMux(ready_vec.zip(payload))
+        val selection_valid = ready_vec.asUInt =/= 0.U
+
+        val sel_oh = PriorityEncoderOH(ready_vec)
+        val sel_ind = OHToUInt(sel_oh) 
+        when(selection_valid) {
+            issue_queue(sel_ind).waiting := false.B
+        }
+
+        val selected_payload_coerced = Wire(new LDISSUE_LDPIPE_uop)
+        (selected_payload_coerced: Data).waiveAll :<>= (selected_payload: Data).waiveAll
+        selected_payload_coerced.ps1_value := 1.U
+        io.load_uop.valid := RegNext(selection_valid)
+        io.load_uop.bits := RegEnable(selected_payload_coerced, selection_valid)
+
+        io.ld_issued_index.bits := OHToUInt(PriorityEncoderOH(ready_vec))
+        io.ld_issued_index.valid := selection_valid
+
+        // 外接一个读取prf的模块
+        io.prf_raddr.bits := RegEnable(selected_entry.ps, selection_valid)
+        io.prf_raddr.valid:= RegNext(selection_valid)
     }
-    issue_queue.foreach(iq => {
-        when(iq.waiting && io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst_value.valid && wb_uop.bits.pdst === iq.ps)) {
-            iq.ps_ready := true.B
-        }
-        when(io.st_issued_index.valid) {
-            iq.st_busy(io.st_issued_index.bits) := false.B
-        }
-    })
-
-    val ready_vec = VecInit(issue_queue.map(iq => iq.waiting && iq.ps_ready && !iq.st_busy.reduce(_ || _)))
-    val selected_entry = PriorityMux(ready_vec.zip(issue_queue))
-    val selected_payload = PriorityMux(ready_vec.zip(payload))
-    val selection_valid = ready_vec.asUInt =/= 0.U
-
-    val sel_oh = PriorityEncoderOH(ready_vec)
-    val sel_ind = OHToUInt(sel_oh) 
-    when(selection_valid) {
-        issue_queue(sel_ind).waiting := false.B
-    }
-
-    val selected_payload_coerced = Wire(new LDISSUE_LDPIPE_uop)
-    (selected_payload_coerced: Data).waiveAll :<>= (selected_payload: Data).waiveAll
-    selected_payload_coerced.ps1_value := 1.U
-    io.load_uop.valid := RegNext(selection_valid)
-    io.load_uop.bits := RegEnable(selected_payload_coerced, selection_valid)
-
-    io.ld_issued_index.bits := OHToUInt(PriorityEncoderOH(ready_vec))
-    io.ld_issued_index.valid := selection_valid
-
-    // 外接一个读取prf的模块
-    io.prf_raddr.bits := RegEnable(selected_entry.ps, selection_valid)
-    io.prf_raddr.valid:= RegNext(selection_valid)
 
     // Debugging
-    import chisel3.experimental.BundleLiterals._
-    io.load_uop.bits.debug(selected_payload, selection_valid)
+    // import chisel3.experimental.BundleLiterals._
+    // io.load_uop.bits.debug(selected_payload, selection_valid)
 }

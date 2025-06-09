@@ -28,45 +28,51 @@ class EXU(implicit p: Parameters) extends Module {
   val bu = Seq.fill(p.BU_NUM)(Module(new BranchFU))
   val mul = Seq.fill(p.MUL_NUM)(Module(new MULFU))
   val div = Seq.fill(p.DIV_NUM)(Module(new DIVFU))
-
-  require(bu.length <= 1, "Currently supports only 1 BU")
-  
   val fus = (bu ++ alu ++ mul ++ div)
   val io = IO(new EXUIO(fus.length))
-  fus.zip(io.execute_uop).foreach { case (fu, in_uop) => 
-    fu.input.valid := in_uop.valid
-    fu.input.bits := in_uop.bits
-    in_uop.ready := fu.input.ready
-  }
-
-  io.bu_signals := bu(0).bu_out
   
   def fus_properties: Seq[FUProps] = fus.map(_.properties)
 
-  // Note that checks if instr_type is as subset of any FUs' supported types
-  io.wb_uop := VecInit(fus.map(_.output))
+  val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
+  
+  require(bu.length <= 1, "Currently supports only 1 BU")
+  
+  withReset(reset.asBool || mispred) {
+    fus.zip(io.execute_uop).foreach { case (fu, in_uop) => 
+      fu.input.valid := in_uop.valid
+      fu.input.bits := in_uop.bits
+      in_uop.ready := fu.input.ready
+    }
 
-  // In-order FUs should deserve better attention
-  val csru = Module(new CSRFU_Default)
-  //Serialised uop
-  csru.input.bits := io.serialised_uop.bits
-  csru.input.valid := io.serialised_uop.valid
-  // CSRU should always be ready? 
-  io.serialised_wb_uop := csru.output
+    io.bu_signals := RegEnableValid(bu(0).bu_out)
+  
+
+    // Note that checks if instr_type is as subset of any FUs' supported types
+    io.wb_uop := VecInit(fus.map(fu => RegEnableValid(fu.output)))
+
+    // In-order FUs should deserve better attention
+    val csru = Module(new CSRFU_Default)
+    //Serialised uop
+    csru.input.bits := io.serialised_uop.bits
+    csru.input.valid := io.serialised_uop.valid
+    // CSRU should always be ready? 
+    io.serialised_wb_uop := csru.output
+  } 
 }
 
 object EXU {
 
   type InstrTypeSets = Seq[Set[InstrType.Type]]
  
-  def get_indicies_of_fus_that_support(instr_type_mapping: Seq[FUProps])(instr_type: InstrType.Type*): Seq[Int] = {
+
+  def get_indicies_of_fus_that_support(instr_type_mapping: Seq[FUProps])(instr_type: Set[InstrType.Type]): Seq[Int] = {
     instr_type_mapping.zipWithIndex.collect{
       case (x, y) if instr_type.toSet.subsetOf(x.supportedInstr) => y
     }
   }
   
-  def get_mapping_of_fus_that_support[T <: Data](instr_type_mapping: Seq[FUProps])(instr_type: InstrType.Type*)(vec: Vec[T]): Seq[T] = {
-   val indices = get_indicies_of_fus_that_support(instr_type_mapping)(instr_type: _*)
+  def get_mapping_of_fus_that_support[T <: Data](instr_type_mapping: Seq[FUProps])(instr_type: Set[InstrType.Type])(vec: Vec[T]): Seq[T] = {
+   val indices = get_indicies_of_fus_that_support(instr_type_mapping)(instr_type)
 
     require(indices.nonEmpty, s"No functional units all the features: ${instr_type.mkString(", ")}")
 

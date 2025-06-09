@@ -73,11 +73,11 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
 
   // 操作数选择逻辑
   def Sel(sel: OprSel.Type, reg: UInt) = {
-    MuxLookup(sel, 0.U)(Seq(
+    MuxLookup(sel, 0.S)(Seq(
       OprSel.IMM -> immExtract(Cat(input.bits.instr_, 0.U(7.W)), IType.I),
-      OprSel.REG -> reg,
-      OprSel.PC -> input.bits.instr_addr,
-      OprSel.Z -> 0.U,
+      OprSel.REG -> reg.asSInt,
+      OprSel.PC -> input.bits.instr_addr.asSInt,
+      OprSel.Z -> 0.S,
     ))
   }
 
@@ -88,6 +88,7 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   val is_divu   = func3 === 5.U  // DIVU
   val is_rem    = func3 === 6.U  // REM
   val is_remu   = func3 === 7.U  // REMU
+
 
   divider.io.valid := false.B
   divider.io.dividend := 1.U
@@ -100,8 +101,8 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
     is(s_idle) {
       when(input.valid && (input.bits.instr_type === InstrType.DIV_REM)) {
         // 锁存操作数、操作类型和uop信息
-        val op1 = Sel(input.bits.fu_signals.opr1_sel, input.bits.ps1_value).asSInt
-        val op2 = Sel(input.bits.fu_signals.opr2_sel, input.bits.ps2_value).asSInt
+        val op1 = Sel(input.bits.opr1_sel, input.bits.ps1_value).asSInt
+        val op2 = Sel(input.bits.opr2_sel, input.bits.ps2_value).asSInt
 
         // 仍然更新寄存器用于后续状态
         op1Reg := op1
@@ -192,15 +193,11 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   val out = Wire(new WB_uop)
   // 输出连接
   (out: Data).waiveAll :<= (uopReg: Data).waiveAll
-  out.pdst_value.valid := true.B
-  out.pdst_value.bits := resultReg
+  out.pdst_value := resultReg
 
   output.bits := out
   output.valid := out_valid
 
   // 流控制
   input.ready := (state === s_idle)
-  
-  // Debugging
-  out.debug(input.bits, out_valid)
 }

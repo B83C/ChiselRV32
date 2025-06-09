@@ -18,9 +18,7 @@ class ROBControlSignal(implicit p: Parameters) extends CustomBundle {
     val mispred = Bool()
 
     // To BP
-    val taken = Bool()
-    // val vGHR = Valid(UInt(p.GHR_WIDTH.W)) // Global history register that when valid means should modify
-    // TODO REMOVE IT!
+    val PC_next = UInt(p.XLEN.W)
 
     def isMispredicted: Bool = mispred
 }
@@ -36,12 +34,12 @@ class ROBContent(implicit p: Parameters) extends CustomBundle {
     val mispred = Bool() // Misprediction flag(1 represents misprediction)
     val completed = Bool() // Completion flag(1 represents completion)
 
-    val pdst = UInt(log2Ceil(p.PRF_DEPTH).W) // Physical destination register
-    val rd = UInt(5.W) // Destination register
-    val wb = Bool()
+    // TODO: Currently the valid bits in both are the same
+    val pdst = Valid(UInt(bl(p.PRF_DEPTH)))
+    val rd = Valid(UInt(5.W)) // Destination register
 
-    val rob_type = ROBType() // Instruction type
-
+    val is_st = Bool()
+    val is_branch = Bool()
     // Branch info - Can be eliminated, but works for now
     // val btb_hit = BTBHit() // BTB hit flag, 1 represents hit
     val target_PC = UInt(p.XLEN.W) // Target address
@@ -135,46 +133,48 @@ class ROB(implicit p: Parameters) extends CustomModule {
     val can_enqueue = !full
     io.rob_uop.ready := can_enqueue
 
-    val commiting_entry = rob(whead)
-    val mispred = VecInit(commiting_entry.map(entry => entry.valid && entry.completed && entry.mispred))
-    val is_mispredicted = (mispred.asUInt =/= 0.U)
+    val committing_entry = rob(whead)
+    val mispred = VecInit(committing_entry.map(entry => entry.valid && entry.completed && entry.mispred))
+    val is_mispredicted = !empty && (mispred.asUInt =/= 0.U)
 
     // 不需要检测mispredict,因为发生mispred之后下一个周期就empty了
-    val can_dequeue = !empty && commiting_entry.map(entry => entry.completed || !entry.valid).reduce(_ && _)
+    val can_dequeue = !empty && committing_entry.map(entry => entry.completed || !entry.valid).reduce(_ && _)
 
-    var prev_mispred = false.B
-    commiting_entry.zip(mispred).foreach{case (ce, mp) => {
-        ce.valid := ce.valid && !prev_mispred 
-        prev_mispred = prev_mispred | mp
+    var prev_instr_mispred = false.B
+    committing_entry.zip(mispred).foreach{case (ce, mp) => {
+        ce.valid := ce.valid && !prev_instr_mispred 
+        prev_instr_mispred = prev_instr_mispred | mp
     }}
 
-    io.rob_commitsignal.valid := (can_dequeue)
-    io.rob_commitsignal.bits := (commiting_entry)
+    // io.rob_commitsignal.valid := (can_dequeue)
+    // io.rob_commitsignal.bits := (committing_entry)
+    // io.rob_commitsignal.valid := (can_dequeue)
+    io.rob_commitsignal := RegEnableValid(committing_entry, can_dequeue)
+    // io.rob_commitsignal := RegEnableValid(committing_entry, can_dequeue)
     // io.rob_commitsignal.valid := RegNext(can_dequeue)
-    // io.rob_commitsignal.bits := RegEnable(commiting_entry, can_dequeue)
+    // io.rob_commitsignal.bits := RegEnable(committing_entry, can_dequeue)
 
     // TODO
-    val mispredicted_entry = PriorityMux(mispred.zip(commiting_entry))
+    val mispredicted_entry = PriorityMux(mispred.zip(committing_entry))
     val control_signal = Wire(ROB.ControlSignal)
     control_signal.valid := is_mispredicted
-    control_signal.bits.mispred := false.B
-    control_signal.bits.taken := false.B
+    (control_signal.bits: Data).waiveAll :<>= (mispredicted_entry: Data).waiveAll
+    // TODO: this needs to be changed
     when(is_mispredicted) {
         tail := head
-        (control_signal.bits: Data).waiveAll :<>= (mispredicted_entry: Data).waiveAll
-
-        control_signal.bits.taken := mispredicted_entry.branch_taken
     }
 
-    io.rob_controlsignal.valid := (control_signal.valid)
-    io.rob_controlsignal.bits := (control_signal.bits)
+    // io.rob_controlsignal.valid := RegNext(control_signal.valid)
+    // io.rob_controlsignal.bits := RegEnable(control_signal.bits, control_signal.valid)
+    // io.rob_controlsignal.valid := (control_signal.valid)
+    io.rob_controlsignal := RegEnableValid(control_signal)
 
-    when(can_dequeue) {
+    when(can_dequeue && !is_mispredicted) {
         dbg(cf"ROB dequeuing ${io.rob_uop.bits}")
         head := head + 1.U
     }
 
-    when(io.rob_uop.fire) {
+    when(io.rob_uop.fire && !is_mispredicted) {
         dbg(cf"Enqueuing ${io.rob_uop.bits}")
         rob(wtail) := io.rob_uop.bits.map(uop =>
             convert_to_content(uop)
@@ -189,19 +189,11 @@ class ROB(implicit p: Parameters) extends CustomModule {
         //common部分
         (rob_allocate: Data).waiveAll :<>= (uop: Data).waiveAll
         rob_allocate.valid := dis_uop.valid
-        rob_allocate.rob_type := MuxLookup(uop.instr_type, ROBType.Arithmetic)(Seq(
-            InstrType.ALU -> ROBType.Arithmetic,
-            InstrType.MUL -> ROBType.Arithmetic,
-            InstrType.DIV_REM -> ROBType.Arithmetic,
-            InstrType.LD -> ROBType.Arithmetic,
-            InstrType.ST -> ROBType.Store,
-            InstrType.Branch -> ROBType.Branch,
-            InstrType.Jump -> ROBType.Jump,
-            InstrType.CSR -> ROBType.CSR
-        ))
         rob_allocate.mispred := false.B
         rob_allocate.completed := false.B
-        rob_allocate.wb := false.B
+
+        rob_allocate.is_st := uop.instr_type === InstrType.ST
+        rob_allocate.is_branch := uop.instr_type === InstrType.Branch
 
         rob_allocate.target_PC := 0.U
         rob_allocate.branch_taken := false.B
@@ -220,7 +212,7 @@ class ROB(implicit p: Parameters) extends CustomModule {
     // TODO
     val inner_offset = bu_uop.bits.rob_inner_index
 
-    when(bu_uop.valid){
+    when(bu_uop.valid && !is_mispredicted){
         // 无需complete，complete信号在wb_uop
         val update_entry = rob(index)(inner_offset)
         (update_entry: Data).waiveAll :<= (bu_uop.bits: Data).waiveAll
@@ -233,10 +225,13 @@ class ROB(implicit p: Parameters) extends CustomModule {
         val index = wb_uop.bits.rob_index
         // TODO
         val inner_offset = wb_uop.bits.rob_inner_index
-        when(wb_uop.valid) {
+        when(wb_uop.valid && !is_mispredicted) {
             rob(index)(inner_offset).completed := true.B
-            rob(index)(inner_offset).wb := wb_uop.bits.pdst_value.valid
+            // rob(index)(inner_offset).wb := wb_uop.bits.pdst_value.valid
         }
     }
+
+    // TODO
+    control_signal.bits.PC_next := Mux(mispredicted_entry.branch_taken, bu_uop.bits.target_PC, mispredicted_entry.instr_addr + 4.U)
 }
 

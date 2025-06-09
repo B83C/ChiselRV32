@@ -150,7 +150,7 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   stage2.bits := RegEnable({
     val temp = Wire(new lpipe_uop)
     temp :<= stage1.bits
-    temp.uop.debug(stage1.bits.uop, stage1.valid)
+    temp.uop.debug === stage1.bits.uop.debug
     temp
   }, stage1.valid && !stall) 
 
@@ -202,7 +202,7 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
     temp.data:= io.data_out_stq.data
     temp.bitvalid:= io.data_out_stq.bit_valid
 
-    temp.uop.debug(stage2.bits.uop, stage2.valid)
+    temp.uop.debug === stage2.bits.uop.debug
     temp
   }, stage2.valid && !stall) 
 
@@ -243,7 +243,7 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
     temp := stage3.bits
     temp.data := final_data
     // Debugging
-    temp.uop.debug(stage3.bits.uop, stage3.valid)
+    temp.uop.debug === stage3.bits.uop.debug
     temp
   }, stage3.valid && !stall) 
   stage4.bits.data := final_data
@@ -253,8 +253,8 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   io.ldu_wb_uop.valid := stage4.valid && (!need_flush)
   //仅当ld_issue_uop传入有效且不需要flush时wb rob的uop才有效
   (io.ldu_wb_uop.bits: Data).waiveAll :<= (stage4.bits.uop: Data).waiveAll
-  io.ldu_wb_uop.bits.pdst_value.bits := stage4.bits.data
-  io.ldu_wb_uop.bits.pdst_value.valid := true.B
+  io.ldu_wb_uop.bits.pdst_value := stage4.bits.data
+
   io.ldu_wb_uop.bits.debug := stage4.bits.uop.debug
 }
 
@@ -268,7 +268,7 @@ class spipe_uop(implicit p: Parameters) extends CustomBundle {
 class StorePipeline(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
     val store_uop = Flipped(Valid(new STISSUE_STPIPE_uop()))//存储指令的uop
-    val stu_wb_uop = Valid(new STPIPE_WB_uop())//存储完成的信号,wb to ROB
+    val stu_wb_uop = Valid(new WB_uop())//存储完成的信号,wb to ROB
 
     val data_into_stq = (UInt(p.XLEN.W))//需要写入stq的数据
     val dataAddr_into_stq = Valid(UInt(p.XLEN.W))//需要写入stq的地址
@@ -287,14 +287,14 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
   stage1.bits.uop := io.store_uop.bits
   val stage1_instr = Instr.disassemble(io.store_uop.bits.instr_ << 7, IType.S)
   stage1.bits.stAddr := io.store_uop.bits.ps1_value + stage1_instr.imm
-  stage1.bits.data := stage1.bits.uop.ps1_value + stage1_instr.imm
+  stage1.bits.data := stage1.bits.uop.ps2_value
 
   val stage2 = Wire(Valid(new spipe_uop))
   stage2.valid := RegNext(stage1.valid && !need_flush)
   stage2.bits := RegEnable({
     val temp = Wire(new spipe_uop)
     temp :<= stage1.bits
-    temp.uop.debug(stage1.bits.uop, stage1.valid)
+    temp.uop.debug === stage1.bits.uop.debug
     temp
   }, stage1.valid && !need_flush) 
 
@@ -308,11 +308,15 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
   io.stq_index         := stage2.bits.uop.stq_index
   io.func3             := stage2_instr.funct3
 
-  io.dataAddr_into_stq.valid := !need_flush && stage2.valid
+  io.dataAddr_into_stq.valid := stage2.valid
+  // io.dataAddr_into_stq.valid := !need_flush && stage2.valid
 
   io.stu_wb_uop.valid  := stage2.valid && (!need_flush)
   //仅当st_issue_uop传入有效且不需要flush时wb rob的uop才有效
   (io.stu_wb_uop.bits: Data).waiveAll :<= (stage2.bits.uop: Data).waiveAll
+  io.stu_wb_uop.bits.pdst.valid := false.B
+  io.stu_wb_uop.bits.pdst.bits := DontCare
+  io.stu_wb_uop.bits.pdst_value := 0.U
 
 //  printf(p"data=${Hexadecimal(stage2_data)} addr=${Hexadecimal(stage2_addr)}\n")
 //  printf(p"stqidx=${Hexadecimal(io.stq_index)} func3=${Hexadecimal(io.func3)}\n")
@@ -407,7 +411,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
 //  printf(p"\n")
 
   //更新write_valid指针
-  val write_valid_inc = PopCount(io.rob_commitsignal.bits.map(x => x.valid && x.rob_type === ROBType.Store))
+  val write_valid_inc = PopCount(io.rob_commitsignal.bits.map(x => x.valid && x.is_st))
   when(need_flush){
     write_valid := write_valid
   }.elsewhen(io.rob_commitsignal.valid){
@@ -591,9 +595,6 @@ class LSU(implicit p: Parameters) extends CustomModule {
   //连接storepipeline的信号
     store_pipeline.io.store_uop := io.store_uop
     (io.stu_wb_uop: Data).waiveAll :<>= (store_pipeline.io.stu_wb_uop: Data).waiveAll
-    io.stu_wb_uop.bits.pdst := 0.U
-    io.stu_wb_uop.bits.pdst_value.bits := 0.U
-    io.stu_wb_uop.bits.pdst_value.valid := false.B
     store_pipeline.io.data_into_stq <> store_queue.io.data_into_stq
     store_pipeline.io.dataAddr_into_stq <> store_queue.io.dataAddr_into_stq
     store_pipeline.io.func3 <> store_queue.io.st_func3

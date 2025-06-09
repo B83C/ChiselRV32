@@ -48,237 +48,218 @@ object DispatchState extends ChiselEnum {
 // 反馈给dispatch单元，dispatch单元会将该id存入freelist的tail处。
 class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule {
 
-  implicit val debug_print_enabled: Bool = true.B
-  
   val io = IO(new Dispatcher_IO(exu_fu_num))
 
   import DispatchState._
   val state = RegInit(ooo_mode)
   
-  //函数定义见common/utils.scala
-  val flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
-  val should_kill = reset.asBool || flush
+  val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
   val rob_ready = io.rob_uop.ready
-  // 对于wrap around的情况不影响: 修改rob可简化（不需要大改）
 
-  // Special Instruction - Serialised mode
-  val is_csr = VecInit(io.rob_uop.bits.map(x => x.bits.instr_type.isOneOf(InstrType.CSR))).asUInt
-  // val ooo_mask = 
-  val serialise_mask = Reg(UInt(p.CORE_WIDTH.W)) // All 1's by default
-  val still_has_csr = (serialise_mask & is_csr) =/= 0.U 
-  serialise_mask := ~0.U(p.CORE_WIDTH.W)
+  withReset(mispred || reset.asBool) {
+    val is_csr = VecInit(io.dis_uop.bits.map(x => x.valid && x.bits.instr_type.isOneOf(InstrType.CSR))).asUInt
+    // val ooo_mask = 
+    val serialise_mask = Reg(UInt(p.CORE_WIDTH.W)) // All 1's by default
+    val still_has_csr = (serialise_mask & is_csr) =/= 0.U && io.dis_uop.valid
+    serialise_mask := ~0.U(p.CORE_WIDTH.W)
   
-  def sig_mask(value: UInt) : UInt = {
-    val mid = PriorityEncoderOH(value) - 1.U
-    mid(p.CORE_WIDTH - 1 , 0)
-  }
-
-  val clamped_is_csr = Cat(1.U, serialise_mask & is_csr) // 1.U is padded at the furthest, note this is little endian
-  val closest_mask = sig_mask(clamped_is_csr)  // Generates 1's mask that appear right before the next csr instruction, the clamped_is_csr is clamped to make sure when csr is not detected till the end of the packet, it is handled correctly (that closest_mask should be 1's for all the left non-csr instructions)
-  val furthest_mask = ~closest_mask
-  val ooo_mask = closest_mask & serialise_mask // Clamped within serialise mask to make sure ooo instructions dispatched before don't appear again
-
-  dbg(cf"state : ${state}\n")
-  dbg(cf"ooo_mask ${serialise_mask}%b ${is_csr}%b ${ooo_mask}%b ${closest_mask}%b ${furthest_mask}%b ${clamped_is_csr}%b\n")
-
-  val serialise_mask_mb = PriorityEncoderOH(serialise_mask) 
-  val serialise_fire = serialise_mask_mb & is_csr 
-  val serialise_fire_next = (serialise_mask_mb << 1) & is_csr 
-  
-  val selected_serialising_uop = Mux1H(serialise_fire.asBools, io.dis_uop.bits) 
-  
-  val dispatch_serialised = serialise_fire =/= 0.U && state === ino_mode
-  val serialised_uop_w = Reg(new DISPATCH_EXUISSUE_uop())
-  when(dispatch_serialised) {
-    (serialised_uop_w: Data).waiveAll :<>= (selected_serialising_uop.bits: Data).waiveAll
-  } 
-  io.serialised_uop.bits := serialised_uop_w
-  io.serialised_uop.valid := RegNext(dispatch_serialised)
-      
-  val all_valid = io.dis_uop.valid
-
-  import InstrType._
-  //TODO: Hack
-  val is_st = Mux(state === ooo_mode, (VecInit(io.dis_uop.bits.map(x => (x.bits.instr_type.isOneOf(ST)) && x.valid)).asUInt & ooo_mask), 0.U)
-  val is_ld = Mux(state === ooo_mode, (VecInit(io.dis_uop.bits.map(x => (x.bits.instr_type.isOneOf(LD)) && x.valid)).asUInt & ooo_mask), 0.U)
-  val is_ex = Mux(state === ooo_mode, (VecInit(io.dis_uop.bits.map(x => ~(x.bits.instr_type.isOneOf(ST, LD)) && x.valid)).asUInt & ooo_mask), 0.U)
-
-  dbg(cf"st ${is_st}%b ${is_ld}%b ${is_ex}%b\n")
-
-  val exu_issue_depth_bits = log2Ceil(p.EXUISSUE_DEPTH)
-  val ld_issue_depth_bits = log2Ceil(p.LDISSUE_DEPTH)
-  val st_issue_depth_bits = log2Ceil(p.STISSUE_DEPTH)
-  //为了解决单周期iq条目释放数量的不确定行，对不同通道设立一个独立的freelist，使两者地址域不交叠
-  // Write back length is determined by issue width, not entirely core_width
-  val exu_freelist = Module(new FreeListCam(p.EXUISSUE_DEPTH, p.CORE_WIDTH, exu_fu_num)) 
-  val ld_freelist = Module(new FreeListCam(p.LDISSUE_DEPTH, p.CORE_WIDTH, 1)) 
-  val st_freelist = Module(new FreeListCam(p.STISSUE_DEPTH, p.CORE_WIDTH, 1)) 
-
-  exu_freelist.io.checkpoint := false.B
-  exu_freelist.io.restore := false.B
-  ld_freelist.io.checkpoint := false.B
-  ld_freelist.io.restore := false.B
-  st_freelist.io.checkpoint := false.B
-  st_freelist.io.restore := false.B
-  
-  val input_ready = Wire(Bool())
-  
-  exu_freelist.io.enq_request := io.exu_issued_index
-  ld_freelist.io.enq_request := VecInit(io.ld_issued_index)
-  st_freelist.io.enq_request := VecInit(io.st_issued_index)
-  
-  (exu_freelist.io.deq_request zip is_ex.asBools).foreach{ case(dq, v) =>
-    dq.ready := v  
-  }  
-  (ld_freelist.io.deq_request  zip is_ld.asBools).foreach{ case(dq, v) =>
-    dq.ready := v  
-  } 
-  (st_freelist.io.deq_request  zip is_st.asBools).foreach{ case(dq, v) =>
-    dq.ready := v  
-  } 
-  
-  // Ready fields should be ready when it is not valid, or when it is a valid instruction and freelist is ready
-  val ex_ready = (exu_freelist.io.deq_request zip is_ex.asBools).map{ case(dq, v) =>
-    dbg(cf" exu ${dq.bits} ${dq.valid} || ${v} \n")
-    (dq.valid) || !v
-  }  
-  val ld_ready = (ld_freelist.io.deq_request  zip is_ld.asBools).map{ case(dq, v) =>
-    dbg(cf" ld ${dq.bits} ${dq.valid} || ${v} \n")
-    (dq.valid) || !v
-  } 
-  val st_ready = (st_freelist.io.deq_request  zip is_st.asBools).map{ case(dq, v) =>
-    dbg(cf" st ${dq.bits} ${dq.valid} || ${v} \n")
-    (dq.valid) || !v
-  } 
-
-  exu_freelist.io.squeeze := should_kill
-  ld_freelist.io.squeeze := should_kill
-  st_freelist.io.squeeze := should_kill
-
-  val ex_ready_R = ex_ready.reduce(_ && _)
-  val ld_ready_R = ld_ready.reduce(_ && _)
-  val st_ready_R = st_ready.reduce(_ && _)
-
-  input_ready := rob_ready &&
-     !io.stq_full &&
-     ex_ready_R &&
-     ld_ready_R &&
-     st_ready_R &&
-     !still_has_csr &&
-     state === ooo_mode
-
-  dbg(cf"${input_ready} ${rob_ready} ${io.stq_full} ${ex_ready_R} ${ld_ready_R} ${st_ready_R} ${still_has_csr} \n")
-  
-  //TODO: Should be something else? Or is it sufficient
-  io.dis_uop.ready := input_ready && !should_kill 
-  
-  //Checks for every single uop, signals to update each output register
-  val st_valid = is_st =/= 0.U
-  val ld_valid = is_ld =/= 0.U
-  val ex_valid = is_ex =/= 0.U
-
-   
-  val output_valid = input_ready && io.dis_uop.valid
-  
-  io.st_inc.bits := RegNext(PopCount(is_st.asBools))
-  io.st_inc.valid := RegNext(output_valid)
-  
-  io.rob_uop.valid := RegNext(output_valid)
-  io.rob_uop.bits := RegEnable(VecInit(io.dis_uop.bits.map{c =>
-    val out = Wire(Valid(new DISPATCH_ROB_uop()))
-    out.valid := c.valid && input_ready
-    (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
-    // TODO: bug, maybe instr should not be truncated
-    out.bits.rd := c.bits.instr_(4, 0)
-    out
-  }), output_valid)
-
-  io.exu_issue_uop.valid := RegNext(output_valid && ex_valid)
-  io.exu_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_ex.asBools).zip(exu_freelist.io.deq_request).zipWithIndex.map{case (((c, v), fl), rob_inner_ind) =>
-    val out = Wire(Valid(new DISPATCH_EXUISSUE_uop()))
-    out.valid := c.valid && v && fl.valid
-    (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
-    //TODO: This is not that appropriate
-    out.bits.iq_index := fl.bits
-    out.bits.rob_index := io.rob_index
-    out.bits.rob_inner_index := rob_inner_ind.U
-    out
-  }), output_valid && ex_valid)
-  
-  io.ld_issue_uop.valid := RegNext(output_valid && ld_valid)
-  var stq_tail_offset = 0.U
-  io.ld_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_ld.asBools).zip(ld_freelist.io.deq_request).zipWithIndex.map{case (((c, v), fl), rob_inner_ind) =>
-    val out = Wire(Valid(new DISPATCH_LDISSUE_uop()))
-    out.valid := c.valid &&  v && fl.valid
-    (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
-    out.bits.iq_index := fl.bits
-    // TODO
-    out.bits.stq_tail := io.stq_tail + stq_tail_offset//TODO: Check on its validity
-    out.bits.rob_index := io.rob_index
-    out.bits.rob_inner_index := rob_inner_ind.U
-    out
-  }), output_valid && ld_valid)
-  
-  io.st_issue_uop.valid := RegNext(output_valid && st_valid)
-  io.st_issue_uop.bits := RegEnable(VecInit(io.dis_uop.bits.zip(is_st.asBools).zip(st_freelist.io.deq_request).zipWithIndex.map{case (((c, v), fl), rob_inner_ind) =>
-    val out = Wire(Valid(new DISPATCH_STISSUE_uop()))
-
-    val valid = c.valid &&  v && fl.valid
-    out.valid := valid
-    (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
-    out.bits.iq_index := fl.bits
-    out.bits.rob_index := io.rob_index
-    out.bits.rob_inner_index := rob_inner_ind.U
-    // TODO stupidest thing ever seen
-    out.bits.stq_index := stq_tail_offset + io.stq_tail //TODO: Check on its validity
-    stq_tail_offset = stq_tail_offset + valid.asUInt
-    out
-  }), output_valid && st_valid)
-
-  when(should_kill) {
-    io.exu_issue_uop.valid := 0.U
-    io.ld_issue_uop.valid := 0.U
-    io.st_issue_uop.valid := 0.U
-    state := ooo_mode
-  }.elsewhen(state === ooo_mode && still_has_csr) {
-    dbg(cf"Now entering csr mode serialised mask ${serialise_mask}%b furthest mask ${furthest_mask}%b fire: ${serialise_fire}%b\n")
-    serialise_mask := furthest_mask // Shift the mask to align the most significant bit with the first matching csr instruction within the previous serialise_mask window
-    // when(rob_empty) {
-      // val next_serialise_mask = (serialise_mask << 1.U)
-      // serialise_mask := next_serialise_mask
-      // state := ino_mode
-    // }.otherwise {
-    state:= pre_ino_mode
-    // }
-  }.elsewhen(state === pre_ino_mode && io.rob_empty) {
-    state:= ino_mode
-  }.elsewhen(state === ino_mode) {
-    val next_serialise_mask = (serialise_mask << 1.U)
-    serialise_mask := next_serialise_mask
-    when(serialise_fire_next =/= 0.U) {
-      dbg(cf"Now entering csr mode again\n")
-      state := ino_mode
-    }.otherwise {
-      dbg(cf"Now leaving csr mode sm : ${next_serialise_mask}%b\n")
-      state := post_ino_mode
+    def sig_mask(value: UInt) : UInt = {
+      val mid = PriorityEncoderOH(value) - 1.U
+      mid(p.CORE_WIDTH - 1 , 0)
     }
-  }.elsewhen(state === post_ino_mode) {
-    dbg(cf"post ino mode, resetting serialise_mask ${serialise_mask}%b\n")
-    state := ooo_mode
-    serialise_mask := serialise_mask // Doesn't retain value without this, costed me a fortune in time to find out
-  }.elsewhen(state === ooo_mode && input_ready) {
-    dbg(cf"Pre ooo mode, resetting serialise_mask, was previously ${serialise_mask}%b\n")
-    serialise_mask := ~0.U(p.CORE_WIDTH.W) // Reset back to all 1's
-  }
 
-  // Debugging
-  import chisel3.experimental.BundleLiterals._
-  (io.exu_issue_uop.bits.zip(io.dis_uop.bits).zip(is_ex.asBools)
-    ++ io.ld_issue_uop.bits.zip(io.dis_uop.bits).zip(is_ld.asBools)
-    ++ io.st_issue_uop.bits.zip(io.dis_uop.bits).zip(is_st.asBools)
-  ).foreach{case ((x, y), z) => {
-      x.bits.debug(y.bits, z)
-  }}
+    val clamped_is_csr = Cat(1.U, serialise_mask & is_csr) // 1.U is padded at the furthest, note this is little endian
+    val closest_mask = sig_mask(clamped_is_csr)  // Generates 1's mask that appear right before the next csr instruction, the clamped_is_csr is clamped to make sure when csr is not detected till the end of the packet, it is handled correctly (that closest_mask should be 1's for all the left non-csr instructions)
+    val furthest_mask = ~closest_mask
+    val ooo_mask = closest_mask & serialise_mask // Clamped within serialise mask to make sure ooo instructions dispatched before don't appear again
+
+    dbg(cf"state : ${state}\n")
+    dbg(cf"ooo_mask ${serialise_mask}%b ${is_csr}%b ${ooo_mask}%b ${closest_mask}%b ${furthest_mask}%b ${clamped_is_csr}%b\n")
+
+    val serialise_mask_mb = PriorityEncoderOH(serialise_mask) 
+    val serialise_fire = serialise_mask_mb & is_csr 
+    val serialise_fire_next = (serialise_mask_mb << 1) & is_csr 
+  
+    val selected_serialising_uop = Mux1H(serialise_fire.asBools, io.dis_uop.bits) 
+  
+    val dispatch_serialised = serialise_fire =/= 0.U && state === ino_mode
+    val serialised_uop_w = Reg(new DISPATCH_EXUISSUE_uop())
+    when(dispatch_serialised) {
+      (serialised_uop_w: Data).waiveAll :<>= (selected_serialising_uop.bits: Data).waiveAll
+    } 
+    io.serialised_uop.bits := serialised_uop_w
+    io.serialised_uop.valid := RegNext(dispatch_serialised)
+      
+    import InstrType._
+    //TODO: Hack
+    val is_st = Mux(state === ooo_mode, (VecInit(io.dis_uop.bits.map(x => (x.bits.instr_type.isOneOf(ST)) && x.valid)).asUInt & ooo_mask), 0.U)
+    val is_ld = Mux(state === ooo_mode, (VecInit(io.dis_uop.bits.map(x => (x.bits.instr_type.isOneOf(LD)) && x.valid)).asUInt & ooo_mask), 0.U)
+    val is_ex = Mux(state === ooo_mode, (VecInit(io.dis_uop.bits.map(x => ~(x.bits.instr_type.isOneOf(ST, LD)) && x.valid)).asUInt & ooo_mask), 0.U)
+
+    dbg(cf"st ${is_st}%b ${is_ld}%b ${is_ex}%b\n")
+
+    val exu_issue_depth_bits = log2Ceil(p.EXUISSUE_DEPTH)
+    val ld_issue_depth_bits = log2Ceil(p.LDISSUE_DEPTH)
+    val st_issue_depth_bits = log2Ceil(p.STISSUE_DEPTH)
+    //为了解决单周期iq条目释放数量的不确定行，对不同通道设立一个独立的freelist，使两者地址域不交叠
+    // Write back length is determined by issue width, not entirely core_width
+    val exu_freelist = Module(new FreeListCam(p.EXUISSUE_DEPTH, p.CORE_WIDTH, exu_fu_num)) 
+    val ld_freelist = Module(new FreeListCam(p.LDISSUE_DEPTH, p.CORE_WIDTH, 1)) 
+    val st_freelist = Module(new FreeListCam(p.STISSUE_DEPTH, p.CORE_WIDTH, 1)) 
+  
+    val input_ready = Wire(Bool())
+  
+    exu_freelist.io.enq_request := io.exu_issued_index
+    ld_freelist.io.enq_request := VecInit(io.ld_issued_index)
+    st_freelist.io.enq_request := VecInit(io.st_issued_index)
+  
+    (exu_freelist.io.deq_request zip is_ex.asBools).foreach{ case(dq, v) =>
+      dq.ready := v  
+    }  
+    (ld_freelist.io.deq_request  zip is_ld.asBools).foreach{ case(dq, v) =>
+      dq.ready := v  
+    } 
+    (st_freelist.io.deq_request  zip is_st.asBools).foreach{ case(dq, v) =>
+      dq.ready := v  
+    } 
+  
+    // Ready fields should be ready when it is not valid, or when it is a valid instruction and freelist is ready
+    val ex_ready = (exu_freelist.io.deq_request zip is_ex.asBools).map{ case(dq, v) =>
+      dbg(cf" exu ${dq.bits} ${dq.valid} || ${v} \n")
+      (dq.valid) || !v
+    }  
+    val ld_ready = (ld_freelist.io.deq_request  zip is_ld.asBools).map{ case(dq, v) =>
+      dbg(cf" ld ${dq.bits} ${dq.valid} || ${v} \n")
+      (dq.valid) || !v
+    } 
+    val st_ready = (st_freelist.io.deq_request  zip is_st.asBools).map{ case(dq, v) =>
+      dbg(cf" st ${dq.bits} ${dq.valid} || ${v} \n")
+      (dq.valid) || !v
+    } 
+
+    exu_freelist.io.squeeze := mispred
+    ld_freelist.io.squeeze := mispred
+    st_freelist.io.squeeze := mispred
+
+    val ex_ready_R = ex_ready.reduce(_ && _)
+    val ld_ready_R = ld_ready.reduce(_ && _)
+    val st_ready_R = st_ready.reduce(_ && _)
+
+    input_ready := rob_ready &&
+       !io.stq_full &&
+       ex_ready_R &&
+       ld_ready_R &&
+       st_ready_R &&
+       !still_has_csr &&
+       state === ooo_mode // TODO can be omitted
+
+    dbg(cf"${input_ready} ${rob_ready} ${io.stq_full} ${ex_ready_R} ${ld_ready_R} ${st_ready_R} ${still_has_csr} \n")
+  
+    //TODO: Should be something else? Or is it sufficient
+    io.dis_uop.ready := input_ready 
+  
+    //Checks for every single uop, signals to update each output register
+    val st_valid = is_st =/= 0.U
+    val ld_valid = is_ld =/= 0.U
+    val ex_valid = is_ex =/= 0.U
+
+    val output_valid = (ooo_mask =/= 0.U && state === ooo_mode) && !mispred && io.dis_uop.valid
+  
+    io.st_inc.bits := RegNext(PopCount(is_st.asBools))
+    io.st_inc.valid := RegNext(st_valid)
+  
+    io.rob_uop.valid := (output_valid)
+    // TODO invalidating csrs this way is incorrect
+    io.rob_uop.bits := (VecInit(io.dis_uop.bits.zip(is_csr.asBools).map{case (c, csr) =>
+      val out = Wire(Valid(new DISPATCH_ROB_uop()))
+      out.valid := c.valid && input_ready && !csr
+      (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
+      out
+    }))
+
+    io.exu_issue_uop:= ValidPassthrough(VecInit(io.dis_uop.bits.zip(is_ex.asBools).zip(exu_freelist.io.deq_request).zipWithIndex.map{case (((c, v), fl), rob_inner_ind) =>
+      val out = Wire(Valid(new DISPATCH_EXUISSUE_uop()))
+      out.valid := c.valid && v && fl.valid
+      (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
+      //TODO: This is not that appropriate
+      out.bits.iq_index := fl.bits
+      out.bits.rob_index := io.rob_index
+      out.bits.rob_inner_index := rob_inner_ind.U
+      out
+    }), output_valid && ex_valid)
+  
+    var stq_tail_offset = 0.U
+    io.ld_issue_uop:= ValidPassthrough(VecInit(io.dis_uop.bits.zip(is_ld.asBools).zip(ld_freelist.io.deq_request).zipWithIndex.map{case (((c, v), fl), rob_inner_ind) =>
+      val out = Wire(Valid(new DISPATCH_LDISSUE_uop()))
+      out.valid := c.valid &&  v && fl.valid
+      (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
+      out.bits.iq_index := fl.bits
+      // TODO
+      out.bits.stq_tail := io.stq_tail + stq_tail_offset//TODO: Check on its validity
+      out.bits.rob_index := io.rob_index
+      out.bits.rob_inner_index := rob_inner_ind.U
+      out
+    }), output_valid && ld_valid)
+  
+    io.st_issue_uop:= ValidPassthrough(VecInit(io.dis_uop.bits.zip(is_st.asBools).zip(st_freelist.io.deq_request).zipWithIndex.map{case (((c, v), fl), rob_inner_ind) =>
+      val out = Wire(Valid(new DISPATCH_STISSUE_uop()))
+
+      val valid = c.valid &&  v && fl.valid
+      out.valid := valid
+      (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
+      out.bits.iq_index := fl.bits
+      out.bits.rob_index := io.rob_index
+      out.bits.rob_inner_index := rob_inner_ind.U
+      // TODO stupidest thing ever seen
+      out.bits.stq_index := stq_tail_offset + io.stq_tail //TODO: Check on its validity
+      stq_tail_offset = stq_tail_offset + valid.asUInt
+      out
+    }), output_valid && st_valid)
+
+    when(mispred) {
+      state := ooo_mode
+    }.elsewhen(state === ooo_mode && still_has_csr) {
+      dbg(cf"Now entering csr mode serialised mask ${serialise_mask}%b furthest mask ${furthest_mask}%b fire: ${serialise_fire}%b\n")
+      serialise_mask := furthest_mask // Shift the mask to align the most significant bit with the first matching csr instruction within the previous serialise_mask window
+      // when(rob_empty) {
+        // val next_serialise_mask = (serialise_mask << 1.U)
+        // serialise_mask := next_serialise_mask
+        // state := ino_mode
+      // }.otherwise {
+      state:= pre_ino_mode
+      // }
+    }.elsewhen(state === pre_ino_mode && io.rob_empty) {
+      state:= ino_mode
+    }.elsewhen(state === ino_mode) {
+      val next_serialise_mask = (serialise_mask << 1.U)
+      serialise_mask := next_serialise_mask
+      when(serialise_fire_next =/= 0.U) {
+        dbg(cf"Now entering csr mode again\n")
+        state := ino_mode
+      }.otherwise {
+        dbg(cf"Now leaving csr mode sm : ${next_serialise_mask}%b\n")
+        state := post_ino_mode
+      }
+    }.elsewhen(state === post_ino_mode) {
+      dbg(cf"post ino mode, resetting serialise_mask ${serialise_mask}%b\n")
+      state := ooo_mode
+      serialise_mask := serialise_mask // Doesn't retain value without this, costed me a fortune in time to find out
+    }.elsewhen(state === ooo_mode && input_ready) {
+      dbg(cf"Pre ooo mode, resetting serialise_mask, was previously ${serialise_mask}%b\n")
+      serialise_mask := ~0.U(p.CORE_WIDTH.W) // Reset back to all 1's
+    }
+
+    // Debugging
+    import chisel3.experimental.BundleLiterals._
+    (io.exu_issue_uop.bits.zip(io.dis_uop.bits).zip(is_ex.asBools)
+      ++ io.ld_issue_uop.bits.zip(io.dis_uop.bits).zip(is_ld.asBools)
+      ++ io.st_issue_uop.bits.zip(io.dis_uop.bits).zip(is_st.asBools)
+    ).foreach{case ((x, y), z) => {
+        x.bits.debug := y.bits.debug
+        // x.bits.debug(y.bits, z)
+    }}
+  }
+  // Special Instruction - Serialised mode
 }
 
 

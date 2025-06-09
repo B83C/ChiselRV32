@@ -34,9 +34,10 @@ class Machine() extends Module {
 }
 
 class Core(implicit p: Parameters) extends CustomModule {
-  val mem_depth = 512
+  // Mem depth is the count of processor word
+  val mem_depth = 128 * 1024
   // val mem_depth = 12376
-  val mem = Module(new mem("../dhrystone.data_truncated", mem_depth, p.CORE_WIDTH))
+  val mem = Module(new mem("../zig-out/rv32im_test.hex", mem_depth, p.CORE_WIDTH))
   // val mem = Module(new mem("../dhrystone.data_truncated", mem_depth, p.CORE_WIDTH))
   
   val fetch = Module(new FetchUnit)
@@ -59,17 +60,21 @@ class Core(implicit p: Parameters) extends CustomModule {
 
   val wb_uops = VecInit(exu.io.wb_uop ++ Seq(lsu.io.ldu_wb_uop, lsu.io.stu_wb_uop, exu.io.serialised_wb_uop))
 
-  dispatch.io.dis_uop.bits.foreach{ dispatched_uop => {
-    when(dispatched_uop.valid && dispatched_uop.bits.pdst =/= 0.U) {
-      prf_busys(dispatched_uop.bits.pdst) := true.B
+  rename.io.prf_busys_write.foreach{ prf_busy => {
+    when(prf_busy.valid) {
+      prf_busys(prf_busy.bits) := true.B
     }
   }}
   wb_uops.foreach{wb_uop => {
-    when(wb_uop.valid && wb_uop.bits.pdst_value.valid) {
-      prf_busys(wb_uop.bits.pdst) := false.B
+    when(wb_uop.valid && wb_uop.bits.pdst.valid) {
+      prf_busys(wb_uop.bits.pdst.bits) := false.B
     }
   }}
 
+  val mispred = rob.io.rob_controlsignal.valid && rob.io.rob_controlsignal.bits.isMispredicted
+  when(mispred) {
+    prf_busys.foreach(x => x := false.B)
+  }
 
   mem.io.reset := reset
   // Since if_mem is 4-byte aligned by default
@@ -77,7 +82,7 @@ class Core(implicit p: Parameters) extends CustomModule {
 
   fetch.io.instr := mem.io.mem_id.inst
   fetch.io.predicted_next_pc := branch_predictor.io.predicted_next_pc 
-  fetch.io.instr_mask := branch_predictor.io.instr_mask 
+  fetch.io.btb_hits := branch_predictor.io.btb_hits 
   fetch.io.should_branch := branch_predictor.io.should_branch 
   fetch.io.rob_controlsignal := rob.io.rob_controlsignal
   fetch.io.ghr := branch_predictor.io.ghr 
@@ -158,13 +163,13 @@ class Core(implicit p: Parameters) extends CustomModule {
   lsu.io.rob_controlsignal := rob.io.rob_controlsignal
 
   val execute_prf_reads = (execute_uop.map(_.bits) :+ serialised_uop_exu.bits).zip(exu_issue.io.prf_raddr :+ serialised_uop_prfs).map{case (uop, prf_raddr) => {
-    Seq(ReadValueRequest(uop.ps1_value, prf_raddr.bits(0), prf_raddr.valid )) ++  Seq(ReadValueRequest( uop.ps2_value, prf_raddr.bits(1), prf_raddr.valid))
+    Seq(ReadValueRequest(uop.ps1_value, prf_raddr.bits(0), uop.opr1_sel === OprSel.REG && prf_raddr.valid)) ++  Seq(ReadValueRequest( uop.ps2_value, prf_raddr.bits(1), uop.opr2_sel === OprSel.REG && prf_raddr.valid))
   }}.reduce(_ ++ _)
   val load_prf_reads = Seq(load_uop.bits).zip(Seq(ld_issue.io.prf_raddr)).map{case (uop, prf_raddr) => {
     Seq(ReadValueRequest(uop.ps1_value, prf_raddr.bits, prf_raddr.valid))
   }}.reduce(_ ++ _)
   val store_prf_reads = Seq(store_uop.bits).zip(Seq(st_issue.io.prf_raddr)).map{case (uop, prf_raddr) => {
-    Seq(ReadValueRequest( uop.ps1_value, prf_raddr.bits(0), prf_raddr.valid )) ++  Seq(ReadValueRequest( uop.ps2_value, prf_raddr.bits(1), prf_raddr.valid))
+    Seq(ReadValueRequest( uop.ps1_value, prf_raddr.bits(0), prf_raddr.valid )) ++  Seq(ReadValueRequest( uop.ps2_value, prf_raddr.bits(1),  prf_raddr.valid))
   }}.reduce(_ ++ _)
 
   val read_requests =

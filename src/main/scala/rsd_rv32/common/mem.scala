@@ -91,40 +91,8 @@ class mem(mem_path: String, memDepth: Int, instWidth: Int) extends CustomModule 
     }
   }
 
-  loadMemoryFromFile(memInside, mem_path, MemoryLoadFileType.Hex)
   // loadMemoryFromFile(memInside, mem_path, MemoryLoadFileType.Hex)
-
-  def readMemFile(file: String): Seq[Vec[UInt]] = {
-    println(s"Reading from : ${file}")
-    val source = Source.fromFile(file)
-    println(s"Done reading\n")
-    try {
-      source.getLines().map { line =>
-        val word = BigInt(line.trim, 16).U(32.W)
-        word.asTypeOf(Vec(4, UInt(8.W)))
-      }.toSeq
-    } finally {
-      source.close()
-    }
-  }
-
-  // Read the memory contents
-  // val memContents = readMemFile("/home/b83c/chisel/ChiselRV32/drystone.data")
-
-  // val value = VecInit(memContents)
-
-  // val loaded = RegInit(0.U(14.W))
-  // Initialize memory during reset
-  
-  // when (loaded < 20.U) {
-  //   memInside.write(loaded, value(loaded))
-  //   loaded := loaded + 1.U
-  // }
-  // when(true.B) {
-  //   printf(cf"first byte ${memInside.read(0.U)} \n")
-  // }
-
-  // loadMemoryFromFile(memInside, "drystone.data", MemoryLoadFileType.Hex)
+  // loadMemoryFromFile(memInside, mem_path, MemoryLoadFileType.Hex)
 
   val data_addr   = Wire(UInt(64.W))
   val dataAddrP1 = Wire(UInt(64.W))

@@ -30,25 +30,22 @@ class PRF(read_port_count: Int)(implicit p: Parameters) extends CustomModule{
       })
   )
 
+  val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
+
   // 执行寄存器写入
-  (io.wb_uop.map(x => (x.bits, x.valid && x.bits.pdst_value.valid))).foreach{ case (x, y) => 
-    when(y) {
-      regBank(x.pdst) := x.pdst_value.bits
+  io.wb_uop.foreach(x => {
+    when(!mispred && x.valid && x.bits.pdst.valid) {
+      regBank(x.bits.pdst.bits) := x.bits.pdst_value
     }
-  }
+    
+  })
   io.read_requests.foreach(request => {
     request.value := Mux(request.addr =/= 0.U, regBank(request.addr), 0.U)
   })
 
-  val flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
 
-  //1置0的逻辑
-  def hasPd(rob_type : ROBType.Type, rd : UInt) : Bool = {
-    (rob_type === ROBType.Arithmetic || rob_type === ROBType.Jump || rob_type === ROBType.CSR) && (rd =/= 0.U)
-  }
-
-  val rob_valid_bits = Wire(UInt(2.W))
-  rob_valid_bits := io.rob_commitsignal.bits(0).valid ## io.rob_commitsignal.bits(1).valid
+  // val rob_valid_bits = Wire(UInt(2.W)
+  // rob_valid_bits := io.rob_commitsignal.bits(0).valid ## io.rob_commitsignal.bits(1).valid
   
   // when(!flush && io.rob_commitsignal.valid){
   //   switch(rob_valid_bits){
