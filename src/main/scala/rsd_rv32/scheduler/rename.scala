@@ -20,7 +20,7 @@ class RenameUnit_IO(implicit p: Parameters) extends Bundle {
 
   //with ROB
   val rob_commitsignal = Flipped(ROB.CommitSignal)  //ROB提交时的广播信号，rob正常提交指令时更新amt与rmt，发生误预测时对本模块进行恢复
-  val rob_controlsignal = Flipped(ROB.ControlSignal) //来自于ROB的控制信号
+  val rob_controlsignal = Flipped(new ROBControlSignal) //来自于ROB的控制信号
 
   val prf_busys_write = Vec(p.CORE_WIDTH, Valid(UInt(log2Ceil(p.PRF_DEPTH).W)))
 
@@ -37,10 +37,13 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
   val io = IO(new RenameUnit_IO())
   val prf_depth_bits = log2Ceil(p.PRF_DEPTH).W
 
-  val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
-  val rmt = RegInit(VecInit.tabulate(32)(i => (i).U(prf_depth_bits))) // 重命名表，存储逻辑寄存器到物理寄存器的映射关系
-  val rmt_valid = RegInit(VecInit.tabulate(32)(_ => false.B)) // 重命名表，存储逻辑寄存器到物理寄存器的映射关系
-  val amt = RegInit(VecInit.tabulate(32)(i => (i).U(prf_depth_bits))) // 架构寄存器表，存储逻辑寄存器到物理寄存器的映射关系
+  // val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
+  val should_flush = io.rob_controlsignal.shouldFlush
+
+  // val rmt = RegInit(VecInit.tabulate(32)(i => (i).U(prf_depth_bits))) // 重命名表，存储逻辑寄存器到物理寄存器的映射关系
+  // val amt = RegInit(VecInit.tabulate(32)(i => (i).U(prf_depth_bits))) // 架构寄存器表，存储逻辑寄存器到物理寄存器的映射关系
+  val rmt = RegInit(VecInit(Seq.fill(32)(0.U(prf_depth_bits)))) // 重命名表，存储逻辑寄存器到物理寄存器的映射关系
+  val amt = RegInit(VecInit(Seq.fill(32)(0.U(prf_depth_bits)))) // 架构寄存器表，存储逻辑寄存器到物理寄存器的映射关系
 
   // io.amt := amt
 
@@ -62,8 +65,15 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
   val amt_freelist_mapping = RegInit(VecInit(0.U(p.PRF_DEPTH.W).asBools))
   // TODO
   prf_freelist.io.squeeze := false.B
-  prf_freelist.io.restore.get := RegNext(mispred)
+  // TODO: since the commitsignal has output reg, it should be delayed 
+  prf_freelist.io.restore.get := RegNext(io.rob_controlsignal.restore_amt)
   prf_freelist.io.restore_mapping.get := amt_freelist_mapping
+
+  val mapping_1 = prf_freelist.io.state.get.asUInt
+  val mapping_2 = amt_freelist_mapping.asUInt
+
+  dontTouch(mapping_1)
+  dontTouch(mapping_2)
 
   // when(mispred) {
   //   printf(cf"AMT RESTORE\n")
@@ -81,12 +91,14 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
   }.reduce(_ && _)
 
   val operation_ready = can_rename_all
-  val ack = operation_ready && io.dis_uop.ready
+  val downstream_ready = io.dis_uop.ready
+  val ack = operation_ready && downstream_ready
 
   io.rename_uop.ready := ack
 
-  // TODO: there should be better ways to handle mispred
-  withReset(reset.asBool || mispred)  {
+  withReset(reset.asBool || should_flush)  {
+    val rmt_valid = RegInit(VecInit.tabulate(32)(_ => false.B)) // 重命名表，存储逻辑寄存器到物理寄存器的映射关系
+
     var mapping = VecInit(Seq.fill(p.CORE_WIDTH)(0.U(prf_depth_bits)))
     // var mask = VecInit(Seq.fill(32)(false.B))
     var mask = VecInit(Seq.fill(32)(VecInit(Seq.fill(p.CORE_WIDTH)(false.B))))
@@ -100,7 +112,8 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
       (out_uop_w: Data).waiveAll :<>= (in_uop: Data).waiveAll
 
       // Valid bit check is a bit redundant
-      val writes_to_reg = in_uop.bits.rd.valid && instr_valid
+      val writes_to_reg = in_uop.bits.rd.valid && instr_valid && downstream_ready
+      // TODO
       prf_deq.ready := writes_to_reg
 
       prf_busy.valid := writes_to_reg
@@ -144,37 +157,41 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
       out_uop_w
     }}), ack) 
 
+    // io.dis_uop.valid := RegNext(io.rename_uop.valid && ack)
     io.dis_uop.valid := RegEnable(io.rename_uop.valid, false.B, ack)
   
     // 来自ROB的commit
-    // 我发现chisel会自动处理写入冲突的问题，最后的赋值才是有效的
-    io.rob_commitsignal.bits.zip(prf_freelist.io.enq_request).foreach{ case (commit, prf_enq) => {
+    var commit_rd_mask = 0.U(32.W)
+    // var commit_rd_mask = VecInit(Seq.fill(32)(VecInit(Seq.fill(p.CORE_WIDTH)(false.B))))
+    io.rob_commitsignal.bits.zip(prf_freelist.io.enq_request).zipWithIndex.reverse.foreach{ case ((commit, prf_enq), idx) => {
+      val rd = commit.rd.bits
+      val pdst = commit.pdst.bits
       val wb_valid =  commit.valid && io.rob_commitsignal.valid && commit.pdst.valid
-      prf_enq.bits := DontCare
-      prf_enq.valid := wb_valid
+      prf_enq.bits := pdst
+      prf_enq.valid := wb_valid && rmt(rd) =/= pdst
       when(wb_valid) {
-        val previous_mapping = amt(commit.rd.bits)
-        prf_enq.bits := previous_mapping
-        when(previous_mapping =/= 0.U) {
-          amt_freelist_mapping(previous_mapping) := false.B
+        // RMT bug
+
+        // AMT - Replaces old mappings, in amt, there could only be 32 pdst valid at a time
+        val commit_rd_mask_vec = VecInit(commit_rd_mask.asBools)
+        when(commit_rd_mask_vec(rd) === false.B) {
+          val amt_mapping = amt(commit.rd.bits)
+          when(amt_mapping =/= 0.U) {
+            amt_freelist_mapping(amt_mapping) := false.B
+          }
+          amt_freelist_mapping(pdst) := true.B
+          amt_mapping := pdst
         }
-        amt_freelist_mapping(commit.pdst.bits) := true.B
-        previous_mapping := commit.pdst.bits
       }
+      commit_rd_mask = commit_rd_mask | (wb_valid.asUInt << rd)
     }}
 
-    rmt_valid.foreach(v => {
-      when(mispred){
-        v := false.B
-      }
-    })
-
     //for debugging
-    when (true.B) {
+    // when (true.B) {
       // val buf: UInt = prf_freelist.io.state.get.asUInt
       // printf(cf"${io.dis_uop.bits(0).bits.instr_addr}%x \n")
       // printf(cf"b${buf}%b \n")
       // printf(cf"a${amt_freelist_mapping.asUInt}%b \n")
-    }
+    // }
   }
 }

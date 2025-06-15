@@ -59,7 +59,7 @@ just spec
 
 | Part | Member |
 |------|--------|
-|组长+toplevel+doc| 刘恒雨|
+|组长+toplevel+doc+dispatch+test| 刘恒雨|
 |rename|蔡家麒|
 |dispatch|李可名|
 |branch predictor|杨钧铎|

@@ -8,7 +8,7 @@ import scala.io.Source
 import java.nio.file.Files
 
 class if_mem extends Bundle {
-  val instAddr = (UInt(64.W))
+  val instAddr = Valid(UInt(64.W))
 }
 
 class mem_id(val instWidth: Int) extends Bundle {
@@ -39,7 +39,7 @@ class mem(mem_path: String, memDepth: Int, instWidth: Int) extends CustomModule 
   })
 
 
-  val memInside = SyncReadMem(memDepth, Vec(4, UInt(8.W)))
+  val memInside = SyncReadMem(memDepth, Vec(4, UInt(8.W))).suggestName("mem")
 
   //  var memAddrDiff = Wire(UInt(2.W))
   //  for (i <- 0 to 3) {
@@ -102,11 +102,17 @@ class mem(mem_path: String, memDepth: Int, instWidth: Int) extends CustomModule 
   dataAddrP2 := data_addr + 2.U
 
   for (i <- 0 until instWidth) {
+    val last_instr = RegInit(0x13.U(32.W))
+    val valid = RegNext(io.if_mem.instAddr.valid)
+    val read_mem = memInside.read(io.if_mem.instAddr.bits + i.U).reduce((acc, elem) => Cat(elem, acc))
     io.mem_id.inst(i) := Mux(
-      io.reset,
-      0x13.U,
-      memInside.read(io.if_mem.instAddr + i.U).reduce((acc, elem) => Cat(elem, acc))
+      io.reset || !valid,
+      last_instr,
+      read_mem
     )
+    when(valid)  {
+      last_instr := read_mem
+    }
   }
   io.mem_lsu.data_out_mem := Cat(
     memInside.read(dataAddrP1).reduce((acc, elem) => Cat(elem, acc)),

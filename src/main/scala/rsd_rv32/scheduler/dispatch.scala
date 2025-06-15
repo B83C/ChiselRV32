@@ -12,13 +12,13 @@ class Dispatcher_IO(exu_fu_num: Int)(implicit p:Parameters) extends CustomBundle
   
   val rob_uop = Decoupled(Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop()))) //发往ROB的uop
   
-  val rob_index = Flipped(UInt(log2Ceil(p.ROB_DEPTH).W)) //ROB尾指针
+  val rob_index = Flipped(UInt(bl(p.ROB_DEPTH) + 1.W)) //ROB尾指针
   val rob_empty = Flipped(Bool()) //ROB尾指针
   
   val serialised_uop = Valid(new DISPATCH_EXUISSUE_uop()) // 只有在顺序执行模式下才有效
   
   //感觉可能csr采用到
-  val rob_controlsignal = Flipped(Valid(new ROBControlSignal)) //来自于ROB的控制信号
+  val rob_controlsignal = Flipped(new ROBControlSignal) //来自于ROB的控制信号
   // with exu_issue
   val exu_issue_uop = Valid(Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop()))) //发往EXU的uop
   val exu_issued_index = Flipped(Vec(exu_fu_num, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W)))) //本周期EXU ISSUE queue发出指令对应的issue queue ID，用于更新iq freelist
@@ -36,11 +36,9 @@ class Dispatcher_IO(exu_fu_num: Int)(implicit p:Parameters) extends CustomBundle
 }
 
 // ooo_mode (Out of order) 表示乱序执行状态
-// pre_ino_mode (In order) 表示顺序执行状态(且等待rob清空)
 // ino_mode (In order) 表示顺序执行状态
-// post_ino_mode (In order) 表示顺序执行状态，并且等待执行完毕，目前不等待，只延迟一周期
 object DispatchState extends ChiselEnum {
-  val ooo_mode, pre_ino_mode, ino_mode, post_ino_mode = Value
+  val ooo_mode, ino_mode = Value
 }
 
 // 该模块负责将重命名单元发来的指令派遣到ROB，根据指令类型派遣到三个issue queue（分别为exu issue queue，store issue queue和load issue queue），如果是store指令，则还需要派遣到STQ（store queue）中。
@@ -51,12 +49,19 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
   val io = IO(new Dispatcher_IO(exu_fu_num))
 
   import DispatchState._
-  val state = RegInit(ooo_mode)
   
-  val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
-  val rob_ready = io.rob_uop.ready
+  val should_flush = io.rob_controlsignal.shouldFlush
 
-  withReset(mispred || reset.asBool) {
+  val operation_ready = Wire(Bool())
+  val downstream_ready = io.rob_uop.ready && !io.stq_full 
+  val ack = operation_ready && downstream_ready 
+  
+  val exu_freelist = Module(new FreeListCam(p.EXUISSUE_DEPTH, p.CORE_WIDTH, exu_fu_num)) 
+  val ld_freelist = Module(new FreeListCam(p.LDISSUE_DEPTH, p.CORE_WIDTH, 1)) 
+  val st_freelist = Module(new FreeListCam(p.STISSUE_DEPTH, p.CORE_WIDTH, 1)) 
+  
+  withReset(should_flush || reset.asBool) {
+    val state = RegInit(ooo_mode)
     val is_csr = VecInit(io.dis_uop.bits.map(x => x.valid && x.bits.instr_type.isOneOf(InstrType.CSR))).asUInt
     // val ooo_mask = 
     val serialise_mask = Reg(UInt(p.CORE_WIDTH.W)) // All 1's by default
@@ -82,7 +87,7 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
   
     val selected_serialising_uop = Mux1H(serialise_fire.asBools, io.dis_uop.bits) 
   
-    val dispatch_serialised = serialise_fire =/= 0.U && state === ino_mode
+    val dispatch_serialised = serialise_fire =/= 0.U && state === ino_mode && io.rob_empty && !should_flush
     val serialised_uop_w = Reg(new DISPATCH_EXUISSUE_uop())
     when(dispatch_serialised) {
       (serialised_uop_w: Data).waiveAll :<>= (selected_serialising_uop.bits: Data).waiveAll
@@ -98,35 +103,25 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
 
     dbg(cf"st ${is_st}%b ${is_ld}%b ${is_ex}%b\n")
 
-    val exu_issue_depth_bits = log2Ceil(p.EXUISSUE_DEPTH)
-    val ld_issue_depth_bits = log2Ceil(p.LDISSUE_DEPTH)
-    val st_issue_depth_bits = log2Ceil(p.STISSUE_DEPTH)
-    //为了解决单周期iq条目释放数量的不确定行，对不同通道设立一个独立的freelist，使两者地址域不交叠
-    // Write back length is determined by issue width, not entirely core_width
-    val exu_freelist = Module(new FreeListCam(p.EXUISSUE_DEPTH, p.CORE_WIDTH, exu_fu_num)) 
-    val ld_freelist = Module(new FreeListCam(p.LDISSUE_DEPTH, p.CORE_WIDTH, 1)) 
-    val st_freelist = Module(new FreeListCam(p.STISSUE_DEPTH, p.CORE_WIDTH, 1)) 
-  
-    val input_ready = Wire(Bool())
   
     exu_freelist.io.enq_request := io.exu_issued_index
     ld_freelist.io.enq_request := VecInit(io.ld_issued_index)
     st_freelist.io.enq_request := VecInit(io.st_issued_index)
   
     (exu_freelist.io.deq_request zip is_ex.asBools).foreach{ case(dq, v) =>
-      dq.ready := v  
+      dq.ready := v && downstream_ready
     }  
     (ld_freelist.io.deq_request  zip is_ld.asBools).foreach{ case(dq, v) =>
-      dq.ready := v  
+      dq.ready := v && downstream_ready
     } 
     (st_freelist.io.deq_request  zip is_st.asBools).foreach{ case(dq, v) =>
-      dq.ready := v  
+      dq.ready := v && downstream_ready
     } 
   
     // Ready fields should be ready when it is not valid, or when it is a valid instruction and freelist is ready
     val ex_ready = (exu_freelist.io.deq_request zip is_ex.asBools).map{ case(dq, v) =>
       dbg(cf" exu ${dq.bits} ${dq.valid} || ${v} \n")
-      (dq.valid) || !v
+      (dq.valid) || !v 
     }  
     val ld_ready = (ld_freelist.io.deq_request  zip is_ld.asBools).map{ case(dq, v) =>
       dbg(cf" ld ${dq.bits} ${dq.valid} || ${v} \n")
@@ -137,42 +132,41 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
       (dq.valid) || !v
     } 
 
-    exu_freelist.io.squeeze := mispred
-    ld_freelist.io.squeeze := mispred
-    st_freelist.io.squeeze := mispred
+    // TODO: They should not be here
+    exu_freelist.io.squeeze := should_flush
+    ld_freelist.io.squeeze := should_flush
+    st_freelist.io.squeeze := should_flush
 
     val ex_ready_R = ex_ready.reduce(_ && _)
     val ld_ready_R = ld_ready.reduce(_ && _)
     val st_ready_R = st_ready.reduce(_ && _)
 
-    input_ready := rob_ready &&
-       !io.stq_full &&
+    operation_ready := 
        ex_ready_R &&
        ld_ready_R &&
        st_ready_R &&
        !still_has_csr &&
        state === ooo_mode // TODO can be omitted
 
-    dbg(cf"${input_ready} ${rob_ready} ${io.stq_full} ${ex_ready_R} ${ld_ready_R} ${st_ready_R} ${still_has_csr} \n")
+    dbg(cf"${operation_ready} ${downstream_ready} ${io.stq_full} ${ex_ready_R} ${ld_ready_R} ${st_ready_R} ${still_has_csr} \n")
   
     //TODO: Should be something else? Or is it sufficient
-    io.dis_uop.ready := input_ready 
+    io.dis_uop.ready := ack 
   
     //Checks for every single uop, signals to update each output register
-    val st_valid = is_st =/= 0.U
-    val ld_valid = is_ld =/= 0.U
-    val ex_valid = is_ex =/= 0.U
-
-    val output_valid = (ooo_mask =/= 0.U && state === ooo_mode) && !mispred && io.dis_uop.valid
+    val output_valid = (ooo_mask =/= 0.U && state === ooo_mode) && !should_flush && io.dis_uop.valid      
+    val st_valid = is_st =/= 0.U && output_valid
+    val ld_valid = is_ld =/= 0.U && output_valid
+    val ex_valid = is_ex =/= 0.U && output_valid
   
-    io.st_inc.bits := RegNext(PopCount(is_st.asBools))
-    io.st_inc.valid := RegNext(st_valid)
+    io.st_inc.bits := PopCount(is_st.asBools)
+    io.st_inc.valid := st_valid
   
     io.rob_uop.valid := (output_valid)
     // TODO invalidating csrs this way is incorrect
     io.rob_uop.bits := (VecInit(io.dis_uop.bits.zip(is_csr.asBools).map{case (c, csr) =>
       val out = Wire(Valid(new DISPATCH_ROB_uop()))
-      out.valid := c.valid && input_ready && !csr
+      out.valid := c.valid && operation_ready && !csr
       (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
       out
     }))
@@ -210,27 +204,17 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
       out.bits.iq_index := fl.bits
       out.bits.rob_index := io.rob_index
       out.bits.rob_inner_index := rob_inner_ind.U
-      // TODO stupidest thing ever seen
+      // TODO 
       out.bits.stq_index := stq_tail_offset + io.stq_tail //TODO: Check on its validity
       stq_tail_offset = stq_tail_offset + valid.asUInt
       out
     }), output_valid && st_valid)
 
-    when(mispred) {
-      state := ooo_mode
-    }.elsewhen(state === ooo_mode && still_has_csr) {
+    when(state === ooo_mode && still_has_csr) {
       dbg(cf"Now entering csr mode serialised mask ${serialise_mask}%b furthest mask ${furthest_mask}%b fire: ${serialise_fire}%b\n")
       serialise_mask := furthest_mask // Shift the mask to align the most significant bit with the first matching csr instruction within the previous serialise_mask window
-      // when(rob_empty) {
-        // val next_serialise_mask = (serialise_mask << 1.U)
-        // serialise_mask := next_serialise_mask
-        // state := ino_mode
-      // }.otherwise {
-      state:= pre_ino_mode
-      // }
-    }.elsewhen(state === pre_ino_mode && io.rob_empty) {
       state:= ino_mode
-    }.elsewhen(state === ino_mode) {
+    }.elsewhen(state === ino_mode && io.rob_empty) {
       val next_serialise_mask = (serialise_mask << 1.U)
       serialise_mask := next_serialise_mask
       when(serialise_fire_next =/= 0.U) {
@@ -238,28 +222,15 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
         state := ino_mode
       }.otherwise {
         dbg(cf"Now leaving csr mode sm : ${next_serialise_mask}%b\n")
-        state := post_ino_mode
+        state := ooo_mode
       }
-    }.elsewhen(state === post_ino_mode) {
-      dbg(cf"post ino mode, resetting serialise_mask ${serialise_mask}%b\n")
-      state := ooo_mode
-      serialise_mask := serialise_mask // Doesn't retain value without this, costed me a fortune in time to find out
-    }.elsewhen(state === ooo_mode && input_ready) {
+    }
+    .elsewhen(state === ooo_mode && operation_ready) {
       dbg(cf"Pre ooo mode, resetting serialise_mask, was previously ${serialise_mask}%b\n")
       serialise_mask := ~0.U(p.CORE_WIDTH.W) // Reset back to all 1's
     }
 
-    // Debugging
-    import chisel3.experimental.BundleLiterals._
-    (io.exu_issue_uop.bits.zip(io.dis_uop.bits).zip(is_ex.asBools)
-      ++ io.ld_issue_uop.bits.zip(io.dis_uop.bits).zip(is_ld.asBools)
-      ++ io.st_issue_uop.bits.zip(io.dis_uop.bits).zip(is_st.asBools)
-    ).foreach{case ((x, y), z) => {
-        x.bits.debug := y.bits.debug
-        // x.bits.debug(y.bits, z)
-    }}
   }
-  // Special Instruction - Serialised mode
 }
 
 

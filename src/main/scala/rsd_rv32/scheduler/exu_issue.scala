@@ -23,11 +23,13 @@ class exu_issue_IO(exu_fu_num: Int, fu_num: Int)(implicit p: Parameters) extends
     val exu_issued_index = Vec(exu_fu_num, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W))) //更新IQ Freelist
 
     //with ROB
-    val rob_controlsignal = Flipped(Valid(new ROBControlSignal)) //来自于ROB的控制信号
+    val rob_controlsignal = Flipped(new ROBControlSignal) //来自于ROB的控制信号
 }
 
 class exu_issue_content(implicit p: Parameters) extends Bundle {
     val ps = Vec(2,UInt(log2Ceil(p.PRF_DEPTH).W)) // 操作数的物理寄存器地址 
+
+    val branch_mask = UInt(p.BRANCH_MASK_WIDTH.W)
 
     val instr_type = InstrType()
     val waiting = Bool() // 表示有效
@@ -39,9 +41,9 @@ class exu_issue_queue(fu_num: Int, fus_props: Seq[FUProps])(implicit p: Paramete
     val VALID = io.exu_issue_uop.valid
     val dis_uop = io.exu_issue_uop.bits
 
-    val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
+    val should_flush = io.rob_controlsignal.shouldFlush
 
-    withReset(reset.asBool || mispred) {
+    withReset(reset.asBool) {
         val issue_queue = RegInit(
             VecInit(Seq.fill(p.EXUISSUE_DEPTH) (
                 0.U.asTypeOf(new exu_issue_content())
@@ -56,13 +58,14 @@ class exu_issue_queue(fu_num: Int, fus_props: Seq[FUProps])(implicit p: Paramete
 
 
         dis_uop.foreach { uop =>
-            when(VALID && uop.valid && !mispred)  {
+            when(VALID && uop.valid && !should_flush)  {
                 val uop_ps = VecInit(Seq(uop.bits.ps1, uop.bits.ps2))
                 val uop_ps_is_reg = VecInit(Seq(uop.bits.opr1_sel, uop.bits.opr2_sel).map(_ === OprSel.REG))
                 payload(uop.bits.iq_index) := uop.bits
                 issue_queue(uop.bits.iq_index).waiting := true.B
                 issue_queue(uop.bits.iq_index).ps := uop_ps
                 issue_queue(uop.bits.iq_index).instr_type := uop.bits.instr_type
+                issue_queue(uop.bits.iq_index).branch_mask := uop.bits.branch_mask.asUInt
 
                 // 因为ps可能在dispatch的时候就就绪了(信号来自WB)
 
@@ -79,7 +82,7 @@ class exu_issue_queue(fu_num: Int, fus_props: Seq[FUProps])(implicit p: Paramete
             val sel_ind = OHToUInt(sel_oh) 
             val selected_entry = issue_queue(sel_ind)
             val selected_payload = payload(sel_ind)
-            val selection_valid = ready_vec_masked.asUInt =/= 0.U && exu_uop.ready && !mispred
+            val selection_valid = ready_vec_masked.asUInt =/= 0.U && exu_uop.ready && !io.rob_controlsignal.shouldBeKilled(selected_entry.branch_mask)
 
             val selected_payload_coerced = Wire(new EXUISSUE_EXU_uop)
             (selected_payload_coerced: Data).waiveAll :<>= (selected_payload: Data).waiveAll
@@ -112,9 +115,12 @@ class exu_issue_queue(fu_num: Int, fus_props: Seq[FUProps])(implicit p: Paramete
         // Eavesdrop on WB signals from all fus (including LSU)
         issue_queue.foreach(iq => {
             iq.ps.zip(iq.ps_ready).foreach{ case (ps, ps_ready) =>
-                when(!mispred && iq.waiting && io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst.valid && wb_uop.bits.pdst.bits === ps)) {
+                when(iq.waiting && io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst.valid && wb_uop.bits.pdst.bits === ps)) {
                     ps_ready := true.B
                 }
+            }
+            when(io.rob_controlsignal.shouldBeKilled(iq.branch_mask)) {
+                iq.waiting := false.B
             }
         })
     }

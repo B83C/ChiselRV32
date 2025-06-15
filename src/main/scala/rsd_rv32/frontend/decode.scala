@@ -16,7 +16,7 @@ class Decode_IO(implicit p: Parameters) extends CustomBundle {
   // to Rename
   val rename_uop = Decoupled(Vec(p.CORE_WIDTH, Valid(new ID_RENAME_uop())))
   // with ROB
-  val rob_controlsignal = Flipped(Valid(new ROBControlSignal)) //来自于ROB的控制信号
+  val rob_controlsignal = Flipped(new ROBControlSignal) //来自于ROB的控制信号
 }
 
 
@@ -26,7 +26,7 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
   //是否接受指令
   //val rob_flush = io.rob_commitsignal.map(_.valid)reduce(_||_)  //是否要flush
   //flush信号
-  val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
+  val should_flush = io.rob_controlsignal.shouldFlush
   
   // Decode always works, no doubt
   val operation_ready = true.B
@@ -36,7 +36,7 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
 
   var has_valid_instruction = false.B
   
-  withReset(reset.asBool || mispred)  {
+  withReset(reset.asBool || should_flush)  {
     io.rename_uop.bits := RegEnable(VecInit(io.id_uop.bits.map{ case id => {
       val to_rename = Wire(Valid(new ID_RENAME_uop)) 
       (to_rename: Data).waiveAll :<>= (id: Data).waiveAll
@@ -165,6 +165,7 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
 
       to_rename
     }}), ack)
+    // io.rename_uop.valid := RegNext(io.id_uop.valid && has_valid_instruction && ack)
     io.rename_uop.valid := RegEnable(io.id_uop.valid && has_valid_instruction, false.B, ack)
   }
 }

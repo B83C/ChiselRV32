@@ -43,9 +43,9 @@ package object Utils {
     }
   }
 
-  def isMispredicted(commitSignal: Valid[ROBContent]): Bool = {
-    commitSignal.valid && commitSignal.bits.mispred
-  }
+  // def isMispredicted(commitSignal: Valid[ROBContent]): Bool = {
+  //   commitSignal.valid && commitSignal.bits.mispred
+  // }
 
   case class Request[T <: Data](data: T) extends Bundle {
     val bits = (data)

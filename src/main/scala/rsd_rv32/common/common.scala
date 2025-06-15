@@ -15,6 +15,12 @@ case class Parameters(
   GHR_WIDTH: Int = 8,
   BRANCH_MASK_WIDTH: Int = 8, // Can handle up to 8 in-flight branches 
 
+  BIMODE_TABLE_SIZE: Int =  1024,          // T/NT 表大小
+  CHOICE_TABLE_SIZE: Int =  1024,          // 选择器表大小
+  COUNTER_BITS: Int =  2,                 // 饱和计数器位宽
+  BTB_SIZE: Int =  512,                   // BTB 表大小
+  INST_BYTES: Int =  4,                   // 指令字节宽度
+
   ALU_NUM: Int = 2,
   BU_NUM: Int = 1,
   MUL_NUM: Int = 1,

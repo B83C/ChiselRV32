@@ -72,6 +72,7 @@ pub fn build(b: *std.Build) void {
     convert_to_hex_step.step.dependOn(&generate_bin.step);
     // const custom_output = b.addInstallArtifact(artifact: *Compile, options: Options)
 
+    // b.installArtifact(&exe.step);
     b.getInstallStep().dependOn(&b.addInstallFileWithDir(output, .prefix, "rv32im_test.hex").step);
 
     const lib_unit_tests = b.addTest(.{

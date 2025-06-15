@@ -14,7 +14,7 @@ import java.lang.reflect.Parameter
 import rsd_rv32.common.Utils.ReadValueRequest
 
 // Top Level Structure
-class Machine() extends Module {
+class Machine() extends CustomModule {
   implicit val p: Parameters = new Parameters
   val core = Module(new Core)
 
@@ -42,6 +42,7 @@ class Core(implicit p: Parameters) extends CustomModule {
   
   val fetch = Module(new FetchUnit)
   val branch_predictor = Module(new BranchPredictor)
+  val branch_mask = Module(new BranchMask)
 
   val exu = Module(new EXU)
 
@@ -71,25 +72,39 @@ class Core(implicit p: Parameters) extends CustomModule {
     }
   }}
 
-  val mispred = rob.io.rob_controlsignal.valid && rob.io.rob_controlsignal.bits.isMispredicted
-  when(mispred) {
+  when(rob.io.rob_controlsignal.shouldFlush) {
     prf_busys.foreach(x => x := false.B)
   }
 
   mem.io.reset := reset
   // Since if_mem is 4-byte aligned by default
-  mem.io.if_mem.instAddr := fetch.io.instr_addr >> 2.U
+  val pc_aligned = fetch.io.instr_addr.bits & ~((p.CORE_WIDTH << 2).U(p.XLEN.W) - 1.U)         //对齐后的当前PC
+  mem.io.if_mem.instAddr.bits := pc_aligned >> 2.U
+  mem.io.if_mem.instAddr.valid := fetch.io.instr_addr.valid
 
   fetch.io.instr := mem.io.mem_id.inst
   fetch.io.predicted_next_pc := branch_predictor.io.predicted_next_pc 
   fetch.io.btb_hits := branch_predictor.io.btb_hits 
   fetch.io.should_branch := branch_predictor.io.should_branch 
   fetch.io.rob_controlsignal := rob.io.rob_controlsignal
+  fetch.io.rob_commitsignal := rob.io.rob_commitsignal
   fetch.io.ghr := branch_predictor.io.ghr 
+  fetch.io.bu_update := branch_mask.io.bu_update
+  fetch.io.bu_commit := branch_mask.io.bu_commit
+  fetch.io.current_branch_mask_with_freed := branch_mask.io.current_branch_mask_with_freed
+  fetch.io.branch_freed := branch_mask.io.branch_freed
 
+  branch_predictor.io.instr_addr := fetch.io.instr_addr 
+  branch_predictor.io.ghr_update := fetch.io.ghr_update
+  branch_predictor.io.bu_update := branch_mask.io.bu_update
+  branch_predictor.io.bu_commit := branch_mask.io.bu_commit
   branch_predictor.io.rob_controlsignal := rob.io.rob_controlsignal
   branch_predictor.io.rob_commitsignal := rob.io.rob_commitsignal
-  branch_predictor.io.instr_addr := fetch.io.instr_addr 
+
+  branch_mask.io.bu_signals := exu.io.bu_signals
+  branch_mask.io.rob_commitsignal := rob.io.rob_commitsignal
+  branch_mask.io.rob_controlsignal := rob.io.rob_controlsignal
+  branch_mask.io.bu_mask_freelist_deq <> fetch.io.bu_mask_freelist_deq
 
   decode.io.id_uop :<>= fetch.io.id_uop
   decode.io.rob_controlsignal := rob.io.rob_controlsignal
@@ -109,11 +124,14 @@ class Core(implicit p: Parameters) extends CustomModule {
 
   rob.io.rob_uop :<>= dispatch.io.rob_uop
   rob.io.wb_uop := wb_uops
-  rob.io.bu_uop := exu.io.bu_signals
+  rob.io.bu_update := branch_mask.io.bu_update
+  rob.io.bu_commit := branch_mask.io.bu_commit
 
   ld_issue.io.prf_busys := prf_busys
   ld_issue.io.wb_uop := wb_uops
   ld_issue.io.st_issue_busy_snapshot := st_issue.io.st_issue_busy_snapshot
+  branch_predictor.io.bu_update := branch_mask.io.bu_update
+  branch_predictor.io.bu_commit := branch_mask.io.bu_commit
   // TODO
   ld_issue.io.st_issue_busy_dispatch := Mux(!dispatch.io.st_issue_uop.valid, 0.U, dispatch.io.st_issue_uop.bits.map(st_uop => Mux(!st_uop.valid, 0.U, (1.U(p.STISSUE_DEPTH.W) << st_uop.bits.iq_index)(p.STISSUE_DEPTH - 1, 0))).reduce(_ | _)).asBools
   ld_issue.io.rob_controlsignal := rob.io.rob_controlsignal

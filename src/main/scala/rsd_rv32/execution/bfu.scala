@@ -14,13 +14,13 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
     bufferedOutput = false
   )
   
-  val bu_out = IO(Valid(new BU_uop))
+  val bu_out = IO(Valid(new BU_signals))
 
   // 从uop中提取控制信号
   val instr_type = input.bits.instr_type
 
   // 指令类型判断
-  val is_conditional = input.bits.pdst.valid
+  val is_conditional = instr_type === InstrType.Branch
   val is_jal = instr_type === InstrType.Jump &&
     (input.bits.opr1_sel === OprSel.PC)
   val is_jalr = instr_type === InstrType.Jump &&
@@ -52,8 +52,8 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
       "b001".U  -> (rs1 =/= rs2),
       "b100".U  -> (rs1.asSInt < rs2.asSInt),
       "b101".U  -> (rs1.asSInt >= rs2.asSInt),
-      "b110".U -> (rs1 < rs2),
-      "b111".U -> (rs1 >= rs2),
+      "b110".U -> (rs1.asUInt < rs2.asUInt),
+      "b111".U -> (rs1.asUInt >= rs2.asUInt),
     )
   )
   actual_taken := Mux(input.valid, Mux(is_jal || is_jalr, true.B, temp), false.B)
@@ -90,15 +90,15 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
 
   // data_out.instr := input.bits.instr
 
-  val bu_uop_out = Wire(new BU_uop)
+  val bu_out_w = Wire(new BU_signals)
   val out = Wire(new WB_uop)
   
   // ROB写回信息
-  (bu_uop_out: Data).waiveAll :<= (input.bits: Data).waiveAll
-  bu_uop_out.is_conditional := input.bits.instr_type === InstrType.Branch
-  bu_uop_out.mispred := mispred // 来自之前计算的预测错误信号
-  bu_uop_out.target_PC := actual_target // 计算出的实际目标地址
-  bu_uop_out.branch_taken := actual_taken// 实际分支方向
+  (bu_out_w: Data).waiveAll :<= (input.bits: Data).waiveAll
+  bu_out_w.is_conditional := input.bits.instr_type === InstrType.Branch
+  bu_out_w.mispred := mispred // 来自之前计算的预测错误信号
+  bu_out_w.target_PC := Mux(actual_taken, actual_target, return_addr) // 计算出的实际目标地址
+  bu_out_w.branch_taken := actual_taken// 实际分支方向
 
   // PRF写回信息（JAL/JALR需要）
   out.pdst_value := return_addr // PC+4（JAL/JALR的返回地址）
@@ -111,7 +111,7 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
   bu_out.valid := input.valid
   
   output.bits := out
-  bu_out.bits := bu_uop_out
+  bu_out.bits := bu_out_w
   
   input.ready := true.B // BranchFU通常单周期完成
 

@@ -16,7 +16,7 @@ class PRF_IO(read_port_count: Int)(implicit p: Parameters) extends CustomBundle{
   //接收Rename Unit的AMT用于更新prf_valid
   // val amt = Flipped(Vec(32, UInt(log2Ceil(p.PRF_DEPTH).W)))
   val rob_commitsignal = Flipped(ROB.CommitSignal)  //ROB提交时的广播信号，rob正常提交指令时更新amt与rmt，发生误预测时对本模块进行恢复
-  val rob_controlsignal = Flipped(ROB.ControlSignal) //来自于ROB的控制信号
+  val rob_controlsignal = Flipped(new ROBControlSignal) //来自于ROB的控制信号
   // prf_valid信号用于表示哪些寄存器已经就绪
   // val prf_valid = Vec(p.PRF_DEPTH, Bool())
 }
@@ -30,11 +30,12 @@ class PRF(read_port_count: Int)(implicit p: Parameters) extends CustomModule{
       })
   )
 
-  val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
+  // val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
 
+  // TODO mispredict
   // 执行寄存器写入
   io.wb_uop.foreach(x => {
-    when(!mispred && x.valid && x.bits.pdst.valid) {
+    when(x.valid && x.bits.pdst.valid) {
       regBank(x.bits.pdst.bits) := x.bits.pdst_value
     }
     

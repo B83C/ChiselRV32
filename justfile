@@ -14,7 +14,7 @@ scala:
 	@{{MILL}} rsd_rv32.run
 
 verilator:
-	verilator --cc Machine.sv --exe bench.cpp --build -j 0 -CFLAGS -O0 -CFLAGS -fuse-ld=mold --trace-fst --trace-threads 8 --hierarchical
+	verilator --cc Machine.sv --exe bench.cpp --build -j 0 -CFLAGS -O0 -CFLAGS -fuse-ld=mold -CFLAGS -march=native --trace-fst --trace-threads 8 --hierarchical
 
 execute: 
 	cd obj_dir && ./VMachine

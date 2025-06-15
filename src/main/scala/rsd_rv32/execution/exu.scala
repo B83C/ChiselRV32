@@ -13,17 +13,17 @@ class EXUIO(fu_num: Int)(implicit p: Parameters) extends Bundle{
   
   val serialised_uop = Flipped(Valid(new EXUISSUE_EXU_uop))
 
-  val rob_controlsignal = Flipped(Valid(new ROBControlSignal)) //来自于ROB的控制信号
+  val rob_controlsignal = Flipped(new ROBControlSignal) //来自于ROB的控制信号
   
   //写回信号
   val wb_uop = Vec(fu_num, Valid(new WB_uop()))
   
-  val bu_signals = Valid(new BU_uop)
+  val bu_signals = Valid(new BU_signals)
   val serialised_wb_uop = Valid(new WB_uop())
 }
 
 //把exu的各个fu封装起来的顶层模块
-class EXU(implicit p: Parameters) extends Module {
+class EXU(implicit p: Parameters) extends CustomModule {
   val alu = Seq.fill(p.ALU_NUM)(Module(new ALUFU))
   val bu = Seq.fill(p.BU_NUM)(Module(new BranchFU))
   val mul = Seq.fill(p.MUL_NUM)(Module(new MULFU))
@@ -33,13 +33,13 @@ class EXU(implicit p: Parameters) extends Module {
   
   def fus_properties: Seq[FUProps] = fus.map(_.properties)
 
-  val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
+  val should_flush = io.rob_controlsignal.shouldFlush
   
   require(bu.length <= 1, "Currently supports only 1 BU")
   
-  withReset(reset.asBool || mispred) {
+  withReset(reset.asBool) {
     fus.zip(io.execute_uop).foreach { case (fu, in_uop) => 
-      fu.input.valid := in_uop.valid
+      fu.input.valid := in_uop.valid && !io.rob_controlsignal.shouldBeKilled(in_uop.bits.branch_mask)
       fu.input.bits := in_uop.bits
       in_uop.ready := fu.input.ready
     }
@@ -54,7 +54,7 @@ class EXU(implicit p: Parameters) extends Module {
     val csru = Module(new CSRFU_Default)
     //Serialised uop
     csru.input.bits := io.serialised_uop.bits
-    csru.input.valid := io.serialised_uop.valid
+    csru.input.valid := io.serialised_uop.valid && !io.rob_controlsignal.shouldBeKilled(io.serialised_uop.bits.branch_mask)
     // CSRU should always be ready? 
     io.serialised_wb_uop := csru.output
   } 

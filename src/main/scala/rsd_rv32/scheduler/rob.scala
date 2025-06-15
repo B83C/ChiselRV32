@@ -14,13 +14,29 @@ object ROB {
     }
 }
 
+// Only the the oldest valid bu_signal from bfu is broadcasted.
+// Any younger bu_signal will only go through branch_kill_mask but not bu_signals
+// the bu_signals here is valid only when the branch_mask of the bu_signal matches the
+// instruction at the head.
+// The bu_signal is fired when the oldest bu_signal is fired from bfu, so it can happen before being commited.
+// Therefore, another restore_amt signal is required at the moment so as to restore the amt when
+// the offending instruction reaches the head of rob.
+// The branch_kill_mask is used to inform every modules that there is a mispredition going on and the
+// instructions matching the branch should be killed. This should be broadcasted asap since any misprediction
+// will still halt the younger instructions.
 class ROBControlSignal(implicit p: Parameters) extends CustomBundle {
-    val mispred = Bool()
+    // To all modules
+    // Can be compressed
+    val branch_kill_mask = Valid(UInt(p.BRANCH_MASK_WIDTH.W))
 
-    // To BP
-    val PC_next = UInt(p.XLEN.W)
+    // Can be 
+    val restore_amt = Bool()
 
-    def isMispredicted: Bool = mispred
+    // Used to inform other modules to stop receiving new instructions and clear instructions if needed
+    def shouldFlush: Bool = branch_kill_mask.valid
+    def shouldBeKilled(branch_mask: Vec[Bool]) : Bool = shouldFlush && (branch_kill_mask.bits & branch_mask.asUInt) =/= 0.U 
+    def shouldBeKilled(branch_mask: UInt) : Bool = shouldBeKilled(VecInit(branch_mask.asBools))
+    def shouldBeKilled[T <: uop](uop: T) : Bool = shouldBeKilled(uop.branch_mask)
 }
 
 object ROBType extends ChiselEnum {
@@ -31,46 +47,21 @@ object ROBType extends ChiselEnum {
 class ROBContent(implicit p: Parameters) extends CustomBundle {
     val valid = Bool()
     val instr_addr = UInt(p.XLEN.W) // Instruction address
-    val mispred = Bool() // Misprediction flag(1 represents misprediction)
+    // val mispred = Bool() // Misprediction flag(1 represents misprediction)
     val completed = Bool() // Completion flag(1 represents completion)
 
     // TODO: Currently the valid bits in both are the same
     val pdst = Valid(UInt(bl(p.PRF_DEPTH)))
     val rd = Valid(UInt(5.W)) // Destination register
 
+    // Redundant, and can be merged into one, will be done in the future
+    val branch_freed = UInt(p.BRANCH_MASK_WIDTH.W)
+
     val is_st = Bool()
-    val is_branch = Bool()
-    // Branch info - Can be eliminated, but works for now
-    // val btb_hit = BTBHit() // BTB hit flag, 1 represents hit
-    val target_PC = UInt(p.XLEN.W) // Target address
-    val branch_taken = Bool() // Branch direction
-    val GHR = UInt(p.GHR_WIDTH.W) // Global history register
 
     // Debugging 
     val debug = new InstrDebug
 }
-// class ROBContent(implicit p: Parameters) extends CustomBundle {
-//     val valid = Bool()
-//     val instr_addr = UInt(p.XLEN.W) // Instruction address
-//     val mispred = Bool() // Misprediction flag(1 represents misprediction)
-//     val completed = Bool() // Completion flag(1 represents completion)
-
-//     val last_pdst = UInt(log2Ceil(p.PRF_DEPTH).W) // Physical destination register
-//     val rd = UInt(5.W) // Destination register
-//     val wb = Bool()
-
-//     val rob_type = ROBType() // Instruction type
-//     val payload = UInt(Payload.width.W) // Payload of the ROB entry
-
-//     def as_Arithmetic: ROB_Arithmetic = payload.asTypeOf(new ROB_Arithmetic)
-//     def as_Branch: ROB_Branch = payload.asTypeOf(new ROB_Branch)
-//     def as_Jump: ROB_Jump = payload.asTypeOf(new ROB_Jump)
-//     //def as_Store: ROB_Store = payload.asTypeOf(new ROB_Store)
-//     def as_CSR: ROB_CSR = payload.asTypeOf(new ROB_CSR)
-
-//     // Debugging 
-//     val debug = new InstrDebug
-// }
 
 class ROBIO(implicit p: Parameters) extends CustomBundle {
     // 通过Decoupled向dispatch施压，这样实现比较正确
@@ -80,12 +71,11 @@ class ROBIO(implicit p: Parameters) extends CustomBundle {
     val rob_uop = Flipped(Decoupled(Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop()))))  //Dispatch Unit的uop,存入条目中
 
     // 发出下一个载入指令的地址，供Dispatch用
-    val rob_index = UInt(log2Ceil(p.ROB_DEPTH).W)
+    val rob_index = UInt(bl(p.ROB_DEPTH) + 1.W)
     // 发出empty信号，供Dispatch使用
     val rob_empty = Bool()
 
     val wb_uop = Vec(p.FU_NUM, Flipped(Valid(new WB_uop()))) // 来自FUs（包括LSU）写回信息
-    val bu_uop = Flipped(Valid(new BU_uop())) // 来自bu的uop,更新就绪状态
 
     // 不让其他从commitsignal判断是否发生mispred，因为这是rob的职责。这里这里不是要论谁对谁错，而是画清责任的界线，这样如果内部实现方式发生了变化，就不影响其他模块，这就是api/abi的作用，目的是为了减轻工作量。
     // 写回信号，仅对特定模块起作用 
@@ -93,7 +83,10 @@ class ROBIO(implicit p: Parameters) extends CustomBundle {
     val rob_commitsignal = ROB.CommitSignal  //广播ROB条目
 
     // TO BP, and all other modules to signal reset
-    val rob_controlsignal = ROB.ControlSignal
+    val rob_controlsignal = new ROBControlSignal
+
+    val bu_update = Flipped(Valid(new BU_signals))
+    val bu_commit = Flipped(Valid(new BU_signals))
 }
 
 object ROBState extends ChiselEnum {
@@ -131,50 +124,57 @@ class ROB(implicit p: Parameters) extends CustomModule {
     io.rob_empty := empty
 
     val can_enqueue = !full
-    io.rob_uop.ready := can_enqueue
+    io.rob_uop.ready := can_enqueue && state === normal
 
-    val committing_entry = rob(whead)
-    val mispred = VecInit(committing_entry.map(entry => entry.valid && entry.completed && entry.mispred))
-    val is_mispredicted = !empty && (mispred.asUInt =/= 0.U)
+    val committing_entry_w = Wire(Vec(p.CORE_WIDTH, new ROBContent()))
+    committing_entry_w := rob(whead)
 
-    // 不需要检测mispredict,因为发生mispred之后下一个周期就empty了
-    val can_dequeue = !empty && committing_entry.map(entry => entry.completed || !entry.valid).reduce(_ && _)
+    val branch_miss_rob_index = RegInit(0.U(depth_bits.W))
+    val branch_miss_rob_entry_mask = RegInit(0.U(p.CORE_WIDTH.W))
+    // val branch_id_mask 
 
-    var prev_instr_mispred = false.B
-    committing_entry.zip(mispred).foreach{case (ce, mp) => {
-        ce.valid := ce.valid && !prev_instr_mispred 
-        prev_instr_mispred = prev_instr_mispred | mp
-    }}
+    val bu_signal = io.bu_commit.bits
+    val bu_signal_commited = io.bu_commit.valid
+    when(bu_signal_commited) {
+        val offending_index = bu_signal.rob_index
+        val offending_mask = (2.U << bu_signal.rob_inner_index) - 1.U
+        branch_miss_rob_index := offending_index
+        branch_miss_rob_entry_mask := offending_mask 
+        state := rollback
+        tail := offending_index + 1.U
 
-    // io.rob_commitsignal.valid := (can_dequeue)
-    // io.rob_commitsignal.bits := (committing_entry)
-    // io.rob_commitsignal.valid := (can_dequeue)
-    io.rob_commitsignal := RegEnableValid(committing_entry, can_dequeue)
-    // io.rob_commitsignal := RegEnableValid(committing_entry, can_dequeue)
-    // io.rob_commitsignal.valid := RegNext(can_dequeue)
-    // io.rob_commitsignal.bits := RegEnable(committing_entry, can_dequeue)
-
-    // TODO
-    val mispredicted_entry = PriorityMux(mispred.zip(committing_entry))
-    val control_signal = Wire(ROB.ControlSignal)
-    control_signal.valid := is_mispredicted
-    (control_signal.bits: Data).waiveAll :<>= (mispredicted_entry: Data).waiveAll
-    // TODO: this needs to be changed
-    when(is_mispredicted) {
-        tail := head
+        // TODO: We can do better
+        rob(offending_index).zip(offending_mask.asBools).foreach{case (column, mask) => {
+            column.valid := column.valid & mask
+        }}
     }
 
-    // io.rob_controlsignal.valid := RegNext(control_signal.valid)
-    // io.rob_controlsignal.bits := RegEnable(control_signal.bits, control_signal.valid)
-    // io.rob_controlsignal.valid := (control_signal.valid)
-    io.rob_controlsignal := RegEnableValid(control_signal)
+    val can_dequeue = !empty && committing_entry_w.map(entry => entry.completed || !entry.valid).reduce(_ && _)
 
-    when(can_dequeue && !is_mispredicted) {
+    // committing_entry_w.zip(branch_miss_rob_entry_mask.asBools).foreach{case (ce, mask) => {
+    //     ce.valid := ce.valid && whead === 
+    // }}
+
+    io.rob_commitsignal := RegEnableValid(committing_entry_w, can_dequeue)
+
+    // val control_signal = Wire(new ROBControlSignal)
+
+    io.rob_controlsignal.branch_kill_mask.bits:= 1.U << io.bu_update.bits.branch_id 
+    io.rob_controlsignal.branch_kill_mask.valid := io.bu_update.valid 
+
+    when(state === rollback && empty) {
+        io.rob_controlsignal.restore_amt := true.B
+        state := normal
+    }.otherwise {
+        io.rob_controlsignal.restore_amt := false.B
+    }
+
+    when(can_dequeue) {
         dbg(cf"ROB dequeuing ${io.rob_uop.bits}")
         head := head + 1.U
     }
 
-    when(io.rob_uop.fire && !is_mispredicted) {
+    when(io.rob_uop.fire && !bu_signal_commited) {
         dbg(cf"Enqueuing ${io.rob_uop.bits}")
         rob(wtail) := io.rob_uop.bits.map(uop =>
             convert_to_content(uop)
@@ -189,49 +189,28 @@ class ROB(implicit p: Parameters) extends CustomModule {
         //common部分
         (rob_allocate: Data).waiveAll :<>= (uop: Data).waiveAll
         rob_allocate.valid := dis_uop.valid
-        rob_allocate.mispred := false.B
+        // rob_allocate.mispred := false.B
         rob_allocate.completed := false.B
 
         rob_allocate.is_st := uop.instr_type === InstrType.ST
-        rob_allocate.is_branch := uop.instr_type === InstrType.Branch
+        // rob_allocate.is_branch := uop.instr_type === InstrType.Branch
 
-        rob_allocate.target_PC := 0.U
-        rob_allocate.branch_taken := false.B
-        rob_allocate.GHR := uop.ghr
+        rob_allocate.branch_freed := uop.branch_freed
 
         // Debugging
         rob_allocate.debug := dis_uop.bits.debug
-        // rob_allocate.debug(dis_uop)
 
         rob_allocate
     }
 
-    val bu_uop = io.bu_uop
-    // io.bu_uop.map{ bu_uop => {
-    val index = bu_uop.bits.rob_index
-    // TODO
-    val inner_offset = bu_uop.bits.rob_inner_index
-
-    when(bu_uop.valid && !is_mispredicted){
-        // 无需complete，complete信号在wb_uop
-        val update_entry = rob(index)(inner_offset)
-        (update_entry: Data).waiveAll :<= (bu_uop.bits: Data).waiveAll
-        // update_entry.mispred := bu_uop.bits.mispred
-        // update_entry.target_PC := bu_uop.bits.target_PC
-        // update_entry.branch_taken := bu_uop.bits.branch_taken
-    }
-    // }}
     io.wb_uop.foreach{ wb_uop =>
+        // NOTE: It has an extra most significant bit
         val index = wb_uop.bits.rob_index
         // TODO
         val inner_offset = wb_uop.bits.rob_inner_index
-        when(wb_uop.valid && !is_mispredicted) {
+        when(wb_uop.valid) {
             rob(index)(inner_offset).completed := true.B
-            // rob(index)(inner_offset).wb := wb_uop.bits.pdst_value.valid
         }
     }
-
-    // TODO
-    control_signal.bits.PC_next := Mux(mispredicted_entry.branch_taken, bu_uop.bits.target_PC, mispredicted_entry.instr_addr + 4.U)
 }
 

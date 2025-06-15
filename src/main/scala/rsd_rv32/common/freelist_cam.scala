@@ -16,10 +16,12 @@ class FreeListCam[T <: Data](
   preOccupiedRegion: Seq[Range] = Seq(),
   needCheckpoint: Boolean = false,
   sharedState: Boolean = false,
+  directFree: Boolean = false,
 )(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
     val deq_request = Vec(multiShotRead, Decoupled(UInt(log2Ceil(depth).W)))
     val enq_request  = Flipped(Vec(multiShotWrite, Valid(UInt(log2Ceil(depth).W))))
+    val enq_request_direct  = if(directFree) Some(Flipped(Valid(UInt(depth.W)))) else None
     val squeeze = Flipped(Bool())
     val restore = if (needCheckpoint) Some(Flipped(Bool())) else None// Signals to checkpoint and restore both head and tail pointer
     val restore_mapping = if (needCheckpoint) Some(Flipped(Vec(depth, Bool()))) else None// Signals to checkpoint and restore both head and tail pointer
@@ -60,13 +62,23 @@ class FreeListCam[T <: Data](
 
   // buffer := (buffer & ~io.enq_request.map(b => b.valid << b.bits).reduce(_ | _)) | masks.reduce(_ | _)
 
-  io.enq_request.foreach{case (enq) => {
-    when(!should_halt_requests) {
-      when(enq.valid) {
-        buffer(enq.bits) := false.B
-      }
+  if(directFree) {
+    val direct_free_request = io.enq_request_direct.get 
+    when(direct_free_request.valid) {
+      buffer.zip(direct_free_request.bits.asBools).map{ case (b, r) => when(r) {
+        b := false.B
+      }}
     }
-  }}
+  } else {
+     io.enq_request.foreach{case (enq) => {
+      when(!should_halt_requests) {
+        when(enq.valid) {
+          buffer(enq.bits) := false.B
+        }
+      }
+    }   
+  }
+}
 
   when(io.squeeze) {
     buffer := VecInit(0.U(depth.W).asBools)

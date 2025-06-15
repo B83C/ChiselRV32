@@ -30,7 +30,7 @@ class ld_issue_IO(fu_num: Int)(implicit p: Parameters) extends CustomBundle {
     val ld_issued_index = (Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W))) //更新IQ Freelist
 
     //with ROB
-    val rob_controlsignal = Flipped(ROB.ControlSignal) //来自于ROB的控制信号
+    val rob_controlsignal = Flipped(new ROBControlSignal) //来自于ROB的控制信号
     
     // 来自st_issue的busy表
     val st_issue_busy_snapshot = Flipped(Vec(p.STISSUE_DEPTH, Bool()))
@@ -44,6 +44,8 @@ class ld_issue_IO(fu_num: Int)(implicit p: Parameters) extends CustomBundle {
 class ld_issue_content(implicit p: Parameters) extends Bundle {
     val ps = UInt(log2Ceil(p.PRF_DEPTH).W) // 操作数的物理寄存器地址 
 
+    val branch_mask = UInt(p.BRANCH_MASK_WIDTH.W)
+
     val waiting = Bool() // 表示有效
     val ps_ready = Bool() // 源操作数的ready信号
     val st_busy = Vec(p.STISSUE_DEPTH, Bool()) // 载入时是st_issue_queue内容busy表的快照，并由后续st_issued_index更新
@@ -54,10 +56,9 @@ class ld_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
     val VALID = io.ld_issue_uop.valid
     val dis_uop = io.ld_issue_uop.bits
 
-    val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
+    val should_flush = io.rob_controlsignal.shouldFlush
 
-    withReset(reset.asBool || mispred) {
-        
+    withReset(reset.asBool) {
         val issue_queue = RegInit(
             VecInit(Seq.fill(p.LDISSUE_DEPTH) (
                 0.U.asTypeOf(new ld_issue_content())
@@ -71,11 +72,12 @@ class ld_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
         )
 
         dis_uop.foreach { uop =>
-            when(VALID && uop.valid && !mispred)  {
+            when(VALID && uop.valid && !should_flush)  {
                 payload(uop.bits.iq_index) := uop.bits
                 issue_queue(uop.bits.iq_index).waiting := true.B
                 issue_queue(uop.bits.iq_index).ps := uop.bits.ps1
                 issue_queue(uop.bits.iq_index).st_busy := VecInit((io.st_issue_busy_dispatch.asUInt | io.st_issue_busy_snapshot.asUInt).asBools)
+                issue_queue(uop.bits.iq_index).branch_mask := uop.bits.branch_mask.asUInt
 
                 // 因为ps可能在dispatch的时候就就绪了(信号来自WB)
                 issue_queue(uop.bits.iq_index).ps_ready := uop.bits.ps1 === 0.U || !io.prf_busys(uop.bits.ps1) || io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst.valid && wb_uop.bits.pdst.bits === uop.bits.ps1)
@@ -88,12 +90,15 @@ class ld_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
             when(io.st_issued_index.valid) {
                 iq.st_busy(io.st_issued_index.bits) := false.B
             }
+            when(io.rob_controlsignal.shouldBeKilled(iq.branch_mask)) {
+                iq.waiting := false.B
+            }
         })
 
-        val ready_vec = VecInit(issue_queue.map(iq => iq.waiting && iq.ps_ready && !iq.st_busy.reduce(_ || _)))
+        val ready_vec = VecInit(issue_queue.map(iq => iq.waiting && iq.ps_ready && !iq.st_busy.reduce(_ || _) ))
         val selected_entry = PriorityMux(ready_vec.zip(issue_queue))
         val selected_payload = PriorityMux(ready_vec.zip(payload))
-        val selection_valid = ready_vec.asUInt =/= 0.U
+        val selection_valid = ready_vec.asUInt =/= 0.U && !io.rob_controlsignal.shouldBeKilled(selected_entry.branch_mask)
 
         val sel_oh = PriorityEncoderOH(ready_vec)
         val sel_ind = OHToUInt(sel_oh) 

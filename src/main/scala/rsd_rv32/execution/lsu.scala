@@ -39,7 +39,7 @@ class LSUIO(implicit p: Parameters) extends CustomBundle {
   val st_inc = Flipped(Valid(UInt(log2Ceil(p.CORE_WIDTH + 1).W)))//存储指令被派遣的情况(00表示没有，01表示派遣一条，11表示派遣两条)，用于更新store queue（在lsu中）的tail（full标志位）
   
   //with ROB
-  val rob_controlsignal = Flipped(ROB.ControlSignal) //来自于ROB的控制信号
+  val rob_controlsignal = Flipped(new ROBControlSignal) //来自于ROB的控制信号
   val rob_commitsignal = Flipped(ROB.CommitSignal)  //ROB提交时的广播信号，rob正常提交指令时更新amt与rmt，发生误预测时对本模块进行恢复
   val stu_wb_uop = Valid(new WB_uop)//存储完成的信号,wb to ROB
   val ldu_wb_uop  = Valid(new WB_uop)//加载完成的信号,wb to ROB and PRF
@@ -129,10 +129,12 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
     val data_out_mem = Flipped(UInt(64.W))//从储存器中读取的数据
     val data_out_stq = Flipped(new STQEntry())//从stq中读取的数据
 
-    val rob_controlsignal = Flipped(ROB.ControlSignal) //来自于ROB的控制信号
+    val rob_controlsignal = Flipped(new ROBControlSignal) //来自于ROB的控制信号
     val rob_commitsignal = Flipped(ROB.CommitSignal) //ROB提交时的广播信号，rob正常提交指令时更新amt与rmt，发生误预测时对本模块进行恢复
   })
-  val need_flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
+  // val need_flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
+  // TODO: URGENT
+  val need_flush = false.B
   val rob_commitsignal = ROB.CommitSignal  //ROB提交时的广播信号，rob正常提交指令时更新amt与rmt，发生误预测时对本模块进行恢复
   val stage1_pipevalid = io.load_uop.valid
   val stall = Wire(Bool())
@@ -150,7 +152,6 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   stage2.bits := RegEnable({
     val temp = Wire(new lpipe_uop)
     temp :<= stage1.bits
-    temp.uop.debug === stage1.bits.uop.debug
     temp
   }, stage1.valid && !stall) 
 
@@ -202,7 +203,6 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
     temp.data:= io.data_out_stq.data
     temp.bitvalid:= io.data_out_stq.bit_valid
 
-    temp.uop.debug === stage2.bits.uop.debug
     temp
   }, stage2.valid && !stall) 
 
@@ -243,10 +243,9 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
     temp := stage3.bits
     temp.data := final_data
     // Debugging
-    temp.uop.debug === stage3.bits.uop.debug
     temp
   }, stage3.valid && !stall) 
-  stage4.bits.data := final_data
+  // stage4.bits.data := final_data
  
 
 //stage4进行wb操作
@@ -275,10 +274,10 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
     val func3 = (UInt(3.W))//fun3信号
     val stq_index = (UInt(log2Ceil(p.STQ_DEPTH).W))//需要写入stq的索引
 
-    val rob_controlsignal = Flipped(ROB.ControlSignal) //来自于ROB的控制信号
+    val rob_controlsignal = Flipped(new ROBControlSignal) //来自于ROB的控制信号
     val rob_commitsignal = Flipped(ROB.CommitSignal) //ROB提交时的广播信号，rob正常提交指令时更新amt，发生误预测时对本模块进行恢复)
   })
-  val need_flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
+  // val need_flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
   val rob_commitsignal = Flipped(ROB.CommitSignal) //ROB提交时的广播信号，rob正常提交指令时更新amt与rmt，发生误预测时对本模块进行恢复
 //stage1地址计算
 // 
@@ -290,17 +289,16 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
   stage1.bits.data := stage1.bits.uop.ps2_value
 
   val stage2 = Wire(Valid(new spipe_uop))
-  stage2.valid := RegNext(stage1.valid && !need_flush)
+  stage2.valid := RegNext(stage1.valid)
   stage2.bits := RegEnable({
     val temp = Wire(new spipe_uop)
     temp :<= stage1.bits
-    temp.uop.debug === stage1.bits.uop.debug
     temp
-  }, stage1.valid && !need_flush) 
+  }, stage1.valid) 
 
   val stage2_instr = Instr.disassemble(stage2.bits.uop.instr_ << 7, IType.S)
   
-  stage2.bits.uop.debug(stage1.bits.uop, stage1.valid)
+  // stage2.bits.uop.debug(stage1.bits.uop, stage1.valid)
   //为1的时候表示需要进行flush，即将传入stq的全部数取0
 
   io.data_into_stq     := stage2.bits.data 
@@ -311,7 +309,7 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
   io.dataAddr_into_stq.valid := stage2.valid
   // io.dataAddr_into_stq.valid := !need_flush && stage2.valid
 
-  io.stu_wb_uop.valid  := stage2.valid && (!need_flush)
+  io.stu_wb_uop.valid  := stage2.valid 
   //仅当st_issue_uop传入有效且不需要flush时wb rob的uop才有效
   (io.stu_wb_uop.bits: Data).waiveAll :<= (stage2.bits.uop: Data).waiveAll
   io.stu_wb_uop.bits.pdst.valid := false.B
@@ -347,7 +345,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
 
     val stqReq = Decoupled(new Req_Abter())//存储请求信号
 
-    val rob_controlsignal = Flipped(ROB.ControlSignal) //来自于ROB的控制信号
+    val rob_controlsignal = Flipped(new ROBControlSignal) //来自于ROB的控制信号
     val rob_commitsignal = Flipped(ROB.CommitSignal) //ROB提交时的广播信号，rob正常提交指令时更新amt与rmt，发生误预测时对本模块进行恢复
 
     val dataAddr_into_stq = Flipped(Valid(UInt(p.XLEN.W)))//需要写入stq的地址
@@ -358,7 +356,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
 
   //flush信号，作flush的时候tail指针回到write_valid所处的地方
   //当rob的commit信号为valid且mispred为1时，表示需要flush
-  val need_flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
+  // val need_flush = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
   val rob_commitsignal = ROB.CommitSignal  //ROB提交时的广播信号，rob正常提交指令时更新amt与rmt，发生误预测时对本模块进行恢复
   //初始化stq的entrie
 
@@ -397,6 +395,8 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
   // TODO: To simplify detection we only accept up to CORE_WIDTH at a time
   val full = whead <= wtail + p.CORE_WIDTH.U && hwrap =/= twrap
 
+  val need_flush = io.rob_controlsignal.restore_amt
+  // TODO: Currently restore_amt is used to determine when the mispredicted entry reaches the head
   when(need_flush) {
     tail := write_valid
   }.elsewhen(io.st_cnt.valid) {

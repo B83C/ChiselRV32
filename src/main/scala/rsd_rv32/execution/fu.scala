@@ -7,7 +7,7 @@ import rsd_rv32.common._
 
 //功能单元的抽象类，定义了底层模块端口
 abstract class FunctionalUnit(
-)(implicit p: Parameters) extends Module {
+)(implicit p: Parameters) extends CustomModule {
   val properties: FUProps
   // def supportedInstrTypes: Set[InstrType.Type]
   // def needBufferedInput: Bool = true.B

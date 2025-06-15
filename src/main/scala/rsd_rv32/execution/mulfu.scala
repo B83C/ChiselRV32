@@ -29,38 +29,33 @@ class ArithBundle_out extends Bundle {
 class BoothMultiplier extends Module {
   val io = IO(new ArithBundle)
 
-  val multiplicandReg = RegInit(0.U(64.W))
+  val multiplicandReg = RegInit(0.S(64.W))
   val multiplierReg = RegInit(0.U(33.W)) // One more bit
-  val resultReg = RegInit(0.U(64.W))
+  val resultReg = RegInit(0.S(64.W))
 
-  val shiftCounter = RegInit(0.U(8.W)) // Shift counter
-  val busy = (multiplierReg =/= 0.U(33.W) && shiftCounter < 16.U(8.W))
+  // val shiftCounter = RegInit(0.U(8.W)) // Shift counter
+  val busy = (multiplierReg =/= 0.U)
 
   when(io.in.start && (~busy).asBool) {
-    resultReg := 0.U(64.W)
-    shiftCounter := 0.U(8.W)
-    multiplicandReg := io.in.num_1.asTypeOf(SInt(64.W)).asUInt // Signed extend to 64 bit
+    resultReg := 0.S(64.W)
+    // shiftCounter := 0.U(8.W)
+    multiplicandReg := io.in.num_1.pad(64) // Signed extend to 64 bit
     multiplierReg := Cat(io.in.num_2.asUInt, 0.U(1.W)) // Add one more 0 bit right next to it
   }.otherwise {
     when(busy) {
-      resultReg := resultReg + MuxLookup(multiplierReg(2, 0), 0.U(64.W))( Array(
-        "b000".U -> 0.U(64.W),
+      resultReg := resultReg + MuxLookup(multiplierReg(2, 0), 0.S(64.W))(Seq(
+        "b000".U -> 0.S(64.W),
         "b001".U -> multiplicandReg,
         "b010".U -> multiplicandReg,
-        "b011".U -> (multiplicandReg << 1.U).asUInt,
-        "b100".U -> (-(multiplicandReg << 1.U).asUInt),
+        "b011".U -> (multiplicandReg << 1.U),
+        "b100".U -> (-(multiplicandReg << 1.U)),
         "b101".U -> (-multiplicandReg),
         "b110".U -> (-multiplicandReg),
-        "b111".U -> 0.U(64.W)
+        "b111".U -> 0.S(64.W)
       ))
       multiplicandReg := multiplicandReg << 2.U
       multiplierReg := multiplierReg >> 2.U
-      shiftCounter := shiftCounter + 1.U(8.W)
-    }.otherwise {
-      resultReg := resultReg
-      multiplicandReg := multiplicandReg
-      multiplierReg := multiplierReg
-      shiftCounter := shiftCounter
+      // shiftCounter := shiftCounter + 1.U(8.W)
     }
   }
 
@@ -117,7 +112,7 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
     is(s_idle) {
       when(reset.asBool) {
         state := s_idle
-    }.elsewhen(input.valid && input.bits.instr_type === InstrType.MUL) {
+      }.elsewhen(input.valid && input.bits.instr_type === InstrType.MUL) {
         // 锁存操作数
         val op1 = Sel(input.bits.opr1_sel, input.bits.ps1_value).asSInt
         val op2 = Sel(input.bits.opr2_sel, input.bits.ps2_value).asSInt
@@ -129,9 +124,10 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
         val signed1 = !is_mulhu && !is_mulhsu
         val signed2 = !is_mulhu
 
+
         // 启动乘法器
-        boothMul.io.in.num_1 := Mux(signed1, op1Reg, op1Reg.asUInt.zext).asSInt
-        boothMul.io.in.num_2 := Mux(signed2, op2Reg, op2Reg.asUInt.zext).asSInt
+        boothMul.io.in.num_1 := Mux(signed1, op1, op1.asUInt.zext).asSInt
+        boothMul.io.in.num_2 := Mux(signed2, op2, op2.asUInt.zext).asSInt
         boothMul.io.in.start := true.B  // 关键修改：明确启动信号
 
         state := s_busy  // 状态转移

@@ -11,10 +11,15 @@ object OprSel extends ChiselEnum {
     val IMM, REG, PC, Z = Value
 }
 
+class BranchInfo(implicit p: Parameters) extends Bundle {
+    val branch_id = UInt(log2Ceil(p.BRANCH_MASK_WIDTH).W)
+}
+
 abstract class uop(implicit p: Parameters) extends CustomBundle {
     def prf_read_counts: Int = 0
 
-    val branch_mask = Vec(p.BRANCH_MASK_WIDTH, Bool())
+    val branch_mask = UInt(p.BRANCH_MASK_WIDTH.W)
+    val branch_id = UInt(log2Ceil(p.BRANCH_MASK_WIDTH).W)
 
     // Debugging
     val debug = new InstrDebug
@@ -27,6 +32,7 @@ class IF_ID_uop(implicit p: Parameters) extends uop {
     val ghr = UInt(p.GHR_WIDTH.W) //needed by rob
     val branch_taken = Bool() //needed by BU
 
+    val branch_freed = UInt(p.BRANCH_MASK_WIDTH.W)
 }
 
 class ID_RENAME_uop(implicit p: Parameters) extends uop {
@@ -34,6 +40,7 @@ class ID_RENAME_uop(implicit p: Parameters) extends uop {
 
     val instr_type = InstrType() 
     val instr_ = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode
+
     val opr1_sel = OprSel()
     val opr2_sel = OprSel()
 
@@ -46,6 +53,8 @@ class ID_RENAME_uop(implicit p: Parameters) extends uop {
     val rd = Valid(UInt(bl(p.REG_CNT)))
     val rs1 = UInt(bl(p.REG_CNT))
     val rs2 = UInt(bl(p.REG_CNT))
+
+    val branch_freed = UInt(p.BRANCH_MASK_WIDTH.W)
 }
 
 //继承ID_RENAME的uop
@@ -66,7 +75,8 @@ class DISPATCH_ROB_uop(implicit p: Parameters) extends uop {
     val pdst = Valid(UInt(bl(p.PRF_DEPTH)))
     val rd = Valid(UInt(5.W))
 
-    val ghr = UInt(p.GHR_WIDTH.W)
+    val branch_freed = UInt(p.BRANCH_MASK_WIDTH.W)
+    // val ghr = UInt(p.GHR_WIDTH.W)
     //val branch_pred = BranchPred()
     // val btb_hit = BTBHit()
     
@@ -90,10 +100,13 @@ class DISPATCH_EXUISSUE_uop(implicit p: Parameters) extends uop {
     val ps1 = UInt(bl(p.PRF_DEPTH))
     val ps2 = UInt(bl(p.PRF_DEPTH))
 
-    val rob_index = UInt(bl(p.ROB_DEPTH))
+    val rob_index = UInt(bl(p.ROB_DEPTH) + 1.W)
     val rob_inner_index = UInt(bl(p.CORE_WIDTH))
 
     val iq_index = UInt(bl(p.EXUISSUE_DEPTH))
+
+    // TODO
+    val ghr = UInt(p.GHR_WIDTH.W)
 }
 
 class DISPATCH_LDISSUE_uop(implicit p: Parameters) extends uop {
@@ -104,7 +117,7 @@ class DISPATCH_LDISSUE_uop(implicit p: Parameters) extends uop {
     val ps1 = UInt(bl(p.PRF_DEPTH))
     val stq_tail = UInt(bl(p.STQ_DEPTH)) //needed to get the right forwarding data from STQ
 
-    val rob_index = UInt(bl(p.ROB_DEPTH))
+    val rob_index = UInt(bl(p.ROB_DEPTH) + 1.W)
     val rob_inner_index = UInt(bl(p.CORE_WIDTH))
 
     val iq_index = UInt(bl(p.LDISSUE_DEPTH))
@@ -118,7 +131,7 @@ class DISPATCH_STISSUE_uop(implicit p: Parameters) extends uop {
     val ps2 = UInt(bl(p.PRF_DEPTH))
 
     val stq_index = UInt(bl(p.STQ_DEPTH)) //needed to writeback to STQ
-    val rob_index = UInt(bl(p.ROB_DEPTH))
+    val rob_index = UInt(bl(p.ROB_DEPTH) + 1.W)
     val rob_inner_index = UInt(bl(p.CORE_WIDTH))
 
     val iq_index = UInt(bl(p.STISSUE_DEPTH))
@@ -141,9 +154,11 @@ class EXUISSUE_EXU_uop(implicit p: Parameters) extends uop {
 
     val pdst = Valid(UInt(bl(p.PRF_DEPTH)))
 
-    val rob_index = UInt(bl(p.ROB_DEPTH))
+    val rob_index = UInt(bl(p.ROB_DEPTH) + 1.W)
     val rob_inner_index = UInt(bl(p.CORE_WIDTH))
     
+    // TODO
+    val ghr = UInt(p.GHR_WIDTH.W)
 }
 
 class STISSUE_STPIPE_uop(implicit p: Parameters) extends uop {
@@ -154,7 +169,7 @@ class STISSUE_STPIPE_uop(implicit p: Parameters) extends uop {
     val ps2_value = UInt(p.XLEN.W)
 
     val stq_index = UInt(bl(p.STQ_DEPTH))
-    val rob_index = UInt(bl(p.ROB_DEPTH))
+    val rob_index = UInt(bl(p.ROB_DEPTH) + 1.W)
     val rob_inner_index = UInt(bl(p.CORE_WIDTH))
 }
 
@@ -166,7 +181,7 @@ class LDISSUE_LDPIPE_uop(implicit p: Parameters) extends uop {
     val pdst = Valid(UInt(bl(p.PRF_DEPTH)))
     val stq_tail = UInt(bl(p.STQ_DEPTH)) //used when stq forwarding
 
-    val rob_index = UInt(bl(p.ROB_DEPTH))
+    val rob_index = UInt(bl(p.ROB_DEPTH) + 1.W)
     val rob_inner_index = UInt(bl(p.CORE_WIDTH))
 }
 
@@ -179,21 +194,31 @@ class WB_uop(implicit p: Parameters) extends uop {
     val pdst_value = UInt(p.XLEN.W)
 
     //writeback to ROB
-    val rob_index = UInt(bl(p.ROB_DEPTH))
+    val rob_index = UInt(bl(p.ROB_DEPTH) + 1.W)
     val rob_inner_index = UInt(bl(p.CORE_WIDTH))
 }
 
 
-class BU_uop(implicit p: Parameters) extends Bundle {
+class BU_signals(implicit p: Parameters) extends Bundle {
     // TODO: Temporary
     val is_conditional = Bool() //needed to distinguish between conditional branches and unconditional branches, 1 represents conditional branch
+
+    // for updating branch predictor
+    val instr_addr = UInt(p.XLEN.W)
 
     //writeback to ROB
     val mispred = Bool() //1 if mispred, 0 otherwise
     val target_PC = UInt(p.XLEN.W)
     val branch_taken = Bool()
 
-    val rob_index = UInt(bl(p.ROB_DEPTH))
+    // Can be optimised
+    // For checking age dependencies
+    val branch_mask = UInt(p.BRANCH_MASK_WIDTH.W)
+    // For updating branch_mask
+    val branch_id = UInt(log2Ceil(p.BRANCH_MASK_WIDTH).W)
+    val ghr = UInt(p.GHR_WIDTH.W)
+
+    val rob_index = UInt(bl(p.ROB_DEPTH) + 1.W)
     val rob_inner_index = UInt(bl(p.CORE_WIDTH))
 }
 
