@@ -30,69 +30,13 @@ class PRF(read_port_count: Int)(implicit p: Parameters) extends CustomModule{
       })
   )
 
-  // val mispred = io.rob_controlsignal.valid && io.rob_controlsignal.bits.isMispredicted
-
-  // TODO mispredict
-  // 执行寄存器写入
   io.wb_uop.foreach(x => {
     when(x.valid && x.bits.pdst.valid) {
       regBank(x.bits.pdst.bits) := x.bits.pdst_value
     }
-    
   })
+
   io.read_requests.foreach(request => {
     request.value := Mux(request.addr =/= 0.U, regBank(request.addr), 0.U)
   })
-
-
-  // val rob_valid_bits = Wire(UInt(2.W)
-  // rob_valid_bits := io.rob_commitsignal.bits(0).valid ## io.rob_commitsignal.bits(1).valid
-  
-  // when(!flush && io.rob_commitsignal.valid){
-  //   switch(rob_valid_bits){
-  //     is("b11".U){
-  //       when(hasPd(io.rob_commitsignal.bits(0).rob_type, io.rob_commitsignal.bits(0).payload(4,0))){
-  //         when(hasPd(io.rob_commitsignal.bits(1).rob_type, io.rob_commitsignal.bits(1).payload(4,0))){
-  //           when(io.rob_commitsignal.bits(0).payload(4,0) === io.rob_commitsignal.bits(1).payload(4,0)){
-  //             prf_valid(io.amt(io.rob_commitsignal.bits(0).payload(4,0))) := false.B
-  //             prf_valid(io.rob_commitsignal.bits(0).payload(5+log2Ceil(p.PRF_DEPTH)-1, 5)) := false.B
-  //           }.otherwise{
-  //             prf_valid(io.amt(io.rob_commitsignal.bits(0).payload(4,0))) := false.B
-  //             prf_valid(io.amt(io.rob_commitsignal.bits(1).payload(4,0))) := false.B
-  //           }
-  //         }.otherwise{
-  //           prf_valid(io.amt(io.rob_commitsignal.bits(0).payload(4,0))) := false.B
-  //         }
-  //       }.otherwise{
-  //         when(hasPd(io.rob_commitsignal.bits(1).rob_type, io.rob_commitsignal.bits(1).payload(4,0))){
-  //           prf_valid(io.amt(io.rob_commitsignal.bits(1).payload(4,0))) := false.B
-  //         }
-  //       }
-  //     }
-  //     is("b10".U){
-  //       when(hasPd(io.rob_commitsignal.bits(0).rob_type, io.rob_commitsignal.bits(0).payload(4,0))){
-  //         prf_valid(io.amt(io.rob_commitsignal.bits(0).payload(4,0))) := false.B
-  //       }
-  //     }
-  //   }
-  // }
-
-  // //flush的逻辑
-  // def in_amt(prf_index: UInt, amt: Vec[UInt]): Bool = {
-  //   val temp = WireDefault(VecInit(Seq.fill(32)(false.B)))
-  //   for(i <- 0 until 32){
-  //     temp(i) := amt(i) === prf_index
-  //   }
-  //   temp.reduce(_||_)
-  // }
-
-  // val new_amt = WireDefault(io.amt)
-  // when(flush){
-  //   when(hasPd(io.rob_commitsignal.bits(0).rob_type, io.rob_commitsignal.bits(0).payload(4,0))){
-  //     new_amt(io.rob_commitsignal.bits(0).payload(4,0)) := io.rob_commitsignal.bits(0).payload(5+log2Ceil(p.PRF_DEPTH)-1, 5)
-  //   }
-  //   for(i <- 0 until p.PRF_DEPTH){
-  //     prf_valid(i) := Mux(in_amt(i.U, new_amt), prf_valid(i), false.B)
-  //   }
-  // }
 }

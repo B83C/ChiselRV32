@@ -61,6 +61,9 @@ class ROBContent(implicit p: Parameters) extends CustomBundle {
 
     // Debugging 
     val debug = new InstrDebug
+    val pdst_value = UInt(p.XLEN.W)
+    val ps1 = UInt(bl(p.PRF_DEPTH))
+    val ps2 = UInt(bl(p.PRF_DEPTH))
 }
 
 class ROBIO(implicit p: Parameters) extends CustomBundle {
@@ -133,9 +136,10 @@ class ROB(implicit p: Parameters) extends CustomModule {
     val branch_miss_rob_entry_mask = RegInit(0.U(p.CORE_WIDTH.W))
     // val branch_id_mask 
 
-    val bu_signal = io.bu_commit.bits
-    val bu_signal_commited = io.bu_commit.valid
-    when(bu_signal_commited) {
+    // Asserted only when misprediction happens
+    val bu_signal = io.bu_update.bits
+    val bu_signal_updated = io.bu_update.valid
+    when(bu_signal_updated) {
         val offending_index = bu_signal.rob_index
         val offending_mask = (2.U << bu_signal.rob_inner_index) - 1.U
         branch_miss_rob_index := offending_index
@@ -160,7 +164,7 @@ class ROB(implicit p: Parameters) extends CustomModule {
     // val control_signal = Wire(new ROBControlSignal)
 
     io.rob_controlsignal.branch_kill_mask.bits:= 1.U << io.bu_update.bits.branch_id 
-    io.rob_controlsignal.branch_kill_mask.valid := io.bu_update.valid 
+    io.rob_controlsignal.branch_kill_mask.valid := io.bu_update.valid
 
     when(state === rollback && empty) {
         io.rob_controlsignal.restore_amt := true.B
@@ -174,7 +178,7 @@ class ROB(implicit p: Parameters) extends CustomModule {
         head := head + 1.U
     }
 
-    when(io.rob_uop.fire && !bu_signal_commited) {
+    when(io.rob_uop.fire && !bu_signal_updated) {
         dbg(cf"Enqueuing ${io.rob_uop.bits}")
         rob(wtail) := io.rob_uop.bits.map(uop =>
             convert_to_content(uop)
@@ -199,6 +203,7 @@ class ROB(implicit p: Parameters) extends CustomModule {
 
         // Debugging
         rob_allocate.debug := dis_uop.bits.debug
+        rob_allocate.pdst_value := 0.U
 
         rob_allocate
     }
@@ -210,6 +215,9 @@ class ROB(implicit p: Parameters) extends CustomModule {
         val inner_offset = wb_uop.bits.rob_inner_index
         when(wb_uop.valid) {
             rob(index)(inner_offset).completed := true.B
+
+            //DEbugging
+            rob(index)(inner_offset).pdst_value := wb_uop.bits.pdst_value
         }
     }
 }

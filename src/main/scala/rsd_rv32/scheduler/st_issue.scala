@@ -66,7 +66,7 @@ class st_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
         )
 
         dis_uop.foreach { uop =>
-            when(VALID && uop.valid && !should_flush)  {
+            when(VALID && uop.valid)  {
                 val uop_ps = VecInit(Seq(uop.bits.ps1, uop.bits.ps2))
                 payload(uop.bits.iq_index) := uop.bits
                 issue_queue(uop.bits.iq_index).waiting := true.B
@@ -94,9 +94,13 @@ class st_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
         val selected_payload = PriorityMux(ready_vec.zip(payload))
         val selection_valid = ready_vec.asUInt =/= 0.U && !io.rob_controlsignal.shouldBeKilled(selected_entry.branch_mask)
 
+        val operation_ready = selection_valid 
+        val downstream_ready = io.store_uop.ready
+        val ack = operation_ready && downstream_ready
+
         val sel_oh = PriorityEncoderOH(ready_vec)
         val sel_ind = OHToUInt(sel_oh) 
-        when(selection_valid) {
+        when(selection_valid && ack) {
             issue_queue(sel_ind).waiting := false.B
         }
 
@@ -104,15 +108,15 @@ class st_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
         (selected_payload_coerced: Data).waiveAll :<>= (selected_payload: Data).waiveAll
         selected_payload_coerced.ps1_value := DontCare
         selected_payload_coerced.ps2_value := DontCare
-        io.store_uop.valid := RegNext(selection_valid)
-        io.store_uop.bits := RegEnable(selected_payload_coerced, selection_valid)
+        io.store_uop.valid := RegEnable(selection_valid, false.B, downstream_ready) 
+        io.store_uop.bits := RegEnable(selected_payload_coerced, ack)
 
         io.st_issued_index.bits := OHToUInt(PriorityEncoderOH(ready_vec))
-        io.st_issued_index.valid := selection_valid
+        io.st_issued_index.valid := selection_valid && ack
 
         // 外接一个读取prf的模块
-        io.prf_raddr.bits := RegEnable(selected_entry.ps, selection_valid)
-        io.prf_raddr.valid:= RegNext(selection_valid)
+        io.prf_raddr.bits := RegEnable(selected_entry.ps, ack)
+        io.prf_raddr.valid:= RegEnable(selection_valid, false.B, downstream_ready) 
 
         io.st_issue_busy_snapshot := issue_queue.map(_.waiting)
     }

@@ -13,7 +13,7 @@ case class Parameters(
   CORE_WIDTH: Int = 2,  //Dispatch, Issue, Commit Width
   INSTR_WIDTH: Int = 32,
   GHR_WIDTH: Int = 8,
-  BRANCH_MASK_WIDTH: Int = 8, // Can handle up to 8 in-flight branches 
+  BRANCH_MASK_WIDTH: Int = 16, // Can handle up to 8 in-flight branches 
 
   BIMODE_TABLE_SIZE: Int =  1024,          // T/NT 表大小
   CHOICE_TABLE_SIZE: Int =  1024,          // 选择器表大小

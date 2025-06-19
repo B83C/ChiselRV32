@@ -189,7 +189,7 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
     }
   }
 
-  val out_valid = (state === s_done)
+  val out_valid = (state === s_done) && !reset.asBool
   val out = Wire(new WB_uop)
   // 输出连接
   (out: Data).waiveAll :<= (uopReg: Data).waiveAll
@@ -199,5 +199,5 @@ class DIVFU(implicit p: Parameters) extends FunctionalUnit() {
   output.valid := out_valid
 
   // 流控制
-  input.ready := (state === s_idle)
+  input.ready := !input.valid && (state === s_idle) && !reset.asBool
 }

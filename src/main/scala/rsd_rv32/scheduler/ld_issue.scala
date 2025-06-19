@@ -58,19 +58,19 @@ class ld_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
 
     val should_flush = io.rob_controlsignal.shouldFlush
 
+    val issue_queue = RegInit(
+        VecInit(Seq.fill(p.LDISSUE_DEPTH) (
+            0.U.asTypeOf(new ld_issue_content())
+        ))
+    )
+
+    val payload = RegInit(
+        VecInit(Seq.fill(p.LDISSUE_DEPTH) (
+            0.U.asTypeOf(new DISPATCH_LDISSUE_uop())
+        ))
+    )
+
     withReset(reset.asBool) {
-        val issue_queue = RegInit(
-            VecInit(Seq.fill(p.LDISSUE_DEPTH) (
-                0.U.asTypeOf(new ld_issue_content())
-            ))
-        )
-
-        val payload = RegInit(
-            VecInit(Seq.fill(p.LDISSUE_DEPTH) (
-                0.U.asTypeOf(new DISPATCH_LDISSUE_uop())
-            ))
-        )
-
         dis_uop.foreach { uop =>
             when(VALID && uop.valid && !should_flush)  {
                 payload(uop.bits.iq_index) := uop.bits
@@ -95,29 +95,34 @@ class ld_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
             }
         })
 
+
         val ready_vec = VecInit(issue_queue.map(iq => iq.waiting && iq.ps_ready && !iq.st_busy.reduce(_ || _) ))
         val selected_entry = PriorityMux(ready_vec.zip(issue_queue))
         val selected_payload = PriorityMux(ready_vec.zip(payload))
         val selection_valid = ready_vec.asUInt =/= 0.U && !io.rob_controlsignal.shouldBeKilled(selected_entry.branch_mask)
 
+        val operation_ready = selection_valid 
+        val downstream_ready = io.load_uop.ready
+        val ack = operation_ready && downstream_ready
+
         val sel_oh = PriorityEncoderOH(ready_vec)
         val sel_ind = OHToUInt(sel_oh) 
-        when(selection_valid) {
+        when(ack) {
             issue_queue(sel_ind).waiting := false.B
         }
 
         val selected_payload_coerced = Wire(new LDISSUE_LDPIPE_uop)
         (selected_payload_coerced: Data).waiveAll :<>= (selected_payload: Data).waiveAll
-        selected_payload_coerced.ps1_value := 1.U
-        io.load_uop.valid := RegNext(selection_valid)
-        io.load_uop.bits := RegEnable(selected_payload_coerced, selection_valid)
+        selected_payload_coerced.ps1_value := DontCare
+        io.load_uop.valid := RegEnable(selection_valid, false.B, downstream_ready)
+        io.load_uop.bits := RegEnable(selected_payload_coerced, ack)
 
         io.ld_issued_index.bits := OHToUInt(PriorityEncoderOH(ready_vec))
-        io.ld_issued_index.valid := selection_valid
+        io.ld_issued_index.valid := ack
 
         // 外接一个读取prf的模块
-        io.prf_raddr.bits := RegEnable(selected_entry.ps, selection_valid)
-        io.prf_raddr.valid:= RegNext(selection_valid)
+        io.prf_raddr.bits := RegEnable(selected_entry.ps, ack)
+        io.prf_raddr.valid:= RegEnable(selection_valid, false.B, downstream_ready)
     }
 
     // Debugging

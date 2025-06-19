@@ -17,6 +17,8 @@ class ArithBundle_in extends Bundle {
   val start = Bool() // Start signal for 1 cycle
   val num_1 = SInt(32.W) // Operation number 1
   val num_2 = SInt(32.W) // Operation number 2
+  val num_1_is_signed = Bool()
+  val num_2_is_signed = Bool()
 }
 
 // Output Bundle
@@ -29,33 +31,33 @@ class ArithBundle_out extends Bundle {
 class BoothMultiplier extends Module {
   val io = IO(new ArithBundle)
 
-  val multiplicandReg = RegInit(0.S(64.W))
-  val multiplierReg = RegInit(0.U(33.W)) // One more bit
-  val resultReg = RegInit(0.S(64.W))
+  val multiplicandReg = RegInit(0.U(64.W))
+  val multiplierReg = RegInit(0.S(34.W)) // One more bit
+  val resultReg = RegInit(0.U(64.W))
 
-  // val shiftCounter = RegInit(0.U(8.W)) // Shift counter
-  val busy = (multiplierReg =/= 0.U)
+  val shiftCounter = RegInit(0.U(8.W)) // Shift counter
+  val busy = (multiplierReg =/= 0.S && multiplierReg =/= ~0.S && shiftCounter < 17.U)
 
   when(io.in.start && (~busy).asBool) {
-    resultReg := 0.S(64.W)
-    // shiftCounter := 0.U(8.W)
-    multiplicandReg := io.in.num_1.pad(64) // Signed extend to 64 bit
-    multiplierReg := Cat(io.in.num_2.asUInt, 0.U(1.W)) // Add one more 0 bit right next to it
+    resultReg := 0.U(64.W)
+    shiftCounter := 0.U(8.W)
+    multiplicandReg := Mux(io.in.num_1_is_signed, io.in.num_1.pad(64).asUInt, io.in.num_1.asUInt.pad(64)) // Signed extend to 64 bit
+    multiplierReg := Cat(Mux(io.in.num_2_is_signed, io.in.num_2.pad(33), io.in.num_2.asUInt.zext.asSInt), 0.S(1.W)).asSInt // Add one more 0 bit right next to it
   }.otherwise {
     when(busy) {
-      resultReg := resultReg + MuxLookup(multiplierReg(2, 0), 0.S(64.W))(Seq(
-        "b000".U -> 0.S(64.W),
+      resultReg := resultReg + MuxLookup(multiplierReg(2, 0), 0.U(64.W))(Seq(
+        "b000".U -> 0.U(64.W),
         "b001".U -> multiplicandReg,
         "b010".U -> multiplicandReg,
-        "b011".U -> (multiplicandReg << 1.U),
-        "b100".U -> (-(multiplicandReg << 1.U)),
+        "b011".U -> (multiplicandReg << 1.U).asUInt,
+        "b100".U -> (-(multiplicandReg << 1.U).asUInt),
         "b101".U -> (-multiplicandReg),
         "b110".U -> (-multiplicandReg),
-        "b111".U -> 0.S(64.W)
+        "b111".U -> 0.U(64.W)
       ))
       multiplicandReg := multiplicandReg << 2.U
       multiplierReg := multiplierReg >> 2.U
-      // shiftCounter := shiftCounter + 1.U(8.W)
+      shiftCounter := shiftCounter + 1.U
     }
   }
 
@@ -83,6 +85,15 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   val op2Reg = RegInit(0.S(p.XLEN.W))
   val mulTypeReg = RegInit(0.U(2.W)) // 00=MUL, 01=MULH, 10=MULHSU, 11=MULHU
 
+  val instr = input.bits.instr_
+  // 从指令中提取func3字段(R-type指令的14-12位)
+  val func3 = instr(7,5)
+  // 解码乘法类型
+  val is_mul    = func3 === 0.U  // MUL
+  val is_mulh   = func3 === 1.U  // MULH
+  val is_mulhsu = func3 === 2.U  // MULHSU
+  val is_mulhu  = func3 === 3.U  // MULHU
+  
   // 操作数选择逻辑
   def Sel(sel: OprSel.Type, reg: UInt) = {
     MuxLookup(sel, 0.S)(Seq(
@@ -95,17 +106,10 @@ class MULFU(implicit p: Parameters) extends FunctionalUnit() {
   boothMul.io.in.start := false.B
   boothMul.io.in.num_1 := 0.S(32.W)
   boothMul.io.in.num_2 := 0.S(32.W)
+  boothMul.io.in.num_1_is_signed := is_mul || is_mulh || is_mulhsu
+  boothMul.io.in.num_2_is_signed := is_mul || is_mulh
 
   // 指令解码
-  val instr = input.bits.instr_
-  // 从指令中提取func3字段(R-type指令的14-12位)
-  val func3 = instr(7,5)
-  // 解码乘法类型
-  val is_mul    = func3 === 0.U  // MUL
-  val is_mulh   = func3 === 1.U  // MULH
-  val is_mulhsu = func3 === 2.U  // MULHSU
-  val is_mulhu  = func3 === 3.U  // MULHU
-
 
   // 状态机转换
   switch(state) {

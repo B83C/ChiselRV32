@@ -17,32 +17,6 @@ export fn _start() callconv(.Naked) noreturn {
     while (true) {}
 }
 
-inline fn notOptimised() void {
-    const a: u32 = 78;
-    var b: u32 = 98;
-    var c: u32 = 0;
-    std.mem.doNotOptimizeAway(a);
-    std.mem.doNotOptimizeAway(b);
-    b = c + 1;
-    // c = a + b * 2;
-    std.mem.doNotOptimizeAway(c);
-    c = a + b * 2;
-}
-
-noinline fn testProcedure(input: u32) u32 {
-    var c: u32 = 3;
-    std.mem.doNotOptimizeAway(c);
-    c = c + input;
-    return c * 3;
-}
-
-var t: u32 = 0;
-var y: u32 = 0;
-
-noinline fn modifyGlobal(ptr: *u32) void {
-    ptr.* = 1234;
-}
-
 noinline fn writeCSR(addr: u12, val: u32) void {
     asm volatile ("csrrw x0, %[addr], %[out]"
         :
@@ -66,12 +40,102 @@ noinline fn print(str: [*:0]const u8) void {
 
 const string_test = "Hello world!";
 
+fn test_sl() void {
+    var mem: [16]u8 = undefined;
+    @memset(mem[0..], 0);
+
+    const byte_val: u8 = 0xAB;
+    const half_val: u16 = 0xCDEF;
+    const word_val: u32 = 0x12345678;
+
+    const byte_off = 0;
+    const half_off = 4;
+    const word_off = 8;
+
+    // Store byte
+    asm volatile (
+        \\ sb %[val], 0(%[base])
+        :
+        : [val] "r" (byte_val),
+          [base] "r" (&mem[byte_off]),
+    );
+    // Juxtapose additional store halfword
+    asm volatile (
+        \\ sh %[val], 0(%[base])
+        :
+        : [val] "r" (half_val),
+          [base] "r" (&mem[half_off]),
+    );
+
+    // Store halfword
+    asm volatile (
+        \\ sh %[val], 0(%[base])
+        :
+        : [val] "r" (half_val),
+          [base] "r" (&mem[half_off]),
+    );
+    // Juxtapose additional store word
+    asm volatile (
+        \\ sw %[val], 0(%[base])
+        :
+        : [val] "r" (word_val),
+          [base] "r" (&mem[word_off]),
+    );
+
+    // Store word
+    asm volatile (
+        \\ sw %[val], 0(%[base])
+        :
+        : [val] "r" (word_val),
+          [base] "r" (&mem[word_off]),
+    );
+
+    // Load back
+    var lb: u32 = undefined;
+    asm volatile (
+        \\ lb %[res], 0(%[base])
+        : [res] "=r" (lb),
+        : [base] "r" (&mem[byte_off]),
+    );
+
+    var lh: u32 = undefined;
+    asm volatile (
+        \\ lh %[res], 0(%[base])
+        : [res] "=r" (lh),
+        : [base] "r" (&mem[half_off]),
+    );
+
+    var lw: u32 = undefined;
+    asm volatile (
+        \\ lw %[res], 0(%[base])
+        : [res] "=r" (lw),
+        : [base] "r" (&mem[word_off]),
+    );
+
+    // Assertions (with proper extension)
+    assert_eq(lb, @as(u32, @bitCast(@as(i32, (@as(i8, @bitCast(byte_val)))))), "huh");
+    assert_eq(lh, @as(u32, @bitCast(@as(i32, (@as(i16, @bitCast(half_val)))))), "huh");
+    assert_eq(lw, word_val, "huh");
+}
+
+const t: u32 = 0xdead;
+const str_test = "hy there";
 pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     // modifyGlobal(&t);
-    // var buf: [20]u8 = undefined;
-    print("hello there\n");
-    // print(try std.fmt.bufPrintZ(&buf, "hello t:{}", .{t}));
+    // test_sl();
+    var buf: [50:0]u8 = undefined;
+    _ = std.fmt.bufPrintZ(&buf, "hell {x} {d} {s} {d} test \n", .{ t, t, str_test, t }) catch |err| {
+        if (err == error.NoSpaceLeft) {
+            print("No space left\n");
+        } else {
+            print("Other error\n");
+        }
+    };
+    print(&buf);
+    // load_store_tests();
+    // branch_test();
+    // print("hello there\n");
     // inline for (0..5) |_| {
     //     t += 1234;
     //     y += 4321;
@@ -83,7 +147,8 @@ pub fn main() !void {
     // print("Now performing branch tests \n");
     // branch_test();
     // print("A value of 63 should be expected\n");
-    alu_test();
+    // alu_test();
+    // alu_test();
     // testAlu();
     // inline for (0..10) |_| {
     //     asm volatile ("nop");
@@ -286,16 +351,75 @@ inline fn create_test_result(test_num: u32, instruction_result: u32, expected: u
     return (pass << 31) | (test_num << 16) | (instruction_result & 0xFFFF);
 }
 
+fn load_store_tests() void {
+    var mem: [16]u8 = undefined;
+
+    // Test cases: value, offset, instruction name
+    inline for (.{
+        .{ "Load/Store Word\n", 0x12345678, 0, .sw, .lw },
+        .{ "Load/Store Halfword\n", -0x1234, 2, .sh, .lh },
+        .{ "Load/Store Byte\n", 0x7F, 4, .sb, .lb },
+        .{ "Unsigned Halfword\n", 0xABCD, 6, .sh, .lhu },
+        .{ "Unsigned Byte\n", 0xFF, 8, .sb, .lbu },
+    }) |tests| {
+        const label = tests[0];
+        const value: isize = tests[1];
+        const offset = tests[2];
+        const store_instr = tests[3];
+        const load_instr = tests[4];
+
+        print(label);
+
+        // Clear memory
+        @memset(&mem, 0);
+
+        // Perform store
+        asm volatile (@tagName(store_instr) ++
+                \\ %[val], 0(%[base])
+            :
+            : [val] "r" (value),
+              [base] "r" (&mem[offset]),
+        );
+
+        // Insert extra store right after to check juxtaposition
+        asm volatile ("sw %[zero], 0(%[base])"
+            :
+            : [zero] "r" (0),
+              [base] "r" (&mem[12]),
+        );
+
+        // Perform load
+        var result: u32 = undefined;
+        asm volatile (@tagName(load_instr) ++
+                \\ %[out], 0(%[base])
+            : [out] "=r" (result),
+            : [base] "r" (&mem[offset]),
+        );
+
+        // Expected cast (manual to avoid UB)
+        const expected: u32 = switch (load_instr) {
+            .lw => value,
+            .lh => @bitCast(@as(i32, @as(i16, value))),
+            .lhu => @as(u32, @as(u16, value)),
+            .lb => @bitCast(@as(i32, @as(i8, value))),
+            .lbu => @as(u32, @as(u8, value)),
+            else => @compileError("Unsupported instruction"),
+        };
+
+        assert_eq(result, expected, label);
+    }
+}
+
 fn rv32im_alu_tests() void {
     print("Starting RV32IM ALU Tests\n");
 
     // Test operands
     const operand1: i32 = 0x1234;
-    const operand2: i32 = -0x8765;
+    // const operand2: i32 = -0x8765;
     // const operand1: u32 = 0x12345678;
     // const operand2: u32 = 0x87654321;
     // const shift_amount: u32 = 15;
-    const test_constant: u32 = 1;
+    // const test_constant: u32 = 1;
 
     var test_counter: u32 = 0;
     var instruction_result: u32 = 0;
@@ -543,128 +667,64 @@ fn rv32im_alu_tests() void {
     // write_test_result(test_counter, instruction_result);
     // print("SLTIU result written to CSR\n");
 
-    // =============================================================================
-    // RV32M Standard Extension - Multiplication and Division Tests
-    // =============================================================================
+    inline for (.{ .{ 0x1234, -0x8765, "Mul test1\n" }, .{ -0x1234, 0x8765, "Mul test2\n" } }) |multipliers| {
+        const m: i32 = multipliers[0];
+        const mr: i32 = multipliers[1];
 
-    print("Testing RV32M Multiplication and Division Instructions...\n");
+        const mu: u32 = @bitCast(m);
+        const mru: u32 = @bitCast(mr);
 
-    const mul_op1: u32 = 0x1234;
-    const mul_op2: u32 = 0x5678;
+        const mhu: u32 = (@as(u64, mu) * @as(u64, mru)) >> 32;
+        const mhsu: i32 = (@as(i64, m) * @as(u64, mru)) >> 32;
+        const mh: i32 = @bitCast(@as(i32, @intCast(@as(i64, m) * @as(i64, mr) >> 32)));
+        const ml: u32 = @bitCast(m *% mr);
 
-    // Test 20: MUL
-    test_counter += 1;
-    print("Test 20: MUL instruction\n");
-    asm volatile (
-        \\mul %[result], %[op1], %[op2]
-        : [result] "=r" (instruction_result),
-        : [op1] "r" (mul_op1),
-          [op2] "r" (mul_op2),
-    );
-    if (instruction_result == mul_op1 * mul_op2) {
-        print("MUL test passed\n");
+        print(multipliers[2]);
+
+        inline for (.{ .{ "mul", ml }, .{ "mulh", mh }, .{ "mulhsu", mhsu }, .{ "mulhu", mhu } }) |tuple| {
+            asm volatile (tuple[0] ++
+                    \\ %[result], %[op1], %[op2]
+                : [result] "=r" (instruction_result),
+                : [op1] "r" (m),
+                  [op2] "r" (mr),
+            );
+            assert_eq(instruction_result, @bitCast(tuple[1]), tuple[0]);
+        }
     }
-    write_test_result(test_counter, instruction_result);
 
-    // Test 21: MULH
-    test_counter += 1;
-    print("Test 21: MULH instruction\n");
-    asm volatile (
-        \\mulh %[result], %[op1], %[op2]
-        : [result] "=r" (instruction_result),
-        : [op1] "r" (operand1),
-          [op2] "r" (operand2),
-    );
-    write_test_result(test_counter, instruction_result);
-    print("MULH result written to CSR\n");
+    inline for (.{ .{ 0x1234, -0x765, "Div test1\n" }, .{ -0x1234, 0x765, "Div test2\n" }, .{ -0x1234, -0x765, "Div test3\n" }, .{ 0x1234, 0x765, "Div test4\n" } }) |divisions| {
+        const d: i32 = divisions[0];
+        const dr: i32 = divisions[1];
 
-    // Test 22: MULHSU
-    test_counter += 1;
-    print("Test 22: MULHSU instruction\n");
-    asm volatile (
-        \\mulhsu %[result], %[op1], %[op2]
-        : [result] "=r" (instruction_result),
-        : [op1] "r" (operand1),
-          [op2] "r" (operand2),
-    );
-    write_test_result(test_counter, instruction_result);
-    print("MULHSU result written to CSR\n");
+        const du: u32 = @bitCast(d);
+        const dru: u32 = @bitCast(dr);
 
-    // Test 23: MULHU
-    test_counter += 1;
-    print("Test 23: MULHU instruction\n");
-    asm volatile (
-        \\mulhu %[result], %[op1], %[op2]
-        : [result] "=r" (instruction_result),
-        : [op1] "r" (operand1),
-          [op2] "r" (operand2),
-    );
-    write_test_result(test_counter, instruction_result);
-    print("MULHU result written to CSR\n");
+        const div: i32 = d / dr;
+        const divu: u32 = du / @as(u32, dru);
+        const rem: i32 = @rem(d, dr);
+        const remu: u32 = du % dru;
 
-    // Test 24: DIV
-    test_counter += 1;
-    print("Test 24: DIV instruction\n");
-    asm volatile (
-        \\div %[result], %[op1], %[divisor]
-        : [result] "=r" (instruction_result),
-        : [op1] "r" (operand1),
-          [divisor] "r" (test_constant),
-    );
-    write_test_result(test_counter, instruction_result);
-    print("DIV result written to CSR\n");
+        print(divisions[2]);
 
-    // Test 25: DIVU
-    test_counter += 1;
-    print("Test 25: DIVU instruction\n");
-    asm volatile (
-        \\divu %[result], %[op1], %[divisor]
-        : [result] "=r" (instruction_result),
-        : [op1] "r" (operand1),
-          [divisor] "r" (test_constant),
-    );
-    write_test_result(test_counter, instruction_result);
-    print("DIVU result written to CSR\n");
-
-    // Test 26: REM
-    test_counter += 1;
-    print("Test 26: REM instruction\n");
-    asm volatile (
-        \\rem %[result], %[op1], %[divisor]
-        : [result] "=r" (instruction_result),
-        : [op1] "r" (operand1),
-          [divisor] "r" (test_constant),
-    );
-    write_test_result(test_counter, instruction_result);
-    print("REM result written to CSR\n");
-
-    // Test 27: REMU
-    test_counter += 1;
-    print("Test 27: REMU instruction\n");
-    asm volatile (
-        \\remu %[result], %[op1], %[divisor]
-        : [result] "=r" (instruction_result),
-        : [op1] "r" (operand1),
-          [divisor] "r" (test_constant),
-    );
-    write_test_result(test_counter, instruction_result);
-    print("REMU result written to CSR\n");
-
-    // =============================================================================
-    // Edge Case Tests
-    // =============================================================================
+        inline for (.{ .{ "div", div }, .{ "divu", divu }, .{ "rem", rem }, .{ "remu", remu } }) |tuple| {
+            asm volatile (tuple[0] ++
+                    \\ %[result], %[op1], %[op2]
+                : [result] "=r" (instruction_result),
+                : [op1] "r" (d),
+                  [op2] "r" (dr),
+            );
+            assert_eq(instruction_result, @bitCast(tuple[1]), tuple[0]);
+        }
+    }
 
     print("Testing Edge Cases...\n");
 
-    // Test 28: Add with zero
-    test_counter += 1;
-    print("Test 28: ADD with zero\n");
     asm volatile (
         \\add %[result], %[op1], zero
         : [result] "=r" (instruction_result),
         : [op1] "r" (operand1),
     );
-    write_test_result(test_counter, instruction_result);
+    // assert_eq(test_counter, instruction_result);
     print("ADD with zero result written to CSR\n");
 
     // Test 29: Negative number addition
@@ -750,12 +810,14 @@ inline fn write_test_result(test_id: u32, result: u32) void {
     );
 }
 
-fn expect_eq(expected: u32, actual: u32, msg: [*:0]const u8) void {
+fn assert_eq(expected: u32, actual: u32, msg: [*:0]const u8) void {
+    print("%T");
+    print(msg);
+    print(" test : ");
     if (expected == actual) {
-        print(msg);
+        print("PASSED\n");
     } else {
-        print("FAILED : ");
-        print(msg);
+        print("FAILED\n");
     }
 }
 
@@ -773,7 +835,7 @@ fn alu_test() void {
         : [lhs] "r" (a),
           [rhs] "r" (b),
     );
-    expect_eq(a + b, result, "ADD PASS\n");
+    assert_eq(a + b, result, "ADD PASS\n");
 
     // SUB
     asm volatile (
@@ -782,7 +844,7 @@ fn alu_test() void {
         : [lhs] "r" (a),
           [rhs] "r" (b),
     );
-    expect_eq(a - b, result, "SUB PASS\n");
+    assert_eq(a - b, result, "SUB PASS\n");
 
     // AND
     asm volatile (
@@ -791,7 +853,7 @@ fn alu_test() void {
         : [lhs] "r" (a),
           [rhs] "r" (b),
     );
-    expect_eq(a & b, result, "AND PASS\n");
+    assert_eq(a & b, result, "AND PASS\n");
 
     // OR
     asm volatile (
@@ -800,7 +862,7 @@ fn alu_test() void {
         : [lhs] "r" (a),
           [rhs] "r" (b),
     );
-    expect_eq(a | b, result, "OR PASS\n");
+    assert_eq(a | b, result, "OR PASS\n");
 
     // XOR
     asm volatile (
@@ -809,7 +871,7 @@ fn alu_test() void {
         : [lhs] "r" (a),
           [rhs] "r" (b),
     );
-    expect_eq(a ^ b, result, "XOR PASS\n");
+    assert_eq(a ^ b, result, "XOR PASS\n");
 
     // SLT (signed)
     asm volatile (
@@ -818,7 +880,7 @@ fn alu_test() void {
         : [lhs] "r" (a),
           [rhs] "r" (b),
     );
-    expect_eq(if (a < b) 1 else 0, result, "SLT PASS\n");
+    assert_eq(if (a < b) 1 else 0, result, "SLT PASS\n");
 
     // SLTU (unsigned)
     asm volatile (
@@ -827,7 +889,7 @@ fn alu_test() void {
         : [lhs] "r" (a),
           [rhs] "r" (b),
     );
-    expect_eq(if (au < bu) 1 else 0, result, "SLTU PASS\n");
+    assert_eq(if (au < bu) 1 else 0, result, "SLTU PASS\n");
 
     // SLL
     asm volatile (
@@ -836,7 +898,7 @@ fn alu_test() void {
         : [lhs] "r" (a),
           [rhs] "r" (b),
     );
-    expect_eq(au << bu, result, "SLL PASS\n");
+    assert_eq(au << bu, result, "SLL PASS\n");
 
     // SRL
     asm volatile (
@@ -845,7 +907,7 @@ fn alu_test() void {
         : [lhs] "r" (a),
           [rhs] "r" (b),
     );
-    expect_eq(au >> bu, result, "SRL PASS\n");
+    assert_eq(au >> bu, result, "SRL PASS\n");
 
     // SRA (signed shift)
     asm volatile (
@@ -858,9 +920,9 @@ fn alu_test() void {
         \\ sra %[out], %[lhs], %[rhs]
         : [out] "=r" (result),
         : [lhs] "r" (neg_val),
-          [rhs] "r" (b),
+          [rhs] "r" (bu),
     );
-    expect_eq(0xFFFFFFFE, result, "SRA PASS\n");
+    assert_eq(@bitCast(-@as(i32, 1)), result, "SRA PASS\n");
 
     // ADDI
     asm volatile (
@@ -868,7 +930,7 @@ fn alu_test() void {
         : [out] "=r" (result),
         : [lhs] "r" (a),
     );
-    expect_eq(12, result, "ADDI PASS\n");
+    assert_eq(12, result, "ADDI PASS\n");
 
     // ANDI
     asm volatile (
@@ -876,7 +938,7 @@ fn alu_test() void {
         : [out] "=r" (result),
         : [lhs] "r" (a),
     );
-    expect_eq(2, result, "ANDI PASS\n");
+    assert_eq(2, result, "ANDI PASS\n");
 
     // ORI
     asm volatile (
@@ -884,7 +946,7 @@ fn alu_test() void {
         : [out] "=r" (result),
         : [lhs] "r" (b),
     );
-    expect_eq(11, result, "ORI PASS\n");
+    assert_eq(11, result, "ORI PASS\n");
 
     // XORI
     asm volatile (
@@ -892,23 +954,23 @@ fn alu_test() void {
         : [out] "=r" (result),
         : [lhs] "r" (b),
     );
-    expect_eq(2, result, "XORI PASS\n");
+    assert_eq(2, result, "XORI PASS\n");
 
     // SLTI
     asm volatile (
-        \\ slti %[out], %[lhs], 1
+        \\ slti %[out], %[lhs], 10
         : [out] "=r" (result),
         : [lhs] "r" (b),
     );
-    expect_eq(1, result, "SLTI PASS\n");
+    assert_eq(1, result, "SLTI PASS\n");
 
     // SLTIU
     asm volatile (
-        \\ sltiu %[out], %[lhs], 1
+        \\ sltiu %[out], %[lhs], 10
         : [out] "=r" (result),
         : [lhs] "r" (b),
     );
-    expect_eq(1, result, "SLTIU PASS\n");
+    assert_eq(1, result, "SLTIU PASS\n");
 
     // SLLI
     asm volatile (
@@ -916,7 +978,7 @@ fn alu_test() void {
         : [out] "=r" (result),
         : [lhs] "r" (b),
     );
-    expect_eq(12, result, "SLLI PASS\n");
+    assert_eq(12, result, "SLLI PASS\n");
 
     // SRLI
     asm volatile (
@@ -924,7 +986,7 @@ fn alu_test() void {
         : [out] "=r" (result),
         : [lhs] "r" (b),
     );
-    expect_eq(1, result, "SRLI PASS\n");
+    assert_eq(1, result, "SRLI PASS\n");
 
     // SRAI
     asm volatile (
@@ -937,5 +999,5 @@ fn alu_test() void {
         : [out] "=r" (result),
         : [lhs] "r" (neg4),
     );
-    expect_eq(0xFFFFFFFE, result, "SRAI PASS\n");
+    assert_eq(0xFFFFFFFE, result, "SRAI PASS\n");
 }

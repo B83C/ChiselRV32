@@ -32,6 +32,7 @@ class Fetch_IO(implicit p: Parameters) extends CustomBundle {
     val bu_update = Flipped(Valid(new BU_signals))
     val bu_commit = Flipped(Valid(new BU_signals))
     val bu_mask_freelist_deq = Flipped(Vec(p.CORE_WIDTH, Decoupled(UInt(bl(p.BRANCH_MASK_WIDTH)))))
+    val bu_mask_freelist_full = Flipped(Bool())
     val current_branch_mask_with_freed = Flipped(UInt(p.BRANCH_MASK_WIDTH.W))
     val branch_freed = Flipped(UInt(p.BRANCH_MASK_WIDTH.W)
 )}
@@ -60,9 +61,6 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
 
     //需不需要flush
     val should_flush = io.rob_controlsignal.shouldFlush
-    // val rob_flush_valid = io.rob_commitsignal(0).valid && io.rob_commitsignal(0).bits.mispred
-    // TODO
-    // val rob_mispred_pc = io.rob_controlsignal.bits.PC_next
 
     //分支预测
     val whether_take_bp = io.should_branch
@@ -88,24 +86,26 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         //TODO
         when(io.bu_commit.valid) {
             pc_reg := io.bu_commit.bits.target_PC
-        }.elsewhen(downstream_ready){
+        }.elsewhen(downstream_ready && can_allocate_all_branches){
             pc_reg := pc_next
         }
     }
 
     //TODO: Confirm validity
     io.instr_addr.bits := pc_reg
-    io.instr_addr.valid := downstream_ready
-
+    io.instr_addr.valid := downstream_ready && can_allocate_all_branches
+ 
     withReset(reset.asBool || should_flush) {
-        val mem_stage_ack = io.id_uop.ready
+        val mem_stage_ack = downstream_ready && can_allocate_all_branches
         
         //为对齐时序而延迟一周期的内容
         val packet_first_valid_slot = pc_reg(log2Ceil(p.CORE_WIDTH - 1) + 2 , 2)
         val instr_valid_mask = Reg(UInt(p.CORE_WIDTH.W))
     
         val offset_mask =  (~0.U(p.CORE_WIDTH.W) << packet_first_valid_slot)(p.CORE_WIDTH - 1, 0)
-        instr_valid_mask := offset_mask
+        when(mem_stage_ack) {
+            instr_valid_mask := offset_mask
+        }
     
         val current_pc_aligned = RegEnable(pc_aligned, mem_stage_ack)
     
@@ -117,7 +117,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         val should_branch = RegEnable(io.should_branch, mem_stage_ack)
         val predicted_next_pc = RegEnable(io.predicted_next_pc, mem_stage_ack)
         val pc_aligned_deferred = RegEnable(pc_aligned, mem_stage_ack)
-        val instr_valid = operation_ready
+        val instr_valid = mem_stage_ack 
 
         // TODO : Needs to be reconsidered
         val is_br = VecInit(io.instr.map{ case instr => {
@@ -136,7 +136,9 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         }    
         // end of TODO
         
-        can_allocate_all_branches := instr_mask_btb.zip(io.bu_mask_freelist_deq).map{ case (valid, deq) =>
+        // can_allocate_all_branches := !io.bu_mask_freelist_full
+        // val has_br = is_br.orR;
+        can_allocate_all_branches := is_br.asBools.zip(io.bu_mask_freelist_deq).map{ case (valid, deq) =>
           !valid || !deq.ready || deq.valid
         }.reduce(_ && _)
 

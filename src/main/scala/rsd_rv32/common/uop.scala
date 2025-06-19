@@ -82,6 +82,9 @@ class DISPATCH_ROB_uop(implicit p: Parameters) extends uop {
     
     //val rob_index = UInt(bl(p.ROB_DEPTH))
     //val rob_inner_index = UInt(bl(p.CORE_WIDTH))
+    // Debugging
+    val ps1 = UInt(bl(p.PRF_DEPTH))
+    val ps2 = UInt(bl(p.PRF_DEPTH))
 }
 
 class DISPATCH_EXUISSUE_uop(implicit p: Parameters) extends uop {
@@ -115,7 +118,7 @@ class DISPATCH_LDISSUE_uop(implicit p: Parameters) extends uop {
     
     val pdst = Valid(UInt(bl(p.PRF_DEPTH)))
     val ps1 = UInt(bl(p.PRF_DEPTH))
-    val stq_tail = UInt(bl(p.STQ_DEPTH)) //needed to get the right forwarding data from STQ
+    val stq_tail = UInt(bl(p.STQ_DEPTH) + 1.W) //needed to get the right forwarding data from STQ
 
     val rob_index = UInt(bl(p.ROB_DEPTH) + 1.W)
     val rob_inner_index = UInt(bl(p.CORE_WIDTH))
@@ -179,7 +182,7 @@ class LDISSUE_LDPIPE_uop(implicit p: Parameters) extends uop {
 
     val ps1_value = UInt(p.XLEN.W)
     val pdst = Valid(UInt(bl(p.PRF_DEPTH)))
-    val stq_tail = UInt(bl(p.STQ_DEPTH)) //used when stq forwarding
+    val stq_tail = UInt(bl(p.STQ_DEPTH) + 1.W) //used when stq forwarding
 
     val rob_index = UInt(bl(p.ROB_DEPTH) + 1.W)
     val rob_inner_index = UInt(bl(p.CORE_WIDTH))

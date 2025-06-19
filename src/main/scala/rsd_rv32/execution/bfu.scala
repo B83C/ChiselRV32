@@ -44,9 +44,9 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
 
   // 分支方向判断
   val actual_taken = Wire(Bool())
-  val func3 = Wire(UInt(3.W))
-  func3 := input.bits.instr_(7, 5)
-  val temp = MuxLookup(func3, false.B)(
+  val instr = Instr.disassemble(input.bits.instr_ << 7)
+  // func3 := input.bits.instr_(7, 5)
+  val temp = MuxLookup(instr.funct3, false.B)(
     Seq(
       "b000".U  -> (rs1 === rs2),
       "b001".U  -> (rs1 =/= rs2),

@@ -93,6 +93,7 @@ class Core(implicit p: Parameters) extends CustomModule {
   fetch.io.bu_commit := branch_mask.io.bu_commit
   fetch.io.current_branch_mask_with_freed := branch_mask.io.current_branch_mask_with_freed
   fetch.io.branch_freed := branch_mask.io.branch_freed
+  fetch.io.bu_mask_freelist_full := branch_mask.io.bu_mask_freelist_full
 
   branch_predictor.io.instr_addr := fetch.io.instr_addr 
   branch_predictor.io.ghr_update := fetch.io.ghr_update
@@ -104,6 +105,7 @@ class Core(implicit p: Parameters) extends CustomModule {
   branch_mask.io.bu_signals := exu.io.bu_signals
   branch_mask.io.rob_commitsignal := rob.io.rob_commitsignal
   branch_mask.io.rob_controlsignal := rob.io.rob_controlsignal
+  branch_mask.io.rob_empty := rob.io.rob_empty
   branch_mask.io.bu_mask_freelist_deq <> fetch.io.bu_mask_freelist_deq
 
   decode.io.id_uop :<>= fetch.io.id_uop

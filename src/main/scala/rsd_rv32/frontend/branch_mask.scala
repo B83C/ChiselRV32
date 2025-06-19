@@ -10,6 +10,7 @@ class BranchMask_IO(implicit p: Parameters) extends CustomBundle {
     // from ROB
     val rob_commitsignal = Flipped(ROB.CommitSignal) // 用于更新branch_mask
     val rob_controlsignal = Flipped(new ROBControlSignal) // 用于更新branch_mask
+    val rob_empty = Flipped(Bool()) // 用于更新branch_mask
     
     // to everyone else
     val bu_update = Valid(new BU_signals)
@@ -17,6 +18,7 @@ class BranchMask_IO(implicit p: Parameters) extends CustomBundle {
     
     // from IF
     val bu_mask_freelist_deq = Vec(p.CORE_WIDTH, Decoupled(UInt(bl(p.BRANCH_MASK_WIDTH))))
+    val bu_mask_freelist_full = Bool()
     
     // to IF
     val current_branch_mask_with_freed = UInt(p.BRANCH_MASK_WIDTH.W)
@@ -81,6 +83,8 @@ class BranchMask(implicit p: Parameters) extends CustomModule {
     branch_mask_freelist.io.enq_request(0).valid := false.B
     branch_mask_freelist.io.enq_request(0).bits := DontCare
 
+    // Check if full
+    io.bu_mask_freelist_full := current_branch_mask === ~0.U(p.BRANCH_MASK_WIDTH.W)
     branch_mask_freelist.io.deq_request.zip(io.bu_mask_freelist_deq).foreach{
         case (freelist, request) => {
             request.bits := freelist.bits
@@ -89,12 +93,19 @@ class BranchMask(implicit p: Parameters) extends CustomModule {
         }
     }
     
-    branch_mask_freelist.io.squeeze := should_commit 
+    // branch_mask_freelist.io.squeeze := should_commit 
 
     
     val first_valid_commit_branch_freed = PriorityMux(io.rob_commitsignal.bits.map(_.valid), io.rob_commitsignal.bits.map(_.branch_freed))
     // val last_valid_commit_branch_mask = PriorityMux(io.rob_commitsignal.bits.map(_.valid).reverse, io.rob_commitsignal.bits.map(_.branch_mask).reverse)
     // val branch_mask_to_be_freed = (last_valid_commit_branch_mask & uncommited_free_branch_mask) ^ uncommited_free_branch_mask
+
+    branch_mask_freelist.io.squeeze := should_commit 
+    // branch_mask_freelist.io.squeeze := should_commit || (io.rob_commitsignal.valid && io.rob_empty)
+    // branch_mask_freelist.io.squeeze := (io.rob_commitsignal.valid && io.rob_empty) || should_commit
+    // when(io.rob_commitsignal.valid && io.rob_empty) {
+    //     free_branch_mask := 0.U
+    // }
     
     branch_mask_freelist.io.enq_request_direct.get.valid := io.rob_commitsignal.valid
     branch_mask_freelist.io.enq_request_direct.get.bits := first_valid_commit_branch_freed    

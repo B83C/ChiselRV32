@@ -1,4 +1,4 @@
-#import "util.typ": *
+#import "./imports.typ": *
 
 #set text(font: ("Libertinus Serif", "Noto Serif CJK SC"))
 #set par(first-line-indent: (amount: 2em, all: true), justify: true, leading: 1em)
@@ -14,49 +14,26 @@
   )
 )
 
-= Revision History
-#table(
-  columns: (2fr, 2fr, 1fr),
-  gutter: 3pt,
-  [Author], [Description], [Date],
-  [刘恒雨], [Initialised and updated spec doc], [2025/04/10],
-  [刘恒雨], [Finialised automatic code referencing logic], [2025/04/23], 
-  [胡英瀚，杨钧铎，饶忠禹], [提供模块功能框图，以及功能部件阐述], [2025/04/23],
-  [刘恒雨], [完善spec文档], [2025/04/30],
+#grid(
+  columns: 1,
+  rows:(1fr, 1fr, 1fr),
+  align: center + horizon,
+  image(width: 95%, "image1.jpeg"),
+  image(width: 45%, "image2.jpeg"),
+  text(size: 3em)[
+    嵌入式荣誉课
+
+    第四组
+  ]
 )
 
+#pagebreak()
 #set heading(numbering: "1.1")
-#outline()
+#outline(title: [目录])
 #pagebreak()
 
-= Terminology
-#show: make-glossary
-#let entry-list = (
-  (
-    key: "kuleuven",
-    short: "KU Leuven",
-    long: "Katholieke Universiteit Leuven",
-    description: "A university in Belgium.",
-  ),
-)
-#register-glossary(entry-list)
-#print-glossary(
- entry-list
-)
-/ PRF: Physical Register File
-/ RMT: Register Map Table
-/ RMT: Architectural Map Table
-/ STQ: STore Queue
-/ LDQ: LoaD Queue
-/ LSU: Load Store Unit
-/ EXU: Execution Unit, 是所有FU的总称
-/ FU: Functional Unit, 指ALU、MUL、DIV等功能元件
-
-= Overview
-#include "diagram.typ"
-
 = 整体架构介绍
-#include "../diagram.typ"
+#include "./diagram.typ"
 
 本处理器为乱序多发射架构，支持RV32IM指令集以及Zicsr指令拓展集。流水线深度为8级以上：取指单元3级、译码1级、重命名单元1级、发射单元2级（包括dispatch）、执行单元若干级，以及写回1级。
 
@@ -89,10 +66,8 @@ PC_Next主要来自：branch_mask单元、分支预测(BP)、#inc_pc，其中优
 
 最终，IF将整个uop向量存入寄存器传给ID阶段进行后续译码操作，并保持在运行状态，等待下一组指令的处理。
 
-#hint(c.FetchUnit)
-
 == 分支预测 (BP)
-#let bp_full= read("../bp.png", encoding: none)
+#let bp_full= read("./bp.png", encoding: none)
 #figure(image-crop(bp_full,
   crop-width: 500,
   crop-height: 250,
@@ -165,8 +140,6 @@ GHR回滚：利用BranchMask提供的快照bu_signal信号将GHR恢复至错误�
 
 流水线冲刷：通知流水线冲刷错误的指令，并从正确的PC重新取指。
 
-#hint(c.BranchPredictorUnit)
-
 == 译码 (ID)
 译码单元从取指单元接受CORE_WIDTH个指令，并对有效的指令进行译码操作，最后发送到重命名单元。若整体无效，则不发射指令组。
 
@@ -176,13 +149,6 @@ ID模块把指令分为了MUL,DIV,ALU,LD,ST,Branch等类别。根据指令的操
 在模块中，引入了对nop指令的识别，即“操作类型是ALU，且源寄存器rs1、rs2、目标寄存器rd均为x0的指令”。一旦识别出指令为nop指令，就将其屏蔽，这条指令将不会被发射到Rename阶段，减少计算资源的消耗。 
 
 译码单元不会造成流水线堵塞，因此只向前传递后级的阻塞信号。
-
-=== 译码 (ID)
-从取指单元接受CORE_WIDTH个指令，并对有效的指令进行译码操作，最后发送到重命名单元。
-
-译码单元不会造成流水线堵塞，因此只传递后级的阻塞信号。
-
-#hint(c.DecodeUnit)
 
 = 后端介绍
 
@@ -202,8 +168,6 @@ ID模块把指令分为了MUL,DIV,ALU,LD,ST,Branch等类别。根据指令的操
 
 对于目的寄存器，需从PRF Freelist获取CORE_WIDTH个空闲物理寄存器，获取成功后将index写入RMT，否则stall。
 
-#hint(c.RenameUnit)
-
 == PRF Busy
 在重命名单元检测到有指令写入寄存器，会把对应物理寄存器地址写入PRF_BUSY表进行登记。该表的用途是记录当前是否仍有指令需要写入指定物理寄存器，主要目的是为了判断指令进入发射队列时，源寄存器就绪的初始状态。如果指令已完成对该寄存器的写入，则后续无需监听该源寄存器的状态。
 
@@ -214,14 +178,11 @@ ID模块把指令分为了MUL,DIV,ALU,LD,ST,Branch等类别。根据指令的操
 
 当检测到CSR指令时，本模块将进入顺序发射模式，并暂停流水线。进入顺序模式之前，将所有乱序指令发送到发射队列中，并将该CSR指令及以后的指令屏蔽掉，再把指令组送入ROB。进入顺序模式之后，等待ROB清空了才将眼前的CSR指令逐一发送到EXU（可连续发送），此时不把指令写入ROB。若CSR指令执行完毕后仍有为派遣的乱序指令，则返回乱序模式。较原先乱序模式不同的地方在于此时的掩码屏蔽掉了之前的指令，直到掩码为零时，才释放流水线。
 
-
-#hint(c.DispatchUnit)
-
 == 指令发射 (IQ)
 #[
 #show regex("[A-z]+_issue") : it => [*#lower(it)*]
-#figure(image("../dispatch_issue_birds_eye_view.png"), caption: "Issue Queue 工作原理图") <iq>
-#figure(image(width: 50%, "../iq.jpeg"), caption: "Issue Queue 条目") <iq_entry>
+#figure(image("./dispatch_issue_birds_eye_view.png"), caption: "Issue Queue 工作原理图") <iq>
+#figure(image(width: 50%, "./iq.jpeg"), caption: "Issue Queue 条目") <iq_entry>
 Issue queue用于向各个EXU发射命令，需要监听后续EXU是否空闲以及各操作数的就绪状态。操作数设置为就绪有三种途径：
 
 #set enum(indent: 2em)
@@ -238,16 +199,12 @@ St_issue基本与exu_issue相同，向store流水线（位于LSU中）发送uop�
 在本CPU中，store指令走完store流水线的周期固定为2，而load指令在load流水线第二级才会从stq获取前馈数据(见@lsu)，所以只需要保证在程序顺序上位于该load指令之前的store指令全部进入STU后再发射load，就可以避免load指令越过有数据依赖的store指令，错误地读取数据（store – load violation）。为此，需要一个存储依赖关系的矩阵，load指令在进入ld_issue时，就要接收当前周期st_issue中尚未发射的store条目，以二进制数(位宽为ST_ISSUE_QUEUE_DEPTH)的形式存入矩阵的一行中。每当st_issue发射一条store指令，就要更新ld_issue矩阵中对应的列，将其全部置为0表示就绪。当一条load命令所在行全为0时，表示与其相关的（比该load指令更年轻的）store指令已经全部发射，该load指令解除限制（又若load指令的psrc为ready状态，则该load指令具备发射条件）。
 ]
 
-#hint(c.exu_issue_queue, c.ld_issue_queue, c.st_issue_queue)
-
 == 重排序 (ROB)
 Reorder Buffer(ROB)，是一个FIFO结构，用于按照程序序存储指令，可以实现顺序retire，从而实现分支预测失误后的回滚与精确异常（本项目无需实现精确异常）
 
 在实际工作时，ROB从dispatch接收uop并储存，把自身头尾指针以及empty/full标志传递给dispatch单元。从各个EXU接收指令完成信号，更新complete状态。ROB总是广播位于头部的两条指令，用额外的valid位（两条指令各有一个）来指示本周期是否retire该指令，用于AMT的更新、通知STQ可以写入内存、通知其他模块发生分支预测错误。
 
-#hint(c.ROB)
-
-=== 功能单元 (FU) <FU>
+== 功能单元 (FU) <FU>
 FU为ALU, BU, MUL, DIV, CSR的抽象类，主要提供基本的输出入输出端口。指定单元（BU, CSR等）有额外读写端口专门与ROB交互。
 
 === ALU 
@@ -267,12 +224,18 @@ Branch mask单元内含转跳指令信息的缓存，用于保存BU写回指令�
 
 每当BU写回指令表示分支判断错误时，branch_mask就会向所有的模块广播冲刷信号（通过ROB），对于前端将进行完整冲刷，而后端（执行端和发射队列）则提供对应branch mask的冲刷位，如若执行中的指令branch mask有效位包含该冲刷位，则该指令被作废。
 
-#hint(c.FunctionalUnit, c.ALUFU, c.BranchFU, c.MULFU, c.DIVFU, c.CSRFU)
+=== MULFU
+MUL部分采用基4（Radix-4）Booth编码算法进行多周期乘法，并支持4种乘法运算。由于32位的Booth乘法器乘数与被乘数均为有符号数，因此为了同时适配不同的乘法运算，本处理器中均对两者进行位数扩展。比如，MUL指令将被乘数进行有符号扩展成64位，而乘数则有符号扩展成33位（不包括运算中向左位移1位），而MULHSU对乘数进行无符号扩展。
 
+=== DIVFU
+DIV_REM部分采用非恢复式移位减法除法算法，支持2种除法和2种取余运算，并遵守RISCV spec中对除数分别为0和-1的情况。
 
-==== LSU
-#figure(image("lsu_internals.png"), caption: "LSU 工作原理图") <lsu>
+=== CSR <csr_mitigation>
+由于写入CSR寄存器时可能更改处理器的状态，所以我们按照传统的做法：ID在检测到CSRRW指令后，进入顺序发射模式，直待ROB清空后，CSR才开始接受CSR指令。
 
+CSR寄存器通过Memory mapping把地址映射到特定的寄存器（可以是外设寄存器，或是io端口）。本处理器只实现简单的mcycle寄存器，实现方法是额外设立一个计数器，在csr读写时，使能读写端口。
+
+== LSU
 #figure(image("./lsu.jpg"), caption: "LSU 工作原理图") <lsu>
 
 在本次处理器设计中，Load-Store Unit（LSU）由4个子模块，Store Queue（STQ）、LoadPipeline、StorePipeline以及一个面向memory的请求仲裁器（Arbiter）构成。通过子模块的相互协作，LSU完成数据写入的暂存、加载过程中的数据选择与拼接、以及最终的 memory 请求发起，构建出一个支持乱序指令执行的访存后端。
@@ -291,45 +254,38 @@ StorePipeline则是两级流水线，依次进行地址计算、最终写回STQ�
 
 由于 LSU 内部所有访存操作共享单一 memory 接口，为避免访问冲突，系统采用轻量级的仲裁器对 LoadPipeline 和 STQ 中待提交 Store 的请求进行调度。在本设计中，memory 接口为理想 ready 信号模型，仲裁策略为轮询式公平仲裁，每周期仅允许一个请求通过，保障访存路径在高并发场景下的有序执行。当LoadPipeline发起申请但是轮询优先级没有轮到时，会stall一个周期
 
-#hint(c.LSU)
-
-=== 物理寄存器堆 (PRF)
+== 物理寄存器堆 (PRF)
 
 物理寄存器堆存有PRF_DEPTH个寄存器，寄存器宽度为XLEN。由于存在多个FU，PRF必须有多个读写端口。
 
-#hint(c.PRF)
+= 集成仿真
 
-Summary:
+本处理器的仿真使用了verilator，并通过surfer软件观察波形。
+
+== 仿真模块
+#figure(image("./bench_cpp.png"), caption: "仿真模块") <iq>
+为了减少对Chisel模拟器的依赖，本项目中调用了verilator的api，将程序载入处理器的内存中。
+
+== 集成测试
+
+// == 性能分析
+
+= 小组分工说明
+
 #table(
   columns: (1fr, 1fr),
   gutter: 3pt,
-  [功能], [实现方法],
-  [分支预测], [BTB + BHT(T/NT)],
-  [重命名表], [AMT+RMT, RMT存有有效位，无效时以AMT为准],
-  [发射队列], [一个执行单元对应一个发射队列],
-  [执行单元], [两个执行单元，即FU（ALU, BU, MUL, DIV, CSR）的组合和LSU],
-  [Cache], [无],
+  [组员], [分工部分],
+  [刘恒雨(组长)], [顶层模块+测试+文档排布+优化代码(dispatch)+branch_mask+csr],
+  [杨钧铎], [ROB + Rename],
+  [饶忠禹], [LSU],
+  [胡英瀚], [Issue Queue],
+  [李可名/赵力], [BP],
+  [邢益成], [Fetch + Decode],
+  [马嘉一], [FU(ALU, BP, DIV, MUL)],
+  [胡继仁], [prf],
+  [蔡家麒], [RAS],
 )
-== 特别案例处理方式
-=== Load Store违例 (Load Store Violation)
-#[
-#set list(indent: 2em)
-Load Store违例是当发射队列中操作地址相同且较年轻的load指令比老的store指令更优先执行。其中主要原因可能是：
-- Load指令的源寄存器较Store指令更早就绪
-为简便起见，我们采用分开的load和store发射FIFO队列，同时维护一个依赖矩阵，用以保存load-store之间的年龄信息。只有load之前的所有store执行完毕，load指令才能执行。该矩阵的每一行对应一个load指令，每一列对应store指令。每当load载入issue queue时，对应行将载入store queue的快照；store指令在完成之后，将对应列清零。由此，当且仅当load的一行全为零才符合被执行的条件。
-  
-]
-=== 分支误判回滚
-分支预测在判定为错误后，由BU写入ROB。直到当该分支指令退休时，才对系统进行回滚操作。回滚时，RMT每一行的vaild bit清零，所有freelist以及rob头部指针与尾部指针重合，同时将跳转地址发送至IF并重置所有其它模块。
-=== CSR写入
-见@csr_mitigation
 
-
-= Units
-#modules
-
-= Parameters
-#p(c.Parameters)
-
-= Interface
-#interfaces
+// #bibliography()
+#bibliography("bib.yml")

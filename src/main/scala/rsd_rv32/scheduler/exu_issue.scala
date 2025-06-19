@@ -43,20 +43,19 @@ class exu_issue_queue(fu_num: Int, fus_props: Seq[FUProps])(implicit p: Paramete
 
     val should_flush = io.rob_controlsignal.shouldFlush
 
+    val issue_queue = RegInit(
+        VecInit(Seq.fill(p.EXUISSUE_DEPTH) (
+            0.U.asTypeOf(new exu_issue_content())
+        ))
+    )
+
+    val payload = RegInit(
+        VecInit(Seq.fill(p.EXUISSUE_DEPTH) (
+            0.U.asTypeOf(new DISPATCH_EXUISSUE_uop())
+        ))
+    )
+
     withReset(reset.asBool) {
-        val issue_queue = RegInit(
-            VecInit(Seq.fill(p.EXUISSUE_DEPTH) (
-                0.U.asTypeOf(new exu_issue_content())
-            ))
-        )
-
-        val payload = RegInit(
-            VecInit(Seq.fill(p.EXUISSUE_DEPTH) (
-                0.U.asTypeOf(new DISPATCH_EXUISSUE_uop())
-            ))
-        )
-
-
         dis_uop.foreach { uop =>
             when(VALID && uop.valid && !should_flush)  {
                 val uop_ps = VecInit(Seq(uop.bits.ps1, uop.bits.ps2))
@@ -84,21 +83,25 @@ class exu_issue_queue(fu_num: Int, fus_props: Seq[FUProps])(implicit p: Paramete
             val selected_payload = payload(sel_ind)
             val selection_valid = ready_vec_masked.asUInt =/= 0.U && exu_uop.ready && !io.rob_controlsignal.shouldBeKilled(selected_entry.branch_mask)
 
+            val operation_ready = selection_valid
+            val downstream_ready = exu_uop.ready
+            val ack = operation_ready && downstream_ready
+
             val selected_payload_coerced = Wire(new EXUISSUE_EXU_uop)
             (selected_payload_coerced: Data).waiveAll :<>= (selected_payload: Data).waiveAll
             selected_payload_coerced.ps1_value := DontCare
             selected_payload_coerced.ps2_value := DontCare
 
-            when(selection_valid) {
+            when(ack) {
                 selected_entry.waiting := false.B
             }
 
-            exu_uop.valid := RegNext(selection_valid)
-            exu_uop.bits := RegEnable(selected_payload_coerced, selection_valid)
+            exu_uop.valid := RegNext(selection_valid && downstream_ready)
+            exu_uop.bits := RegEnable(selected_payload_coerced, ack)
 
             // Assuming that prf read happens asynchronously
-            prf_raddr.bits := RegEnable(selected_entry.ps, selection_valid)
-            prf_raddr.valid:= RegNext(selection_valid)
+            prf_raddr.bits := RegEnable(selected_entry.ps, ack)
+            prf_raddr.valid:= RegNext(selection_valid && downstream_ready)
 
             // This is when freeing happens synchronously
             issued_ind.bits := sel_ind
