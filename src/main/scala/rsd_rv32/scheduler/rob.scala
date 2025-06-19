@@ -64,6 +64,8 @@ class ROBContent(implicit p: Parameters) extends CustomBundle {
     val pdst_value = UInt(p.XLEN.W)
     val ps1 = UInt(bl(p.PRF_DEPTH))
     val ps2 = UInt(bl(p.PRF_DEPTH))
+    // val ps1_value = UInt(p.XLEN.W)
+    // val ps2_value = UInt(p.XLEN.W)
 }
 
 class ROBIO(implicit p: Parameters) extends CustomBundle {
@@ -196,6 +198,7 @@ class ROB(implicit p: Parameters) extends CustomModule {
         // rob_allocate.mispred := false.B
         rob_allocate.completed := false.B
 
+
         rob_allocate.is_st := uop.instr_type === InstrType.ST
         // rob_allocate.is_branch := uop.instr_type === InstrType.Branch
 
@@ -204,6 +207,8 @@ class ROB(implicit p: Parameters) extends CustomModule {
         // Debugging
         rob_allocate.debug := dis_uop.bits.debug
         rob_allocate.pdst_value := 0.U
+        // rob_allocate.ps1_value := DontCare
+        // rob_allocate.ps2_value := DontCare
 
         rob_allocate
     }
@@ -218,6 +223,8 @@ class ROB(implicit p: Parameters) extends CustomModule {
 
             //DEbugging
             rob(index)(inner_offset).pdst_value := wb_uop.bits.pdst_value
+            // rob(index)(inner_offset).ps1_value := wb_uop.bits.ps1_value
+            // rob(index)(inner_offset).ps2_value := wb_uop.bits.ps2_value
         }
     }
 }

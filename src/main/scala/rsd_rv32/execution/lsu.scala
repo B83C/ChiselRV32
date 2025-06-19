@@ -250,6 +250,8 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
 
 //stage4进行wb操作
   io.ldu_wb_uop.valid := stage4.valid 
+  // io.ldu_wb_uop.bits.ps1_value := DontCare
+  // io.ldu_wb_uop.bits.ps2_value := DontCare
   //仅当ld_issue_uop传入有效且不需要flush时wb rob的uop才有效
   (io.ldu_wb_uop.bits: Data).waiveAll :<= (stage4.bits.uop: Data).waiveAll
   io.ldu_wb_uop.bits.pdst_value := stage4.bits.data
@@ -308,6 +310,8 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
   // io.dataAddr_into_stq.valid := !need_flush && stage2.valid
 
   io.stu_wb_uop.valid  := stage2.valid 
+  // io.stu_wb_uop.bits.ps1_value := DontCare
+  // io.stu_wb_uop.bits.ps2_value := DontCare
   //仅当st_issue_uop传入有效且不需要flush时wb rob的uop才有效
   (io.stu_wb_uop.bits: Data).waiveAll :<= (stage2.bits.uop: Data).waiveAll
   io.stu_wb_uop.bits.pdst.valid := false.B
@@ -568,11 +572,20 @@ class LSU(implicit p: Parameters) extends CustomModule {
     load_pipeline.io.data_out_stq <> store_queue.io.searched_data
     load_pipeline.io.rob_commitsignal := io.rob_commitsignal
     load_pipeline.io.rob_controlsignal := io.rob_controlsignal
+    // For Debugging
     load_pipeline.io.ldu_wb_uop <> io.ldu_wb_uop
+    // io.ldu_wb_uop.bits.ps1_value := io.load_uop.bits.ps1_value
+    // io.ldu_wb_uop.bits.ps2_value := DontCare
 
   //连接storepipeline的信号
     store_pipeline.io.store_uop := io.store_uop
+
+    // For Debugging
+
     (io.stu_wb_uop: Data).waiveAll :<>= (store_pipeline.io.stu_wb_uop: Data).waiveAll
+    // io.stu_wb_uop.bits.ps1_value := io.store_uop.bits.ps1_value
+    // io.stu_wb_uop.bits.ps2_value := io.store_uop.bits.ps2_value
+
     store_pipeline.io.data_into_stq <> store_queue.io.data_into_stq
     store_pipeline.io.dataAddr_into_stq <> store_queue.io.dataAddr_into_stq
     store_pipeline.io.func3 <> store_queue.io.st_func3

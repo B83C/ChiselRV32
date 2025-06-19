@@ -38,7 +38,7 @@ class BranchMask(implicit p: Parameters) extends CustomModule {
     val new_bu_signal = io.bu_signals.bits
     val bu_signal_buf = Reg(Valid(new BU_signals))
 
-    val add_free_branch_mask = trigger && !io.bu_signals.bits.mispred
+    val add_free_branch_mask = trigger && !io.bu_signals.bits.mispred && current_branch_mask(io.bu_signals.bits.branch_id) =/= 0.U
     val new_free_branch_mask =  1.U << io.bu_signals.bits.branch_id
 
     val uncommited_free_branch_mask = free_branch_mask | Mux(add_free_branch_mask, new_free_branch_mask, 0.U)
@@ -48,7 +48,7 @@ class BranchMask(implicit p: Parameters) extends CustomModule {
     io.current_branch_mask_with_freed := current_branch_mask_with_freed
     
     // 只有比当前branch更老的那些判断错误的branch/jump指令才能替代
-    val should_update = trigger && new_bu_signal.mispred && (!bu_signal_buf.valid || (new_bu_signal.branch_mask.asUInt & (1.U << bu_signal_buf.bits.branch_id)) === 0.U) 
+    val should_update = trigger && new_bu_signal.mispred && (!bu_signal_buf.valid || (new_bu_signal.branch_mask.asUInt & (1.U << bu_signal_buf.bits.branch_id)) === 0.U) && !io.rob_controlsignal.restore_amt
 
     val commit_buf = bu_signal_buf.valid && (current_branch_mask_with_freed & bu_signal_buf.bits.branch_mask.asUInt) === 0.U
     val commit_current = io.bu_signals.valid && (current_branch_mask_with_freed & new_bu_signal.branch_mask.asUInt) === 0.U
@@ -100,8 +100,8 @@ class BranchMask(implicit p: Parameters) extends CustomModule {
     // val last_valid_commit_branch_mask = PriorityMux(io.rob_commitsignal.bits.map(_.valid).reverse, io.rob_commitsignal.bits.map(_.branch_mask).reverse)
     // val branch_mask_to_be_freed = (last_valid_commit_branch_mask & uncommited_free_branch_mask) ^ uncommited_free_branch_mask
 
-    branch_mask_freelist.io.squeeze := should_commit 
-    // branch_mask_freelist.io.squeeze := should_commit || (io.rob_commitsignal.valid && io.rob_empty)
+    // branch_mask_freelist.io.squeeze := should_commit 
+    branch_mask_freelist.io.squeeze := should_commit || (io.rob_commitsignal.valid && io.rob_empty)
     // branch_mask_freelist.io.squeeze := (io.rob_commitsignal.valid && io.rob_empty) || should_commit
     // when(io.rob_commitsignal.valid && io.rob_empty) {
     //     free_branch_mask := 0.U
@@ -109,6 +109,8 @@ class BranchMask(implicit p: Parameters) extends CustomModule {
     
     branch_mask_freelist.io.enq_request_direct.get.valid := io.rob_commitsignal.valid
     branch_mask_freelist.io.enq_request_direct.get.bits := first_valid_commit_branch_freed    
+    // branch_mask_freelist.io.enq_request_direct.get.valid := trigger
+    // branch_mask_freelist.io.enq_request_direct.get.bits := 1.U << io.bu_signals.bits.branch_id    
 
     when(should_commit) {
         free_branch_mask := 0.U
