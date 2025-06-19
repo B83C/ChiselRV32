@@ -44,7 +44,7 @@ class ld_issue_IO(fu_num: Int)(implicit p: Parameters) extends CustomBundle {
 class ld_issue_content(implicit p: Parameters) extends Bundle {
     val ps = UInt(log2Ceil(p.PRF_DEPTH).W) // 操作数的物理寄存器地址 
 
-    val branch_mask = UInt(p.BRANCH_MASK_WIDTH.W)
+    // val branch_mask = UInt(p.BRANCH_MASK_WIDTH.W)
 
     val waiting = Bool() // 表示有效
     val ps_ready = Bool() // 源操作数的ready信号
@@ -77,7 +77,7 @@ class ld_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
                 issue_queue(uop.bits.iq_index).waiting := true.B
                 issue_queue(uop.bits.iq_index).ps := uop.bits.ps1
                 issue_queue(uop.bits.iq_index).st_busy := VecInit((uop.bits.stq_mask | io.st_issue_busy_snapshot.asUInt).asBools)
-                issue_queue(uop.bits.iq_index).branch_mask := uop.bits.branch_mask.asUInt
+                // issue_queue(uop.bits.iq_index).branch_mask := uop.bits.branch_mask.asUInt
 
                 // 因为ps可能在dispatch的时候就就绪了(信号来自WB)
                 issue_queue(uop.bits.iq_index).ps_ready := uop.bits.ps1 === 0.U || !io.prf_busys(uop.bits.ps1) || io.wb_uop.exists(wb_uop => wb_uop.valid && wb_uop.bits.pdst.valid && wb_uop.bits.pdst.bits === uop.bits.ps1)
@@ -90,7 +90,7 @@ class ld_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
             when(io.st_issued_index.valid) {
                 iq.st_busy(io.st_issued_index.bits) := false.B
             }
-            when(io.rob_controlsignal.shouldBeKilled(iq.branch_mask)) {
+            when(io.rob_controlsignal.shouldBeKilled(0.U)) {
                 iq.waiting := false.B
             }
         })
@@ -99,7 +99,7 @@ class ld_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
         val ready_vec = VecInit(issue_queue.map(iq => iq.waiting && iq.ps_ready && !iq.st_busy.reduce(_ || _) ))
         val selected_entry = PriorityMux(ready_vec.zip(issue_queue))
         val selected_payload = PriorityMux(ready_vec.zip(payload))
-        val selection_valid = ready_vec.asUInt =/= 0.U && !io.rob_controlsignal.shouldBeKilled(selected_entry.branch_mask)
+        val selection_valid = ready_vec.asUInt =/= 0.U && !io.rob_controlsignal.shouldBeKilled()
 
         val operation_ready = selection_valid 
         val downstream_ready = io.load_uop.ready

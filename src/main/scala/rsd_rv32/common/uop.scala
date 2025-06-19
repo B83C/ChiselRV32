@@ -18,8 +18,8 @@ class BranchInfo(implicit p: Parameters) extends Bundle {
 abstract class uop(implicit p: Parameters) extends CustomBundle {
     def prf_read_counts: Int = 0
 
-    val branch_mask = UInt(p.BRANCH_MASK_WIDTH.W)
-    val branch_id = UInt(log2Ceil(p.BRANCH_MASK_WIDTH).W)
+    // val branch_mask = UInt(p.BRANCH_MASK_WIDTH.W)
+    // val branch_id = UInt(log2Ceil(p.BRANCH_MASK_WIDTH).W)
 
     // Debugging
     val debug = new InstrDebug
@@ -32,7 +32,7 @@ class IF_ID_uop(implicit p: Parameters) extends uop {
     val ghr = UInt(p.GHR_WIDTH.W) //needed by rob
     val branch_taken = Bool() //needed by BU
 
-    val branch_freed = UInt(p.BRANCH_MASK_WIDTH.W)
+    // val branch_freed = UInt(p.BRANCH_MASK_WIDTH.W)
 }
 
 class ID_RENAME_uop(implicit p: Parameters) extends uop {
@@ -54,7 +54,7 @@ class ID_RENAME_uop(implicit p: Parameters) extends uop {
     val rs1 = UInt(bl(p.REG_CNT))
     val rs2 = UInt(bl(p.REG_CNT))
 
-    val branch_freed = UInt(p.BRANCH_MASK_WIDTH.W)
+    // val branch_freed = UInt(p.BRANCH_MASK_WIDTH.W)
 }
 
 //继承ID_RENAME的uop
@@ -75,8 +75,8 @@ class DISPATCH_ROB_uop(implicit p: Parameters) extends uop {
     val pdst = Valid(UInt(bl(p.PRF_DEPTH)))
     val rd = Valid(UInt(5.W))
 
-    val branch_freed = UInt(p.BRANCH_MASK_WIDTH.W)
-    // val ghr = UInt(p.GHR_WIDTH.W)
+    // val branch_freed = UInt(p.BRANCH_MASK_WIDTH.W)
+    val ghr = UInt(p.GHR_WIDTH.W)
     //val branch_pred = BranchPred()
     // val btb_hit = BTBHit()
     
@@ -218,9 +218,9 @@ class BU_signals(implicit p: Parameters) extends Bundle {
 
     // Can be optimised
     // For checking age dependencies
-    val branch_mask = UInt(p.BRANCH_MASK_WIDTH.W)
+    // val branch_mask = UInt(p.BRANCH_MASK_WIDTH.W)
     // For updating branch_mask
-    val branch_id = UInt(log2Ceil(p.BRANCH_MASK_WIDTH).W)
+    // val branch_id = UInt(log2Ceil(p.BRANCH_MASK_WIDTH).W)
     val ghr = UInt(p.GHR_WIDTH.W)
 
     val rob_index = UInt(bl(p.ROB_DEPTH) + 1.W)

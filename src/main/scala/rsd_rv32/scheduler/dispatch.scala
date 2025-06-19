@@ -191,7 +191,7 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
       (out.bits: Data).waiveAll :<>= (c.bits : Data).waiveAll //TODO: UNSAFE 
       out.bits.iq_index := fl.bits
       // TODO
-      out.bits.stq_mask := Mux(preceding_st_cnt === 0.U, 0.U, ((10.U << preceding_st_cnt) - 1.U) << io.stq_tail)
+      out.bits.stq_mask := Mux(preceding_st_cnt === 0.U, 0.U, ((2.U << preceding_st_cnt) - 1.U) << io.stq_tail)
       out.bits.stq_tail := io.stq_tail + preceding_st_cnt//TODO: Check on its validity
       out.bits.rob_index := io.rob_index
       out.bits.rob_inner_index := rob_inner_ind.U

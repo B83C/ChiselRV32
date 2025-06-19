@@ -120,6 +120,8 @@ fn test_sl() void {
 
 const t: u32 = 0xdead;
 const str_test = "hy there";
+
+var global_string = "hi there ";
 pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     // modifyGlobal(&t);
@@ -133,6 +135,11 @@ pub fn main() !void {
         }
     };
     print(&buf);
+    // for (global_string) |c| {
+    //     var tt: [2:0]u8 = .{0} ** 2;
+    //     tt[0] = c;
+    //     print(&tt);
+    // }
     // load_store_tests();
     // branch_test();
     // print("hello there\n");
@@ -153,7 +160,8 @@ pub fn main() !void {
     // inline for (0..10) |_| {
     //     asm volatile ("nop");
     // }
-    print("terminating");
+    // print("aoeuanteohu\n");
+    print("\nterminating");
 }
 
 // pub fn multiplicaton_test() !void {

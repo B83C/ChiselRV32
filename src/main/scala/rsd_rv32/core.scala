@@ -126,8 +126,7 @@ class Core(implicit p: Parameters) extends CustomModule {
 
   rob.io.rob_uop :<>= dispatch.io.rob_uop
   rob.io.wb_uop := wb_uops
-  rob.io.bu_update := branch_mask.io.bu_update
-  rob.io.bu_commit := branch_mask.io.bu_commit
+  rob.io.bu_signals := exu.io.bu_signals
 
   ld_issue.io.prf_busys := prf_busys
   ld_issue.io.wb_uop := wb_uops

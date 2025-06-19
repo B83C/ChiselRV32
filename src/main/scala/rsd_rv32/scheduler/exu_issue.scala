@@ -29,7 +29,7 @@ class exu_issue_IO(exu_fu_num: Int, fu_num: Int)(implicit p: Parameters) extends
 class exu_issue_content(implicit p: Parameters) extends Bundle {
     val ps = Vec(2,UInt(log2Ceil(p.PRF_DEPTH).W)) // 操作数的物理寄存器地址 
 
-    val branch_mask = UInt(p.BRANCH_MASK_WIDTH.W)
+    // val branch_mask = UInt(p.BRANCH_MASK_WIDTH.W)
 
     val instr_type = InstrType()
     val waiting = Bool() // 表示有效
@@ -64,7 +64,7 @@ class exu_issue_queue(fu_num: Int, fus_props: Seq[FUProps])(implicit p: Paramete
                 issue_queue(uop.bits.iq_index).waiting := true.B
                 issue_queue(uop.bits.iq_index).ps := uop_ps
                 issue_queue(uop.bits.iq_index).instr_type := uop.bits.instr_type
-                issue_queue(uop.bits.iq_index).branch_mask := uop.bits.branch_mask.asUInt
+                // issue_queue(uop.bits.iq_index).branch_mask := uop.bits.branch_mask.asUInt
 
                 // 因为ps可能在dispatch的时候就就绪了(信号来自WB)
 
@@ -81,7 +81,7 @@ class exu_issue_queue(fu_num: Int, fus_props: Seq[FUProps])(implicit p: Paramete
             val sel_ind = OHToUInt(sel_oh) 
             val selected_entry = issue_queue(sel_ind)
             val selected_payload = payload(sel_ind)
-            val selection_valid = ready_vec_masked.asUInt =/= 0.U && exu_uop.ready && !io.rob_controlsignal.shouldBeKilled(selected_entry.branch_mask)
+            val selection_valid = ready_vec_masked.asUInt =/= 0.U && exu_uop.ready && !io.rob_controlsignal.shouldBeKilled()
 
             val operation_ready = selection_valid
             val downstream_ready = exu_uop.ready
@@ -122,7 +122,7 @@ class exu_issue_queue(fu_num: Int, fus_props: Seq[FUProps])(implicit p: Paramete
                     ps_ready := true.B
                 }
             }
-            when(io.rob_controlsignal.shouldBeKilled(iq.branch_mask)) {
+            when(io.rob_controlsignal.shouldBeKilled()) {
                 iq.waiting := false.B
             }
         })

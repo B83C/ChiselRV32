@@ -37,9 +37,9 @@ class EXU(implicit p: Parameters) extends CustomModule {
   
   require(bu.length <= 1, "Currently supports only 1 BU")
   
-  withReset(reset.asBool) {
+  withReset(reset.asBool || io.rob_controlsignal.shouldBeKilled()) {
     fus.zip(io.execute_uop).foreach { case (fu, in_uop) => 
-      fu.input.valid := in_uop.valid && !io.rob_controlsignal.shouldBeKilled(in_uop.bits.branch_mask)
+      fu.input.valid := in_uop.valid && !io.rob_controlsignal.shouldBeKilled()
       fu.input.bits := in_uop.bits
       in_uop.ready := fu.input.ready
     }
@@ -54,7 +54,7 @@ class EXU(implicit p: Parameters) extends CustomModule {
     val csru = Module(new CSRFU_Default)
     //Serialised uop
     csru.input.bits := io.serialised_uop.bits
-    csru.input.valid := io.serialised_uop.valid && !io.rob_controlsignal.shouldBeKilled(io.serialised_uop.bits.branch_mask)
+    csru.input.valid := io.serialised_uop.valid && !io.rob_controlsignal.shouldBeKilled()
     // CSRU should always be ready? 
     io.serialised_wb_uop := csru.output
   } 

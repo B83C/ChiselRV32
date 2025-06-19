@@ -39,7 +39,7 @@ class st_issue_IO(fu_num: Int)(implicit p: Parameters) extends CustomBundle {
 class st_issue_content(implicit p: Parameters) extends Bundle {
     val ps = Vec(2,UInt(log2Ceil(p.PRF_DEPTH).W)) // 操作数的物理寄存器地址 
 
-    val branch_mask = UInt(p.BRANCH_MASK_WIDTH.W)
+    // val branch_mask = UInt(p.BRANCH_MASK_WIDTH.W)
 
     val waiting = Bool() // 表示有效
     val ps_ready = Vec(2, Bool()) // 源操作数的ready信号
@@ -71,7 +71,7 @@ class st_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
                 payload(uop.bits.iq_index) := uop.bits
                 issue_queue(uop.bits.iq_index).waiting := true.B
                 issue_queue(uop.bits.iq_index).ps := uop_ps
-                issue_queue(uop.bits.iq_index).branch_mask := uop.bits.branch_mask.asUInt
+                // issue_queue(uop.bits.iq_index).branch_mask := uop.bits.branch_mask.asUInt
 
                 // 因为ps可能在dispatch的时候就就绪了(信号来自WB)
 
@@ -84,7 +84,7 @@ class st_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
                     ps_ready := true.B
                 }
             }
-            when(io.rob_controlsignal.shouldBeKilled(iq.branch_mask)) {
+            when(io.rob_controlsignal.shouldBeKilled()) {
                 iq.waiting := false.B
             }
         })
@@ -92,7 +92,7 @@ class st_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
         val ready_vec = VecInit(issue_queue.map(iq => iq.waiting && iq.ps_ready.reduce(_ && _)))
         val selected_entry = PriorityMux(ready_vec.zip(issue_queue))
         val selected_payload = PriorityMux(ready_vec.zip(payload))
-        val selection_valid = ready_vec.asUInt =/= 0.U && !io.rob_controlsignal.shouldBeKilled(selected_entry.branch_mask)
+        val selection_valid = ready_vec.asUInt =/= 0.U && !io.rob_controlsignal.shouldBeKilled()
 
         val operation_ready = selection_valid 
         val downstream_ready = io.store_uop.ready

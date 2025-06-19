@@ -146,10 +146,13 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
     // amt则需保持单一的映射关系，不能同时有多个映射关系
     // 倘若滚回方式更换成步进式恢复rmt，则不需要amt
     var commit_rd_mask = 0.U(32.W)
-    io.rob_commitsignal.bits.zip(prf_freelist.io.enq_request).zipWithIndex.reverse.foreach{ case ((commit, prf_enq), idx) => {
+    val mispreds = VecInit(io.rob_commitsignal.bits.map(x => x.mispred && x.valid)).asUInt
+    val has_mispreds = mispreds =/= 0.U
+    val mmask = (PriorityEncoderOH(mispreds) << 1.U) - 1.U
+    io.rob_commitsignal.bits.zip(prf_freelist.io.enq_request).zip(mmask.asBools).zipWithIndex.reverse.foreach{ case (((commit, prf_enq), mask), idx) => {
       val rd = commit.rd.bits
       val pdst = commit.pdst.bits
-      val wb_valid =  commit.valid && io.rob_commitsignal.valid && commit.pdst.valid
+      val wb_valid =  commit.valid && io.rob_commitsignal.valid && commit.pdst.valid && mask
       prf_enq.bits := DontCare
       prf_enq.valid := false.B
       when(wb_valid) {

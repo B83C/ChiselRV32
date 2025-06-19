@@ -104,19 +104,23 @@ class BranchPredictor(implicit p: Parameters) extends CustomModule {
 
   val bu_signal = io.bu_commit.bits
   // 错误预测的情况
-  when(io.bu_commit.valid) {
-    ghr := Cat(bu_signal.ghr, bu_signal.branch_taken)
+
+  val branches = io.rob_commitsignal.bits.map(e =>  e.valid && e.mispred)
+  val has_got_branches = VecInit(branches).asUInt =/= 0.U && io.rob_commitsignal.valid
+  val first_branch = PriorityMux(branches, io.rob_commitsignal.bits)
+
+  when(has_got_branches) {
+    ghr := Cat(first_branch.ghr, first_branch.branch_taken)
   }.elsewhen(io.ghr_update.fire) {
     ghr := Cat(ghr, io.ghr_update.bits)
   }
 
-  // When bfu outputs
-  when(io.bu_commit.valid) {
-    val choice = choice_table(get_choiceIndex(bu_signal.instr_addr))
-    val direction = bu_signal.branch_taken
+  when(has_got_branches) {
+    val choice = choice_table(get_choiceIndex(first_branch.instr_addr))
+    val direction = first_branch.branch_taken
     choice := counter_update(choice, direction)
 
-    val table_index = get_histIndex(bu_signal.instr_addr, bu_signal.ghr)
+    val table_index = get_histIndex(first_branch.instr_addr, first_branch.ghr)
     // TODO 
     when(choice(1)) {
       T_table(table_index) := counter_update(T_table(table_index), direction)
@@ -124,12 +128,12 @@ class BranchPredictor(implicit p: Parameters) extends CustomModule {
       NT_table(table_index) := counter_update(NT_table(table_index), direction)
     }
 
-    val btb_entry = btb(get_btbIndex(bu_signal.instr_addr))
-    btb_entry.target := bu_signal.target_PC
+    val btb_entry = btb(get_btbIndex(first_branch.instr_addr))
+    btb_entry.target := first_branch.target_PC
     // TODO
-    btb_entry.isConditional := bu_signal.is_conditional // If it writes back then it definitely is jump
+    btb_entry.isConditional := first_branch.is_conditional // If it writes back then it definitely is jump
     btb_entry.valid := true.B
-    btb_entry.tag := get_btbTag(bu_signal.instr_addr)
+    btb_entry.tag := get_btbTag(first_branch.instr_addr)
   }
 
   // when(io.rob_commitsignal.valid) {

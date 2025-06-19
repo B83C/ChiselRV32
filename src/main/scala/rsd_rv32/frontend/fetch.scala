@@ -70,33 +70,38 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     pc_next := Mux(whether_take_bp, bp_target, pc_next_default)
     
     val can_allocate_all_branches = Wire(Bool())
-    val operation_ready = core_state === running && can_allocate_all_branches
+    val operation_ready = core_state === running
     val downstream_ready = io.id_uop.ready
     val ack = operation_ready && downstream_ready
-    
+     
     // When rob signals flush to all modules, then it will signal not ready to every modules
     // So when shouldFlush is triggered, on the next clock cycle, downstream_ready goes low
+    val branches = io.rob_commitsignal.bits.map(e =>  e.valid && e.mispred)
+    val has_got_branches = VecInit(branches).asUInt =/= 0.U && io.rob_commitsignal.valid
+    val first_branch = PriorityMux(branches, io.rob_commitsignal.bits)
+    
     when(!reset.asBool) {
-        when(io.rob_controlsignal.shouldFlush) {
+        when(io.rob_controlsignal.shouldFlush || has_got_branches) {
             core_state := awaiting_instr
         }.elsewhen(core_state === awaiting_instr && downstream_ready) {
             core_state := running
         }
         
         //TODO
-        when(io.bu_commit.valid) {
-            pc_reg := io.bu_commit.bits.target_PC
-        }.elsewhen(downstream_ready && can_allocate_all_branches){
+
+        when(has_got_branches) {
+            pc_reg := first_branch.target_PC
+        }.elsewhen(downstream_ready){
             pc_reg := pc_next
         }
     }
 
     //TODO: Confirm validity
     io.instr_addr.bits := pc_reg
-    io.instr_addr.valid := downstream_ready && can_allocate_all_branches
+    io.instr_addr.valid := downstream_ready && !should_flush
  
     withReset(reset.asBool || should_flush) {
-        val mem_stage_ack = downstream_ready && can_allocate_all_branches
+        val mem_stage_ack = downstream_ready && !should_flush
         
         //为对齐时序而延迟一周期的内容
         val packet_first_valid_slot = pc_reg(log2Ceil(p.CORE_WIDTH - 1) + 2 , 2)
@@ -117,7 +122,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         val should_branch = RegEnable(io.should_branch, mem_stage_ack)
         val predicted_next_pc = RegEnable(io.predicted_next_pc, mem_stage_ack)
         val pc_aligned_deferred = RegEnable(pc_aligned, mem_stage_ack)
-        val instr_valid = mem_stage_ack 
+        val instr_valid = core_state === running  && !should_flush
 
         // TODO : Needs to be reconsidered
         val is_br = VecInit(io.instr.map{ case instr => {
@@ -155,14 +160,14 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
             uop.bits.ghr := ghr
             uop.bits.branch_taken := should_branch
     
-            val is_valid = valid && !masked && (!is_br || branch_mask_deq.valid) && core_state === running 
+            val is_valid = valid && !masked && core_state === running 
             
             uop.valid := is_valid
             
             branch_mask_deq.ready := valid && !masked && core_state === running && is_br && downstream_ready
-            uop.bits.branch_mask := (io.current_branch_mask_with_freed | temporary_branch_mask)
-            uop.bits.branch_id := branch_mask_deq.bits        
-            uop.bits.branch_freed := io.branch_freed
+            // uop.bits.branch_mask := (io.current_branch_mask_with_freed | temporary_branch_mask)
+            // uop.bits.branch_id := branch_mask_deq.bits        
+            // uop.bits.branch_freed := io.branch_freed
 
             temporary_branch_mask |= Mux(branch_mask_deq.valid, 1.U << branch_mask_deq.bits, 0.U)
             
@@ -173,7 +178,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         }}), ack)
         
         // TODO: Not sure yet
-        io.id_uop.valid := RegEnable(instr_valid, false.B, ack)
+        io.id_uop.valid := RegEnable(instr_valid && !should_flush, false.B, ack)
         // io.id_uop.valid := RegNext(instr_valid && ack)
     }
 }

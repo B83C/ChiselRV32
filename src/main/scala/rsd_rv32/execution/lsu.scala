@@ -183,7 +183,7 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
   io.ldReq.bits.data_Addr := stage2.bits.ldAddr
   io.ldReq.bits.func3 := funct3
   io.ldReq.bits.write_en := false.B
-  io.ldReq.valid := stage2.valid && (!io.rob_controlsignal.shouldBeKilled(stage2.bits.uop.branch_mask)) && (!expected)
+  io.ldReq.valid := stage2.valid && (!io.rob_controlsignal.shouldBeKilled()) && (!expected)
 
 //  printf(p"addr=${Hexadecimal(stage2_ldAddr)} data=${Hexadecimal(stage2_data_out_stq)} bitvalid=${Hexadecimal(stage2_data_bitvalid)}\n")
 //  printf(p"ldReq.valid=${Binary(io.ldReq.valid)} stall=${Binary(stall)}\n")
@@ -401,7 +401,10 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
 
   //更新write_valid指针
   // 由于冲刷时，可能会有SW指令，因此
-  val committed_sts = VecInit(io.rob_commitsignal.bits.map(x => x.valid && x.is_st))
+  val mispreds = VecInit(io.rob_commitsignal.bits.map(x => x.mispred && x.valid)).asUInt
+  val has_mispreds = mispreds =/= 0.U
+  val mmask = ((PriorityEncoderOH(mispreds) << 1.U) - 1.U).asBools
+  val committed_sts = VecInit(io.rob_commitsignal.bits.zip(mmask).map{case (x, y) => x.valid && x.is_st && y})
   val committed_sts_cnt = PopCount(committed_sts)
   val new_write_valid = write_valid + committed_sts_cnt 
   when(io.rob_commitsignal.valid && committed_sts.asUInt =/= 0.U) {
