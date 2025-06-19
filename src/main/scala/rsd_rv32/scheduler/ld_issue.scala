@@ -76,7 +76,7 @@ class ld_issue_queue(fu_num: Int)(implicit p: Parameters) extends CustomModule {
                 payload(uop.bits.iq_index) := uop.bits
                 issue_queue(uop.bits.iq_index).waiting := true.B
                 issue_queue(uop.bits.iq_index).ps := uop.bits.ps1
-                issue_queue(uop.bits.iq_index).st_busy := VecInit((io.st_issue_busy_dispatch.asUInt | io.st_issue_busy_snapshot.asUInt).asBools)
+                issue_queue(uop.bits.iq_index).st_busy := VecInit((uop.bits.stq_mask | io.st_issue_busy_snapshot.asUInt).asBools)
                 issue_queue(uop.bits.iq_index).branch_mask := uop.bits.branch_mask.asUInt
 
                 // 因为ps可能在dispatch的时候就就绪了(信号来自WB)
