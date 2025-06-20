@@ -37,7 +37,7 @@ class EXU(implicit p: Parameters) extends CustomModule {
   
   require(bu.length <= 1, "Currently supports only 1 BU")
   
-  withReset(reset.asBool || io.rob_controlsignal.shouldBeKilled()) {
+  withReset(reset.asBool) {
     fus.zip(io.execute_uop).foreach { case (fu, in_uop) => 
       fu.input.valid := in_uop.valid && !io.rob_controlsignal.shouldBeKilled()
       fu.input.bits := in_uop.bits

@@ -397,7 +397,7 @@ class StoreQueue(implicit p: Parameters) extends CustomModule {
   // TODO: To simplify detection we only accept up to CORE_WIDTH at a time
   val full = whead <= wtail + p.CORE_WIDTH.U && hwrap =/= twrap
 
-  val need_flush = io.rob_controlsignal.restore_amt
+  val need_flush = io.rob_controlsignal.should_flush
 
   //更新write_valid指针
   // 由于冲刷时，可能会有SW指令，因此

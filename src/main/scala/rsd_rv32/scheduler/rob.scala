@@ -106,6 +106,11 @@ class ROBIO(implicit p: Parameters) extends CustomBundle {
     val bu_signals = Flipped(Valid(new BU_signals))
 }
 
+
+object CommitState extends ChiselEnum {
+    val commit, flushing, restore = Value
+}
+
 // ROB采用CORE_WIDTH个BANK的好处如下：
 // - 利于硬件实现
 // - 容易实现
@@ -113,6 +118,9 @@ class ROBIO(implicit p: Parameters) extends CustomBundle {
 // 另外，无需将指令左对齐，这样对硬件设计很不友好 :/
 class ROB(implicit p: Parameters) extends CustomModule {
     val io = IO(new ROBIO())
+
+    import CommitState._
+    val state = RegInit(commit)
 
     val rob = RegInit(VecInit.tabulate(p.ROB_DEPTH)(_ => 0.U.asTypeOf(Vec(p.CORE_WIDTH, new ROBContent())))) //ROB条目
 
@@ -140,11 +148,28 @@ class ROB(implicit p: Parameters) extends CustomModule {
 
     val branches = committing_entry_w.map(e => e.completed && e.valid && e.mispred)
     val has_got_branches = VecInit(branches).asUInt =/= 0.U && !empty
-    val first_branch = PriorityMux(branches, committing_entry_w)
 
     val can_dequeue = !empty && committing_entry_w.map(entry => entry.completed || !entry.valid).reduce(_ && _) 
 
     io.rob_commitsignal := RegEnableValid(committing_entry_w, can_dequeue)
+    // io.rob_controlsignal.should_flush := RegInit(false.B)
+    // io.rob_controlsignal.restore_amt := RegInit(false.B)
+
+    io.rob_controlsignal.should_flush := false.B
+    io.rob_controlsignal.restore_amt := false.B
+    when(state === commit && has_got_branches && can_dequeue) {
+        state := flushing
+        io.rob_controlsignal.should_flush := false.B
+        io.rob_controlsignal.restore_amt := false.B
+    }.elsewhen(state === flushing) {
+        state := restore 
+        io.rob_controlsignal.should_flush := true.B
+        io.rob_controlsignal.restore_amt := false.B
+    }.elsewhen(state === restore) {
+        state := commit
+        io.rob_controlsignal.should_flush := false.B
+        io.rob_controlsignal.restore_amt := true.B
+    }
 
     io.rob_uop.ready := can_enqueue && !has_got_branches
 
@@ -153,11 +178,11 @@ class ROB(implicit p: Parameters) extends CustomModule {
         head := head + 1.U
     }
 
-    io.rob_controlsignal.should_flush := has_got_branches
+    // io.rob_controlsignal.should_flush := RegNext(has_got_branches && can_dequeue)
 
-    val c_branches = io.rob_commitsignal.bits.map(e => e.valid && e.mispred)
-    val c_has_got_branches = VecInit(branches).asUInt =/= 0.U && io.rob_commitsignal.valid
-    io.rob_controlsignal.restore_amt := c_has_got_branches
+    // val c_branches = io.rob_commitsignal.bits.map(e => e.valid && e.mispred)
+    // val c_has_got_branches = VecInit(branches).asUInt =/= 0.U && io.rob_commitsignal.valid
+    // io.rob_controlsignal.restore_amt := RegNext(RegNext(has_got_branches && can_dequeue))
 
     when(has_got_branches) {
         tail := head + 1.U
@@ -174,6 +199,15 @@ class ROB(implicit p: Parameters) extends CustomModule {
         val rob_index = io.bu_signals.bits.rob_index
         val rob_inner_index = io.bu_signals.bits.rob_inner_index
         val rob_entry = rob(rob_index)
+
+        when(io.bu_signals.bits.mispred) {
+            rob_entry.zipWithIndex.foreach{case (x, ind) => {
+                when(ind.asUInt > rob_inner_index ) {
+                    x.valid := false.B
+                }
+            }}
+        }
+        
         (rob_entry(rob_inner_index): Data).waiveAll :<>= (io.bu_signals.bits: Data).waiveAll
     }
 

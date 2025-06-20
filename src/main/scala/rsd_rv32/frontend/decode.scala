@@ -162,6 +162,6 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
 
       to_rename
     }}), ack)
-    io.rename_uop.valid := RegEnable(io.id_uop.valid && has_valid_instruction, false.B, ack)
+    io.rename_uop.valid := RegEnable(io.id_uop.valid && has_valid_instruction && !should_flush, false.B, ack || should_flush)
   }
 }

@@ -53,7 +53,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
   // TODO
   prf_freelist.io.squeeze := false.B
   // TODO: since the commitsignal has output reg, it should be delayed 
-  prf_freelist.io.restore.get := RegNext(io.rob_controlsignal.restore_amt)
+  prf_freelist.io.restore.get := io.rob_controlsignal.restore_amt
   prf_freelist.io.restore_mapping.get := amt_freelist_mapping
 
   // For debugging 
@@ -66,7 +66,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
   val rmt_valid = RegInit(VecInit.tabulate(32)(_ => false.B)) // 重命名表，存储逻辑寄存器到物理寄存器的映射关系
 
   // Not the best way to write it but yeah
-  when(RegNext(io.rob_controlsignal.restore_amt)) {
+  when(io.rob_controlsignal.restore_amt) {
     rmt_valid.foreach(x => x := false.B)
   }
 
@@ -139,14 +139,14 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
     }}), ack) 
 
     // io.dis_uop.valid := RegNext(io.rename_uop.valid && ack)
-    io.dis_uop.valid := RegEnable(io.rename_uop.valid, false.B, ack)
+    io.dis_uop.valid := RegEnable(io.rename_uop.valid && !should_flush, false.B, ack || should_flush)
   
     // 当ROB有指令退休时，更新amt以及释放rmt中多余的映射关系
     // 值得注意，由于rmt是一对多的关系，因此释放的时候要检查是否存在其它的映射关系。若无，则不释放。
     // amt则需保持单一的映射关系，不能同时有多个映射关系
     // 倘若滚回方式更换成步进式恢复rmt，则不需要amt
     var commit_rd_mask = 0.U(32.W)
-    val mispreds = VecInit(io.rob_commitsignal.bits.map(x => x.mispred && x.valid)).asUInt
+    val mispreds = VecInit(io.rob_commitsignal.bits.map(x => x.mispred && x.valid && x.completed)).asUInt
     val has_mispreds = mispreds =/= 0.U
     val mmask = (PriorityEncoderOH(mispreds) << 1.U) - 1.U
     io.rob_commitsignal.bits.zip(prf_freelist.io.enq_request).zip(mmask.asBools).zipWithIndex.reverse.foreach{ case (((commit, prf_enq), mask), idx) => {

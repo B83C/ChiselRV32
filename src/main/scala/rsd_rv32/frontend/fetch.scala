@@ -178,7 +178,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         }}), ack)
         
         // TODO: Not sure yet
-        io.id_uop.valid := RegEnable(instr_valid && !should_flush, false.B, ack)
+        io.id_uop.valid := RegEnable(instr_valid && !should_flush, false.B, ack || should_flush)
         // io.id_uop.valid := RegNext(instr_valid && ack)
     }
 }

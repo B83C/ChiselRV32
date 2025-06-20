@@ -26,7 +26,7 @@ noinline fn writeCSR(addr: u12, val: u32) void {
 }
 
 noinline fn readCSR(addr: u12) u32 {
-    return asm volatile ("csrrsi %[out], %[addr], 0"
+    return asm volatile ("csrrsi %[out], 0xc01, 0"
         : [out] "=r" (-> u32),
         : [addr] "r" (addr),
     );
@@ -126,8 +126,9 @@ pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     // modifyGlobal(&t);
     // test_sl();
+    // const val = readCSR(0xC01);
     var buf: [50:0]u8 = undefined;
-    _ = std.fmt.bufPrintZ(&buf, "hell {x} {d} {s} {d} test \n", .{ t, t, str_test, t }) catch |err| {
+    _ = std.fmt.bufPrintZ(&buf, "hell {x} {d} test \n", .{ t, t }) catch |err| {
         if (err == error.NoSpaceLeft) {
             print("No space left\n");
         } else {
@@ -135,32 +136,6 @@ pub fn main() !void {
         }
     };
     print(&buf);
-    // for (global_string) |c| {
-    //     var tt: [2:0]u8 = .{0} ** 2;
-    //     tt[0] = c;
-    //     print(&tt);
-    // }
-    // load_store_tests();
-    // branch_test();
-    // print("hello there\n");
-    // inline for (0..5) |_| {
-    //     t += 1234;
-    //     y += 4321;
-    //     writeCSR(t);
-    //     writeCSR(y);
-    // }
-    // rv32im_alu_tests();
-    // rv32im_alu_tests_with_verification();
-    // print("Now performing branch tests \n");
-    // branch_test();
-    // print("A value of 63 should be expected\n");
-    // alu_test();
-    // alu_test();
-    // testAlu();
-    // inline for (0..10) |_| {
-    //     asm volatile ("nop");
-    // }
-    // print("aoeuanteohu\n");
     print("\nterminating");
 }
 

@@ -39,8 +39,8 @@ class McycleDevice(addrBase: UInt) extends MmapDevice(addrBase, 2.U) {
   io.ready := hit 
   io.rdata := Mux(hit && io.ren,
     MuxLookup(offset, 0.U)(Seq(
-      0.U -> cycle(31, 0),
-      4.U -> cycle(63, 32)
+      1.U -> cycle(31, 0),
+      0.U -> cycle(63, 32)
     ))
     , 0.U)
 
@@ -49,11 +49,11 @@ class McycleDevice(addrBase: UInt) extends MmapDevice(addrBase, 2.U) {
 
   when(hit && io.wdata.valid) {
     switch (offset) {
-      is (0.U) {
+      is (1.U) {
         dbg(cf"Writing ${io.wdata.bits}%b & ${wmask}%b to lower bits of clock\n")
         cycle := Cat(cycle(63, 32), (io.wdata.bits & wmask) | (cycle(31, 0) & wmask_n))
       }
-      is (4.U) {
+      is (0.U) {
         dbg(cf"Writing ${io.wdata.bits}%b & ${wmask}%b to higher bits of clock\n")
         cycle := Cat((io.wdata.bits & wmask) | (cycle(63, 32) & wmask_n), cycle(31,0))
       }
@@ -91,8 +91,8 @@ class MemoryPrintDevice(addrBase: UInt) extends MmapDevice(addrBase, 2.U) {
   io.ready := hit 
   io.rdata := Mux(hit && io.ren,
     MuxLookup(offset, 0.U)(Seq(
-      0.U -> cycle(31, 0),
-      4.U -> cycle(63, 32)
+      1.U -> cycle(31, 0),
+      0.U -> cycle(63, 32)
     ))
     , 0.U)
 
