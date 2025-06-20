@@ -73,7 +73,7 @@ class BranchPredictor(implicit p: Parameters) extends CustomModule {
 
   // TODO
   val btb_entries = pc.map{case pc => btb(get_btbIndex(pc))}
-  val btb_hits = btb_entries.zip(pc).zip(offset_mask).map{case ((be, pc), valid) => valid && be.valid && be.tag === get_btbTag(pc)}
+  val btb_hits = btb_entries.zip(pc).map{case (be, pc) => valid && be.valid && be.tag === get_btbTag(pc)}
 
   // TODO 
   val btb_hit = VecInit(btb_hits).asUInt =/= 0.U
@@ -88,7 +88,7 @@ class BranchPredictor(implicit p: Parameters) extends CustomModule {
     val taken = Mux(first_hit.isConditional,
       Mux(choice, T_table(get_histIndex(first_hit_pc, ghr))(1), NT_table(get_histIndex(first_hit_pc, ghr))(1)), true.B)
     io.should_branch := taken 
-    io.predicted_next_pc := Mux(taken, first_hit.target, 0.U)
+    io.predicted_next_pc := Mux(taken, first_hit.target, PriorityMux(btb_hits, pc) + 4.U)
   }
 
   //bht and btb update logic
