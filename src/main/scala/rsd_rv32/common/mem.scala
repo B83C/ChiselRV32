@@ -104,7 +104,7 @@ class mem(mem_path: String, memDepth: Int, instWidth: Int) extends CustomModule 
   for (i <- 0 until instWidth) {
 
     //val valid = RegNext(io.if_mem.instAddr.valid)
-    val read_mem = memInside.read(io.if_mem.instAddr.bits + i.U).reduce((acc, elem) => Cat(elem, acc))
+    val read_mem = memInside.read(io.if_mem.instAddr + i.U).reduce((acc, elem) => Cat(elem, acc))
     io.mem_id.inst(i) := read_mem
     
   }

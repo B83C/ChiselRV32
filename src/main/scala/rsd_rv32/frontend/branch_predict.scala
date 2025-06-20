@@ -15,8 +15,8 @@ class BP_IO (implicit p: Parameters) extends CustomBundle {
   //val ghr_update = Flipped(Valid(Bool())) //作出预测时的全局历史寄存器快照
 
   // from BranchMask Unit
-  val bu_update = Flipped(Valid(new BU_signals))
-  val bu_commit = Flipped(Valid(new BU_signals))
+  // val bu_update = Flipped(Valid(new BU_signals))
+  // val bu_commit = Flipped(Valid(new BU_signals))
 
   // to IF
   val predicted_next_pc = (UInt(p.XLEN.W))  // 预测的下个cycle取指的目标地址
@@ -73,7 +73,7 @@ class BranchPredictor(implicit p: Parameters) extends CustomModule {
 
   // TODO
   val btb_entries = pc.map{case pc => btb(get_btbIndex(pc))}
-  val btb_hits = btb_entries.zip(pc).map{case (be, pc) => valid && be.valid && be.tag === get_btbTag(pc)}
+  val btb_hits = btb_entries.zip(pc).map{case (be, pc) => be.valid && be.tag === get_btbTag(pc)}
 
   // TODO 
   val btb_hit = VecInit(btb_hits).asUInt =/= 0.U

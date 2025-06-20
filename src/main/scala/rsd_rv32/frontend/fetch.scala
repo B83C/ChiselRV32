@@ -95,8 +95,8 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     }
 
     //uop的传递
-    val id_uop = WireDefault(0.U.asTypeOf(Valid(VecInit(Seq.fill(p.CORE_WIDTH)(Valid(new IF_ID_uop()))))))
-    val reg_id_uop = RegEnable(id_uop, 0.U.asTypeOf(Valid(VecInit(Seq.fill(p.CORE_WIDTH)(Valid(new IF_ID_uop()))))), io.id_uop.ready)
+    val id_uop = Wire(Valid(Vec(p.CORE_WIDTH, Valid(new IF_ID_uop()))))
+    val reg_id_uop = RegEnable(id_uop, 0.U.asTypeOf(Valid(Vec(p.CORE_WIDTH, Valid(new IF_ID_uop())))), io.id_uop.ready)
     io.id_uop.bits := reg_id_uop.bits
     io.id_uop.valid := reg_id_uop.valid
 
@@ -112,6 +112,9 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         id_uop.bits(i).bits.predicted_next_pc := predicted_next_pc_delay
         id_uop.bits(i).bits.ghr := ghr_delay
         id_uop.bits(i).bits.branch_taken := should_branch_delay
+        
+        id_uop.bits(i).bits.debug.instr := io.instr(i)
+        id_uop.bits(i).bits.debug.pc := pc_delay + (i << 2).U
     }
 
     val btb_hits_oh = VecInit(PriorityEncoderOH(btb_hits_delay)).asUInt
@@ -120,6 +123,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         id_uop.bits(i).valid := instr_mask(i)
     }
 
+    id_uop.valid := false.B
     switch(core_state){
         is(awaiting_instr){
             id_uop.valid := false.B
