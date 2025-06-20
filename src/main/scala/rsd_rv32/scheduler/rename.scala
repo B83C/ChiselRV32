@@ -125,8 +125,8 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
       val last_mapping_idx2 = OHToUInt(Reverse(PriorityEncoderOH(Reverse(truncated_mapping_2))))
       // TODO: There is a better way to do this
       // 127.U 是为了方便debug
-      out_uop_w.bits.ps1 := Mux(input.opr1_sel === OprSel.REG, Mux(truncated_mapping_1 =/= 0.U, mapping(last_mapping_idx1), Mux(rm_valid1, rm1, am1)), 127.U)
-      out_uop_w.bits.ps2 := Mux(input.opr2_sel === OprSel.REG, Mux(truncated_mapping_2 =/= 0.U, mapping(last_mapping_idx2), Mux(rm_valid2, rm2, am2)), 127.U)
+      out_uop_w.bits.ps1 := Mux(input.opr1_sel === OprSel.REG, Mux(truncated_mapping_1 =/= 0.U, mapping(last_mapping_idx1), Mux(rm_valid1, rm1, am1)), 0.U)
+      out_uop_w.bits.ps2 := Mux(input.opr2_sel === OprSel.REG, Mux(truncated_mapping_2 =/= 0.U, mapping(last_mapping_idx2), Mux(rm_valid2, rm2, am2)), 0.U)
 
       // 冲突mask
       current_mapping := 0.U

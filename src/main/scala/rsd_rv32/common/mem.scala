@@ -51,6 +51,17 @@ class mem(mem_path: String, memDepth: Int, instWidth: Int) extends CustomModule 
   //    }
   //  }
 
+  val mem_access_addr = io.ex_mem.data_addr.suggestName("mem_access_addr")
+  val data_into_mem = io.ex_mem.data_into_mem.suggestName("data_into_mem")
+  val mem_access_f3  = io.ex_mem.func3.suggestName("mem_access_f3")
+  val is_write_mem  = io.ex_mem.write_en.suggestName("is_write_mem")
+  
+  dontTouch(mem_access_addr)
+  dontTouch(data_into_mem)
+  dontTouch(mem_access_f3) 
+  dontTouch(is_write_mem) 
+  
+  
   val memWriteVec  = Wire(Vec(4, UInt(8.W)))
   val memWriteVec1 = Wire(Vec(4, UInt(8.W)))
   for (i <- 0 to 3) {

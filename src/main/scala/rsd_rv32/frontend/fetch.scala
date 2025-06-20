@@ -69,7 +69,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     //决定下个pc(ROB>BP>default)
     pc_next := Mux(whether_take_bp, bp_target, pc_next_default)
     
-    val can_allocate_all_branches = Wire(Bool())
+    // val can_allocate_all_branches = Wire(Bool())
     val operation_ready = core_state === running
     val downstream_ready = io.id_uop.ready
     val ack = operation_ready && downstream_ready
@@ -143,9 +143,9 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         
         // can_allocate_all_branches := !io.bu_mask_freelist_full
         // val has_br = is_br.orR;
-        can_allocate_all_branches := is_br.asBools.zip(io.bu_mask_freelist_deq).map{ case (valid, deq) =>
-          !valid || !deq.ready || deq.valid
-        }.reduce(_ && _)
+        // can_allocate_all_branches := is_br.asBools.zip(io.bu_mask_freelist_deq).map{ case (valid, deq) =>
+        //   !valid || !deq.ready || deq.valid
+        // }.reduce(_ && _)
 
         var temporary_branch_mask = 0.U(p.BRANCH_MASK_WIDTH.W)
         
@@ -178,7 +178,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         }}), ack)
         
         // TODO: Not sure yet
-        io.id_uop.valid := RegEnable(instr_valid && !should_flush, false.B, ack || should_flush)
+        io.id_uop.valid := RegEnable(instr_valid, false.B, downstream_ready)
         // io.id_uop.valid := RegNext(instr_valid && ack)
     }
 }
