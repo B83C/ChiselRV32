@@ -100,7 +100,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     io.id_uop.bits := reg_id_uop.bits
     io.id_uop.valid := reg_id_uop.valid
 
-    val pc_delay := RegNext(pc_reg)
+    val pc_delay = RegNext(pc_reg)
     val predicted_next_pc_delay = RegNext(io.predicted_next_pc)
     val ghr_delay = RegNext(io.ghr)
     val should_branch_delay = RegNext(io.should_branch)
