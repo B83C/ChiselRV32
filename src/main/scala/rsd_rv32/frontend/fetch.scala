@@ -61,7 +61,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
 
     val pc_next = Wire(UInt(p.XLEN.W))            //下一个PC
     //val pc_aligned = pc_reg & ~((p.CORE_WIDTH << 2).U(p.XLEN.W) - 1.U)         //对齐后的当前PC
-
+    pc_reg := pc_next
     val pc_next_default = pc_reg + (p.CORE_WIDTH.U << 2)
 
     //需不需要flush
