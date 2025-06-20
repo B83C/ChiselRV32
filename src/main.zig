@@ -40,6 +40,25 @@ noinline fn print(str: [*:0]const u8) void {
 
 const string_test = "Hello world!";
 
+pub fn bubbleSort(comptime T: type, arr: []T, comparer: fn (a: T, b: T) bool) void {
+    const n = arr.len;
+    if (n < 2) return;
+
+    var swapped: bool = true;
+    while (swapped) {
+        swapped = false;
+        for (arr, 0..) |_, i| {
+            if (comparer(arr[i + 1], arr[i])) {
+                // swap adjacent out-of-order elements
+                const tmp = arr[i];
+                arr[i] = arr[i + 1];
+                arr[i + 1] = tmp;
+                swapped = true;
+            }
+        }
+    }
+}
+
 fn test_sl() void {
     var mem: [16]u8 = undefined;
     @memset(mem[0..], 0);
@@ -121,22 +140,29 @@ fn test_sl() void {
 const t: u32 = 0xdead;
 const str_test = "hy there";
 
+pub fn less(a: i32, b: i32) bool {
+    return a < b;
+}
+
 var global_string = "hi there ";
 pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
+    var arr = [_]i32{ 5, 3, 8, 1, 9, 2 };
+    bubbleSort(i32, arr[0..], less);
+    // var arr: [100]u8 = .{0};
     // modifyGlobal(&t);
     // test_sl();
     // const val = readCSR(0xC01);
-    var buf: [50:0]u8 = undefined;
-    _ = std.fmt.bufPrintZ(&buf, "hell {x} {d} test \n", .{ t, t }) catch |err| {
-        if (err == error.NoSpaceLeft) {
-            print("No space left\n");
-        } else {
-            print("Other error\n");
-        }
-    };
-    print(&buf);
-    print("\nterminating");
+    // var buf: [50:0]u8 = undefined;
+    // _ = std.fmt.bufPrintZ(&buf, "hell {x} {d} test \n", .{ t, t }) catch |err| {
+    //     if (err == error.NoSpaceLeft) {
+    //         print("No space left\n");
+    //     } else {
+    //         print("Other error\n");
+    //     }
+    // };
+    // print(&buf);
+    // print("\nterminating");
 }
 
 // pub fn multiplicaton_test() !void {
