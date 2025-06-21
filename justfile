@@ -12,9 +12,10 @@ test unittest="_.test": fetchMill
 
 scala:
 	@{{MILL}} rsd_rv32.run
+	sed -i -E 's/(_dontOptimise[^\r\n\t\f\v \\]*)/\1\/* verilator public_flat_rd *\//' Machine.sv
 
 verilator:
-	verilator --cc Machine.sv --exe bench.cpp --build -j 0 -CFLAGS -O0 -CFLAGS -fuse-ld=mold -CFLAGS -march=native --trace-fst --trace-threads 8 --hierarchical
+	verilator --cc Machine.sv --exe bench.cpp --build -j 0 -CFLAGS -O0 -CFLAGS -fuse-ld=mold --verilate-jobs 8 --trace-fst --trace-threads 8 --hierarchical
 
 execute: 
 	cd obj_dir && ./VMachine

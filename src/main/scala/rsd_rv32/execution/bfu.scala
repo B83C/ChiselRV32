@@ -97,7 +97,7 @@ class BranchFU(implicit p: Parameters) extends FunctionalUnit() with BRConsts {
   (bu_out_w: Data).waiveAll :<= (input.bits: Data).waiveAll
   bu_out_w.is_conditional := input.bits.instr_type === InstrType.Branch
   bu_out_w.mispred := mispred // 来自之前计算的预测错误信号
-  bu_out_w.target_PC := Mux(actual_taken, actual_target, return_addr) // 计算出的实际目标地址
+  bu_out_w.target_PC := actual_target // 计算出的实际目标地址
   bu_out_w.branch_taken := actual_taken// 实际分支方向
 
   // PRF写回信息（JAL/JALR需要）

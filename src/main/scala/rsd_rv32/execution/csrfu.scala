@@ -6,9 +6,10 @@ import chisel3.util._
 import rsd_rv32.common._
 
 import chisel3.experimental.hierarchy.{Definition, Instance, instantiable, public}
+import rsd_rv32.scheduler.ROBControlSignal
 
 @instantiable 
-class MmapDevice(addrBase: UInt, length_in_word: UInt) extends Module {
+class MmapDevice(addrBase: UInt, length_in_word: UInt)(implicit p: Parameters) extends Module {
   @public val io = IO(new Bundle {
     val reset = Flipped(Bool())
     val addr  = Flipped(UInt(12.W))    // 12‑bit address as defined in RISCV manual
@@ -17,17 +18,19 @@ class MmapDevice(addrBase: UInt, length_in_word: UInt) extends Module {
     val ren   = Flipped(Bool())        // read enable
     val rdata = (UInt(32.W))   // read data
     val ready = (Bool())       // ready/valid response
+
+    val rob_controlsignal = Flipped(new ROBControlSignal())
   })
 
   // def read(offset: UInt): UInt
   // def write(offset: UInt, data: UInt): Unit
 
   val offset = io.addr - addrBase
-  val hit = io.addr >= addrBase && offset < (length_in_word << 2) //hardcoded
+  val hit = io.addr >= addrBase && offset < length_in_word
 }
 
 @instantiable 
-class McycleDevice(addrBase: UInt) extends MmapDevice(addrBase, 2.U) {
+class McycleDevice(addrBase: UInt)(implicit p: Parameters) extends MmapDevice(addrBase, 2.U) {
   val cycle = RegInit(0.U(64.W))
 
   when(!io.reset) {
@@ -39,8 +42,8 @@ class McycleDevice(addrBase: UInt) extends MmapDevice(addrBase, 2.U) {
   io.ready := hit 
   io.rdata := Mux(hit && io.ren,
     MuxLookup(offset, 0.U)(Seq(
-      1.U -> cycle(31, 0),
-      0.U -> cycle(63, 32)
+      0.U -> cycle(31, 0),
+      1.U -> cycle(63, 32)
     ))
     , 0.U)
 
@@ -59,95 +62,59 @@ class McycleDevice(addrBase: UInt) extends MmapDevice(addrBase, 2.U) {
       }
     }
   }
-
-  when(hit) {
-    dbg(cf"Reading clock ${cycle}%b\n")
-  }
-
-  // override def read(offset: UInt): UInt = {
-  //   MuxLookup(offset, 0.U)(Seq(
-  //     0.U -> cycle(31, 0),
-  //     4.U -> cycle(63, 32)
-  //   ))
-  // }
-
-  // override def write(offset: UInt, wdata: UInt): Unit = {
-  // }
 }
 
-@instantiable 
-class MtimeDevice(addrBase: UInt) extends McycleDevice(addrBase) 
+// @instantiable 
+// class MtimeDevice(addrBase: UInt) extends McycleDevice(addrBase) 
 
 @instantiable 
-class MemoryPrintDevice(addrBase: UInt) extends MmapDevice(addrBase, 2.U) {
-  val cycle = RegInit(0.U(64.W))
-
-  when(!io.reset) {
-    cycle := cycle + 1.U
-  }.otherwise {
-    cycle := 0.U
-  }
-
+class MinstretDevice(addrBase: UInt)(implicit p: Parameters) extends MmapDevice(addrBase, 1.U) {
   io.ready := hit 
   io.rdata := Mux(hit && io.ren,
     MuxLookup(offset, 0.U)(Seq(
-      1.U -> cycle(31, 0),
-      0.U -> cycle(63, 32)
+      0.U -> io.rob_controlsignal.instr_cnt(31, 0),
     ))
     , 0.U)
 
   val wmask = io.wmask
   val wmask_n = ~wmask
 
-  when(hit && io.wdata.valid) {
-    switch (offset) {
-      is (0.U) {
-        dbg(cf"Writing ${io.wdata.bits}%b & ${wmask}%b to lower bits of clock\n")
-        cycle := Cat(cycle(63, 32), (io.wdata.bits & wmask) | (cycle(31, 0) & wmask_n))
-      }
-      is (4.U) {
-        dbg(cf"Writing ${io.wdata.bits}%b & ${wmask}%b to higher bits of clock\n")
-        cycle := Cat((io.wdata.bits & wmask) | (cycle(63, 32) & wmask_n), cycle(31,0))
-      }
-    }
-  }
-
-  when(hit) {
-    dbg(cf"Reading clock ${cycle}%b\n")
-  }
-
-  // override def read(offset: UInt): UInt = {
-  //   MuxLookup(offset, 0.U)(Seq(
-  //     0.U -> cycle(31, 0),
-  //     4.U -> cycle(63, 32)
-  //   ))
-  // }
-
-  // override def write(offset: UInt, wdata: UInt): Unit = {
+  // when(hit && io.wdata.valid) {
+  //   switch (offset) {
+  //     is (1.U) {
+  //       dbg(cf"Writing ${io.wdata.bits}%b & ${wmask}%b to lower bits of clock\n")
+  //       cycle := Cat(cycle(63, 32), (io.wdata.bits & wmask) | (cycle(31, 0) & wmask_n))
+  //     }
+  //     is (0.U) {
+  //       dbg(cf"Writing ${io.wdata.bits}%b & ${wmask}%b to higher bits of clock\n")
+  //       cycle := Cat((io.wdata.bits & wmask) | (cycle(63, 32) & wmask_n), cycle(31,0))
+  //     }
+  //   }
   // }
 }
 
 class CSRFU_Default(implicit p: Parameters) extends CSRFU(Seq(
-  Definition(new McycleDevice(p.CSR_MCYCLE_ADDR.U)),
-  Definition(new MtimeDevice(p.CSR_MTIME_ADDR.U))
+  // Definition(new McycleDevice(p.CSR_MCYCLE_ADDR.U)),
+  // Definition(new MtimeDevice(p.CSR_MTIME_ADDR.U))
 ))
 
-class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extends FunctionalUnit with CSRConsts {
-  override val properties = FUProps(
-    Set(InstrType.CSR),
-    bufferedInput = false,
-    bufferedOutput = true
-  )
+class CSRFU(
+  devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extends CustomModule with CSRConsts {
+  val rob_controlsignal = IO(Flipped(new ROBControlSignal()))
+  val serialised_input = IO(Flipped(Decoupled(new SERIALISED_uop)))
+  val serialised_output = IO(Valid(new SERIALISED_wb_uop))
   //TODO
-  input.ready := true.B
+  serialised_input.ready := true.B
 
-  val uop = input.bits
+  val uop = serialised_input.bits
   // (output.bits: Data).waiveAll :<>= (uop: Data).waiveAll
 
-  // val mcycle = Module(new McycleDevice(p.CSR_MCYCLE_ADDR.U))
+  val mcycle = Module(new McycleDevice(p.CSR_MCYCLE_ADDR.U))
+  val minstret = Module(new MinstretDevice(p.CSR_INSTRET_ADDR.U))
   // val mtime  = Module(new MtimeDevice(p.CSR_MTIME_ADDR.U))
 
-  val all_devices = devices.map(m => Instance(m))
+  val all_devices = Seq(mcycle, minstret)
+  // val all_devices = devices.map(m => Instance(m))
 
   val addr  = WireInit(0.U(p.XLEN.W))
   val wdata  = Wire(Valid(UInt(p.XLEN.W)))
@@ -160,6 +127,8 @@ class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extend
     dev.io.ren   := ren 
     dev.io.wmask   := wmask
     dev.io.reset := reset //TODO should be replaced by mispred
+
+    dev.io.rob_controlsignal := rob_controlsignal
   }
 
   val rdata = VecInit(all_devices.map(_.io.rdata))
@@ -175,18 +144,21 @@ class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extend
 
   wdata.valid := false.B
   wdata.bits := DontCare
-  ren := false.B
 
   val should_input = rs1 =/= 0.U
-  val should_output = uop.pdst.valid
+  // TODO
+  val should_output = uop.rd.bits =/= 0.U
 
-  val out = Wire(new WB_uop)
+  val out = Wire(new SERIALISED_wb_uop)
   (out: Data).waiveAll :<= (uop: Data).waiveAll
   // TODO: Not sure yet
   out.pdst_value := first_ready_rdata
+  out.rob_index := DontCare
+  out.rob_inner_index := DontCare
 
-  output.bits := out
-  output.valid := should_output
+  // currently it is combinational, but in reality, it should be buffered
+  serialised_output.bits := out
+  serialised_output.valid := should_output
 
   ren := should_output
 
@@ -200,7 +172,7 @@ class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extend
   // val rs1_is_imm = uop.opr1_sel === OprSel.IMM // TODO: This is more appropriate
   val write_value = Mux(rs1_is_imm, rs1, uop.ps1_value)
 
-  when(input.valid) {
+  when(serialised_input.valid) {
     when(opr_is(CSRRW) || opr_is(CSRRWI)) {
       dbg(cf"CSRRW instr detected csr ${csr}%x immediate ${rs1_is_imm} rs1 ${rs1} is_imm ${rs1_is_imm} write_value ${write_value}, first_ready_rdata ${first_ready_rdata}\n")
       //Util function for assembling and disassembling instruction
@@ -222,4 +194,13 @@ class CSRFU(devices: Seq[Definition[MmapDevice]])(implicit p: Parameters) extend
 
   // Debugging
   // out.debug(input.bits, should_output, false)
+  val csr_addr_dontOptimise  = WireInit(addr)
+  val csr_wdata_dontOptimise  = WireInit(wdata)
+  val csr_wmask_dontOptimise  = WireInit(wmask)
+  val csr_ren_dontOptimise  = WireInit(ren)
+
+  dontTouch(csr_addr_dontOptimise)
+  dontTouch(csr_wdata_dontOptimise)
+  dontTouch(csr_wmask_dontOptimise)
+  dontTouch(csr_ren_dontOptimise)
 }

@@ -203,6 +203,22 @@ class WB_uop(implicit p: Parameters) extends uop {
     val rob_inner_index = UInt(bl(p.CORE_WIDTH))
 }
 
+class SERIALISED_uop(implicit p: Parameters) extends uop {
+    override def prf_read_counts: Int = 2
+
+    val instr_ = UInt((p.XLEN-7).W) //func3, func7, rd, rs1 , rs2, imm without opcode
+
+    val ps1 = UInt(bl(p.PRF_DEPTH))
+    val ps1_value = UInt(p.XLEN.W)
+
+    val pdst = Valid(UInt(bl(p.PRF_DEPTH)))
+    val rd = Valid(UInt(bl(p.REG_CNT)))
+}
+
+class SERIALISED_wb_uop(implicit p: Parameters) extends WB_uop {
+    // For updating amt & rmt
+    val rd = Valid(UInt(bl(p.REG_CNT)))
+}
 
 class BU_signals(implicit p: Parameters) extends Bundle {
     // TODO: Temporary
@@ -230,6 +246,12 @@ class BU_signals(implicit p: Parameters) extends Bundle {
 class InstrDebug(implicit p: Parameters) extends Bundle {
     val instr = UInt(p.XLEN.W)
     val pc = UInt(p.XLEN.W)
+    val ps1 = UInt(bl(p.PRF_DEPTH))
+    val ps2 = UInt(bl(p.PRF_DEPTH))
+    val pdst = UInt(bl(p.PRF_DEPTH))
+    val ps1_value = UInt(p.XLEN.W)
+    val ps2_value = UInt(p.XLEN.W)
+    val pdst_value = UInt(p.XLEN.W)
 
     def apply(): Unit = {
         this := DontCare 
@@ -246,6 +268,7 @@ class InstrDebug(implicit p: Parameters) extends Bundle {
     }
     def apply(instr: UInt, pc: UInt, valid: Bool): Unit = {
         val temp = Wire(this.cloneType)
+        temp := DontCare
         temp.instr := instr
         temp.pc := pc
         this := Mux(valid, temp, 0.U.asTypeOf(this.cloneType))

@@ -15,23 +15,25 @@ By default, Mill will be automatically downloaded to local directory on first ru
 
 #### Verilator
 
-The test with `svsim` needs Verilator installed.
-See Verilator installation instructions [here](https://verilator.org/guide/latest/install.html).
-
 #### Justfile
 
 For the convenience of cross-platform, we are using justfile in place of makefile. For installation for various platforms (Linux/MacOS/Windows), see [here](https://github.com/casey/just). It is recommended to use it as as makefile is not readily available on windows.
 
 #### Typst
 
-For compilation of spec file written in typst.
+The spec document is generated using *typst*, and the code is automatically read from the codebase and updated accordingly in the document. Typst is needed for doc compilation.
 
 ### Design Schematics
 ![schem](./doc/diagram.svg)
 
-### Performing tests
+### Performing chisel based tests
 ```sh
 just test
+```
+
+### Execute the cpu
+```sh
+just run
 ```
 
 ### Generating Spec File
@@ -48,6 +50,7 @@ just spec
 | Path | Remark |
 |------|--------|
 | [src/](./src)   |   Chisel source code |
+| [bench.cpp](./bench.cpp)   |   Test benchmark program |
 | [doc/spec.typ](./doc/spec.typ)   |    Specifications for the implementation of our RV32   |
 | [doc/spec.pdf](./doc/spec.pdf)   |    Generated specifications for the implementation of our RV32   |
 | [justfile](./justfile) | Similar to that of Makefile, provides ease of access to commonly used commands |
@@ -57,15 +60,14 @@ just spec
 
 ### Work Distribution
 
-| Part | Member |
+| Member | Part |
 |------|--------|
-|组长+toplevel+doc+dispatch+test| 刘恒雨|
-|rename|蔡家麒|
-|dispatch|李可名|
-|branch predictor|杨钧铎|
-|LoadStoreUnit|饶忠禹|
-|Cache|赵力|
-|Fetch&Decode|邢益成|
-|Issue Queue & ROB|胡英瀚|
-|exu|马嘉一|
-|prf & bypass|胡继仁|
+| 刘恒雨(组长) | 顶层模块+测试+文档排布+优化代码(dispatch)+branch_mask+csr |
+| 杨钧铎 | ROB + Rename |
+| 饶忠禹 | LSU |
+| 胡英瀚 | Issue Queue |
+| 李可名/赵力 | BP |
+| 邢益成 | Fetch + Decode |
+| 马嘉一 | FU(ALU BP DIV MUL) |
+| 胡继仁 | prf |
+| 蔡家麒 | RAS |

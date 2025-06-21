@@ -11,7 +11,7 @@ class EXUIO(fu_num: Int)(implicit p: Parameters) extends Bundle{
   //来自exu_issue queue的输入
   val execute_uop = Flipped(Vec(fu_num, Decoupled(new EXUISSUE_EXU_uop)))
   
-  val serialised_uop = Flipped(Valid(new EXUISSUE_EXU_uop))
+  val serialised_uop = Flipped(Valid(new SERIALISED_uop))
 
   val rob_controlsignal = Flipped(new ROBControlSignal) //来自于ROB的控制信号
   
@@ -19,7 +19,7 @@ class EXUIO(fu_num: Int)(implicit p: Parameters) extends Bundle{
   val wb_uop = Vec(fu_num, Valid(new WB_uop()))
   
   val bu_signals = Valid(new BU_signals)
-  val serialised_wb_uop = Valid(new WB_uop())
+  val serialised_wb_uop = Valid(new SERIALISED_wb_uop())
 }
 
 //把exu的各个fu封装起来的顶层模块
@@ -42,21 +42,33 @@ class EXU(implicit p: Parameters) extends CustomModule {
       fu.input.valid := in_uop.valid && !io.rob_controlsignal.shouldBeKilled()
       fu.input.bits := in_uop.bits
       in_uop.ready := fu.input.ready
+      
+      fu.io.rob_controlsignal := io.rob_controlsignal
+      
+      //Debugging
+      fu.input.bits.debug.ps1_value := in_uop.bits.ps1_value
+      fu.input.bits.debug.ps2_value := in_uop.bits.ps2_value
     }
 
     io.bu_signals := RegEnableValid(bu(0).bu_out)
   
 
     // Note that checks if instr_type is as subset of any FUs' supported types
-    io.wb_uop := VecInit(fus.map(fu => RegEnableValid(fu.output)))
+    io.wb_uop := VecInit(fus.map(fu => {
+      val output = Wire(Valid(new WB_uop))
+      (output: Data).waiveAll :<>= (fu.output: Data).waiveAll
+      output.bits.debug.pdst_value := fu.output.bits.pdst_value
+      RegEnableValid(output)
+    }))
 
     // In-order FUs should deserve better attention
     val csru = Module(new CSRFU_Default)
     //Serialised uop
-    csru.input.bits := io.serialised_uop.bits
-    csru.input.valid := io.serialised_uop.valid && !io.rob_controlsignal.shouldBeKilled()
+    csru.serialised_input.bits := io.serialised_uop.bits
+    csru.serialised_input.valid := io.serialised_uop.valid && !io.rob_controlsignal.shouldBeKilled()
+    csru.rob_controlsignal := io.rob_controlsignal
     // CSRU should always be ready? 
-    io.serialised_wb_uop := csru.output
+    io.serialised_wb_uop := RegNext(csru.serialised_output)
   } 
 }
 

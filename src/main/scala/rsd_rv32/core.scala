@@ -51,6 +51,8 @@ class Core(implicit p: Parameters) extends CustomModule {
   val dispatch = Module(new DispatchUnit(exu.fus.length))
   val rob = Module(new ROB)
 
+  val serialised_uop = WireInit(dispatch.io.serialised_uop)
+
   val ld_issue = Module(new ld_issue_queue(p.FU_NUM))
   val st_issue = Module(new st_issue_queue(p.FU_NUM))
   val exu_issue = Module(new exu_issue_queue(p.FU_NUM, exu.fus_properties))
@@ -59,18 +61,25 @@ class Core(implicit p: Parameters) extends CustomModule {
 
   val prf_busys = RegInit(VecInit(Seq.fill(p.PRF_DEPTH)(false.B)))
 
-  val wb_uops = VecInit(exu.io.wb_uop ++ Seq(lsu.io.ldu_wb_uop, lsu.io.stu_wb_uop, exu.io.serialised_wb_uop))
+  val ooo_wb_uops = VecInit(exu.io.wb_uop ++ Seq(lsu.io.ldu_wb_uop, lsu.io.stu_wb_uop ))
+
+  val ino_wb_uop = exu.io.serialised_wb_uop
 
   rename.io.prf_busys_write.foreach{ prf_busy => {
     when(prf_busy.valid) {
       prf_busys(prf_busy.bits) := true.B
     }
   }}
-  wb_uops.foreach{wb_uop => {
+  ooo_wb_uops.foreach{wb_uop => {
     when(wb_uop.valid && wb_uop.bits.pdst.valid) {
       prf_busys(wb_uop.bits.pdst.bits) := false.B
     }
+    wb_uop.bits.debug.pdst_value := wb_uop.bits.pdst_value
   }}
+
+  when(ino_wb_uop.valid) {
+    prf_busys(ino_wb_uop.bits.pdst.bits) := false.B
+  } 
 
   when(rob.io.rob_controlsignal.shouldFlush) {
     prf_busys.foreach(x => x := false.B)
@@ -114,6 +123,7 @@ class Core(implicit p: Parameters) extends CustomModule {
   rename.io.rename_uop :<>= decode.io.rename_uop
   rename.io.rob_controlsignal := rob.io.rob_controlsignal
   rename.io.rob_commitsignal := rob.io.rob_commitsignal
+  rename.io.serialised_wb_uop := exu.io.serialised_wb_uop
 
   dispatch.io.dis_uop :<>= rename.io.dis_uop
   dispatch.io.rob_controlsignal := rob.io.rob_controlsignal
@@ -125,11 +135,11 @@ class Core(implicit p: Parameters) extends CustomModule {
   dispatch.io.rob_empty := rob.io.rob_empty
 
   rob.io.rob_uop :<>= dispatch.io.rob_uop
-  rob.io.wb_uop := wb_uops
+  rob.io.wb_uop := ooo_wb_uops
   rob.io.bu_signals := exu.io.bu_signals
 
   ld_issue.io.prf_busys := prf_busys
-  ld_issue.io.wb_uop := wb_uops
+  ld_issue.io.wb_uop := ooo_wb_uops
   ld_issue.io.st_issue_busy_snapshot := st_issue.io.st_issue_busy_snapshot
   branch_predictor.io.bu_update := branch_mask.io.bu_update
   branch_predictor.io.bu_commit := branch_mask.io.bu_commit
@@ -139,11 +149,11 @@ class Core(implicit p: Parameters) extends CustomModule {
   ld_issue.io.st_issued_index := st_issue.io.st_issued_index
 
   st_issue.io.prf_busys := prf_busys
-  st_issue.io.wb_uop := wb_uops
+  st_issue.io.wb_uop := ooo_wb_uops
   st_issue.io.rob_controlsignal := rob.io.rob_controlsignal
 
   exu_issue.io.prf_busys := prf_busys
-  exu_issue.io.wb_uop := wb_uops
+  exu_issue.io.wb_uop := ooo_wb_uops
   exu_issue.io.rob_controlsignal := rob.io.rob_controlsignal
 
   ld_issue.io.ld_issue_uop :<>= dispatch.io.ld_issue_uop
@@ -161,17 +171,16 @@ class Core(implicit p: Parameters) extends CustomModule {
   load_uop :<>= ld_issue.io.load_uop
   val store_uop = WireInit(st_issue.io.store_uop)
   store_uop :<>= st_issue.io.store_uop
-  val serialised_uop = WireInit(dispatch.io.serialised_uop)
-  val serialised_uop_exu = Wire(Valid(new EXUISSUE_EXU_uop))
-  (serialised_uop_exu: Data).waiveAll :<>= (serialised_uop: Data).waiveAll
 
-  val serialised_uop_prfs = Wire(Valid(Vec(2, UInt(log2Ceil(p.PRF_DEPTH).W))))
-  serialised_uop_prfs.bits(0) := serialised_uop.bits.ps1
-  serialised_uop_prfs.bits(1) := serialised_uop.bits.ps2
-  serialised_uop_prfs.valid := serialised_uop.valid
+  // val serialised_uop_exu = Wire(Valid(new SERIALISED_uop))
+  // (serialised_uop_exu: Data).waiveAll :<>= (serialised_uop: Data).waiveAll
+
+  // val serialised_uop_prfs = Wire(Valid(UInt(log2Ceil(p.PRF_DEPTH).W)))
+  // serialised_uop_prfs.bits(0) := serialised_uop.bits.ps1
+  // serialised_uop_prfs.valid := serialised_uop.valid
 
   exu.io.execute_uop :<>= execute_uop
-  exu.io.serialised_uop := serialised_uop_exu
+  exu.io.serialised_uop := serialised_uop
   exu.io.rob_controlsignal := rob.io.rob_controlsignal
 
   lsu.io.load_uop :<>= load_uop
@@ -181,7 +190,7 @@ class Core(implicit p: Parameters) extends CustomModule {
   lsu.io.rob_commitsignal := rob.io.rob_commitsignal
   lsu.io.rob_controlsignal := rob.io.rob_controlsignal
 
-  val execute_prf_reads = (execute_uop.map(_.bits) :+ serialised_uop_exu.bits).zip(exu_issue.io.prf_raddr :+ serialised_uop_prfs).map{case (uop, prf_raddr) => {
+  val execute_prf_reads = (execute_uop.map(_.bits)).zip(exu_issue.io.prf_raddr).map{case (uop, prf_raddr) => {
     Seq(ReadValueRequest(uop.ps1_value, prf_raddr.bits(0), uop.opr1_sel === OprSel.REG && prf_raddr.valid)) ++  Seq(ReadValueRequest( uop.ps2_value, prf_raddr.bits(1), uop.opr2_sel === OprSel.REG && prf_raddr.valid))
   }}.reduce(_ ++ _)
   val load_prf_reads = Seq(load_uop.bits).zip(Seq(ld_issue.io.prf_raddr)).map{case (uop, prf_raddr) => {
@@ -192,10 +201,12 @@ class Core(implicit p: Parameters) extends CustomModule {
   }}.reduce(_ ++ _)
 
   val read_requests =
-    (execute_prf_reads ++ load_prf_reads ++ store_prf_reads)
+    (execute_prf_reads ++ load_prf_reads ++ store_prf_reads) ++ Seq(ReadValueRequest(serialised_uop.bits.ps1_value, serialised_uop.bits.ps1, serialised_uop.valid))
+
   val prf = Module(new PRF(read_requests.length))
   prf.io.read_requests :<>= VecInit(read_requests)
-  prf.io.wb_uop := wb_uops
+  prf.io.wb_uop := ooo_wb_uops
+  prf.io.serialised_wb_uop := exu.io.serialised_wb_uop
   prf.io.rob_controlsignal := rob.io.rob_controlsignal
   prf.io.rob_commitsignal := rob.io.rob_commitsignal
 

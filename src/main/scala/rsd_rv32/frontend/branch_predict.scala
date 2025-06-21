@@ -39,8 +39,6 @@ class BTBEntry(implicit val p: Parameters) extends Bundle {
 class BranchPredictor(implicit p: Parameters) extends CustomModule {
   val io = IO(new BP_IO())
 
-  val bimodeTableSize = 1024         // T/NT 表大小
-  val choiceTableSize = 1024         // 选择器表大小
   val counterBits = 2                // 饱和计数器位宽
   val btbSize = 512                  // BTB 表大小
   val instBytes = 4                  // 指令字节宽度
@@ -48,9 +46,9 @@ class BranchPredictor(implicit p: Parameters) extends CustomModule {
   val should_flush = io.rob_controlsignal.shouldFlush
 
   //BHT
-  val T_table = RegInit(VecInit(Seq.fill(bimodeTableSize)(2.U(counterBits.W))))
-  val NT_table = RegInit(VecInit(Seq.fill(bimodeTableSize)(1.U(counterBits.W))))
-  val choice_table = RegInit(VecInit(Seq.fill(choiceTableSize)(2.U(counterBits.W))))
+  val T_table = RegInit(VecInit(Seq.fill(p.BIMODE_TABLE_SIZE)(2.U(counterBits.W))))
+  val NT_table = RegInit(VecInit(Seq.fill(p.BIMODE_TABLE_SIZE)(1.U(counterBits.W))))
+  val choice_table = RegInit(VecInit(Seq.fill(p.CHOICE_TABLE_SIZE)(2.U(counterBits.W))))
   //BTB
   val btb = RegInit(VecInit(Seq.fill(btbSize)(0.U.asTypeOf(new BTBEntry))))
   //GHR
@@ -60,8 +58,8 @@ class BranchPredictor(implicit p: Parameters) extends CustomModule {
   //common methods
   def get_btbIndex(pc: UInt): UInt = pc(log2Ceil(btbSize) + log2Ceil(instBytes) - 1, log2Ceil(instBytes))
   def get_btbTag(pc: UInt): UInt = pc(p.XLEN-1, log2Ceil(instBytes) + log2Ceil(btbSize))
-  def get_histIndex(pc: UInt, ghr: UInt): UInt = (pc(p.XLEN-1, log2Ceil(instBytes)) ^ ghr.pad(p.XLEN - log2Ceil(instBytes)))(log2Ceil(bimodeTableSize)-1, 0)
-  def get_choiceIndex(pc: UInt): UInt = pc(log2Ceil(choiceTableSize) - 1 + log2Ceil(instBytes), log2Ceil(instBytes))
+  def get_histIndex(pc: UInt, ghr: UInt): UInt = (pc(p.XLEN-1, log2Ceil(instBytes)) ^ ghr.pad(p.XLEN - log2Ceil(instBytes)))(log2Ceil(p.BIMODE_TABLE_SIZE)-1, 0)
+  def get_choiceIndex(pc: UInt): UInt = pc(log2Ceil(p.CHOICE_TABLE_SIZE) - 1 + log2Ceil(instBytes), log2Ceil(instBytes))
 
   val pc_ready = io.instr_addr.valid
   // TODO
@@ -129,7 +127,7 @@ class BranchPredictor(implicit p: Parameters) extends CustomModule {
     }
 
     val btb_entry = btb(get_btbIndex(first_branch.instr_addr))
-    btb_entry.target := first_branch.target_PC
+    btb_entry.target := Mux(direction, first_branch.target_PC, first_branch.instr_addr + 4.U)
     // TODO
     btb_entry.isConditional := first_branch.is_conditional // If it writes back then it definitely is jump
     btb_entry.valid := true.B

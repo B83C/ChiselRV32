@@ -19,6 +19,7 @@ class FreeListCam[T <: Data](
   directFree: Boolean = false,
 )(implicit p: Parameters) extends CustomModule {
   val io = IO(new Bundle {
+    val full = Bool()
     val deq_request = Vec(multiShotRead, Decoupled(UInt(log2Ceil(depth).W)))
     val enq_request  = Flipped(Vec(multiShotWrite, Valid(UInt(log2Ceil(depth).W))))
     val enq_request_direct  = if(directFree) Some(Flipped(Valid(UInt(depth.W)))) else None
@@ -37,30 +38,29 @@ class FreeListCam[T <: Data](
 
   val should_halt_requests = if(needCheckpoint) io.restore.get else false.B
 
+  val is_full = buffer.asUInt === ~0.U(buffer.length.W) 
+
+  io.full := is_full
+
   var tempMask = buffer.asUInt | masked
   io.deq_request.map{case deq_request => {
       val enc = Mux(deq_request.ready, PriorityEncoderOH(~tempMask(depth - 1, 0)), 0.U)
-      val valid = tempMask =/= ~0.U(depth.W) && deq_request.ready
+      val valid = tempMask =/= ~0.U(depth.W)
       deq_request.valid := valid
       deq_request.bits := WireInit(0.U(log2Ceil(depth).W)) 
       // deq_request.bits := DontCare
       val idx = OHToUInt(enc)
       when(deq_request.fire) {
-        dbg(cf"fired enc; ${enc} idx ${idx} \n")
+        // dbg(cf"fired enc; ${enc} idx ${idx} \n")
         deq_request.bits := idx
         when(!should_halt_requests) {
           buffer(idx) := true.B
         }
       }.otherwise {
         deq_request.bits := DontCare
-      
       }
       tempMask = tempMask | enc
   }}
-
-  // deq_request := multiAlloc(buffer, multiShotRead)
-
-  // buffer := (buffer & ~io.enq_request.map(b => b.valid << b.bits).reduce(_ | _)) | masks.reduce(_ | _)
 
   if(directFree) {
     val direct_free_request = io.enq_request_direct.get 

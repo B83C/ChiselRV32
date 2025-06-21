@@ -34,6 +34,9 @@ class ROBControlSignal(implicit p: Parameters) extends CustomBundle {
 
     val should_flush = Bool()
 
+    // For CSR temporarily
+    val instr_cnt = UInt(64.W)
+
     // Used to inform other modules to stop receiving new instructions and clear instructions if needed
     def shouldFlush: Bool = should_flush
     def shouldBeKilled() : Bool = shouldFlush
@@ -72,13 +75,6 @@ class ROBContent(implicit p: Parameters) extends CustomBundle {
 
     // Debugging 
     val debug = new InstrDebug
-    // val pdst_value = UInt(p.XLEN.W)
-
-    
-    // val ps1 = UInt(bl(p.PRF_DEPTH))
-    // val ps2 = UInt(bl(p.PRF_DEPTH))
-    // val ps1_value = UInt(p.XLEN.W)
-    // val ps2_value = UInt(p.XLEN.W)
 }
 
 class ROBIO(implicit p: Parameters) extends CustomBundle {
@@ -104,6 +100,8 @@ class ROBIO(implicit p: Parameters) extends CustomBundle {
     val rob_controlsignal = new ROBControlSignal
 
     val bu_signals = Flipped(Valid(new BU_signals))
+
+    val commited_instr_count = UInt(64.W)
 }
 
 
@@ -142,12 +140,12 @@ class ROB(implicit p: Parameters) extends CustomModule {
     io.rob_index := tail
     io.rob_empty := empty
 
-    val can_enqueue = !full
+    val can_enqueue = !full && state === commit
 
     val committing_entry_w = rob(whead)
 
     val branches = committing_entry_w.map(e => e.completed && e.valid && e.mispred)
-    val has_got_branches = VecInit(branches).asUInt =/= 0.U && !empty
+    val has_mispredicted = VecInit(branches).asUInt =/= 0.U && !empty
 
     val can_dequeue = !empty && committing_entry_w.map(entry => entry.completed || !entry.valid).reduce(_ && _) 
 
@@ -155,28 +153,25 @@ class ROB(implicit p: Parameters) extends CustomModule {
     // io.rob_controlsignal.should_flush := RegInit(false.B)
     // io.rob_controlsignal.restore_amt := RegInit(false.B)
 
-    io.rob_controlsignal.should_flush := false.B
-    io.rob_controlsignal.restore_amt := false.B
-    when(state === commit && has_got_branches && can_dequeue) {
+    io.rob_controlsignal.should_flush := state === flushing
+    io.rob_controlsignal.restore_amt := state === restore
+    when(state === commit && has_mispredicted && can_dequeue) {
         state := flushing
-        io.rob_controlsignal.should_flush := false.B
-        io.rob_controlsignal.restore_amt := false.B
     }.elsewhen(state === flushing) {
         state := restore 
-        io.rob_controlsignal.should_flush := true.B
-        io.rob_controlsignal.restore_amt := false.B
     }.elsewhen(state === restore) {
         state := commit
-        io.rob_controlsignal.should_flush := false.B
-        io.rob_controlsignal.restore_amt := true.B
     }
 
-    io.rob_uop.ready := can_enqueue && !has_got_branches
+    io.rob_uop.ready := can_enqueue && !has_mispredicted
 
+    val commited_instr_count = RegInit(0.U(64.W))
+    io.commited_instr_count := commited_instr_count
     when(can_dequeue) {
-        dbg(cf"ROB dequeuing ${io.rob_uop.bits}")
         head := head + 1.U
+        commited_instr_count := commited_instr_count + PopCount(committing_entry_w.map(x => x.valid))
     }
+    io.rob_controlsignal.instr_cnt := commited_instr_count
 
     // io.rob_controlsignal.should_flush := RegNext(has_got_branches && can_dequeue)
 
@@ -184,10 +179,10 @@ class ROB(implicit p: Parameters) extends CustomModule {
     // val c_has_got_branches = VecInit(branches).asUInt =/= 0.U && io.rob_commitsignal.valid
     // io.rob_controlsignal.restore_amt := RegNext(RegNext(has_got_branches && can_dequeue))
 
-    when(has_got_branches) {
+    when(has_mispredicted) {
         tail := head + 1.U
     }
-    .elsewhen(io.rob_uop.fire && !RegNext(has_got_branches && !empty)) {
+    .elsewhen(io.rob_uop.fire) {
         dbg(cf"Enqueuing ${io.rob_uop.bits}")
         rob(wtail) := io.rob_uop.bits.map(uop =>
             convert_to_content(uop)
@@ -239,7 +234,9 @@ class ROB(implicit p: Parameters) extends CustomModule {
             rob(index)(inner_offset).completed := true.B
 
             //DEbugging
-            // rob(index)(inner_offset).pdst_value := wb_uop.bits.pdst_value
+            rob(index)(inner_offset).debug.pdst_value := wb_uop.bits.pdst_value
+            rob(index)(inner_offset).debug.ps1_value := wb_uop.bits.debug.ps1_value
+            rob(index)(inner_offset).debug.ps2_value := wb_uop.bits.debug.ps2_value
             // rob(index)(inner_offset).ps1_value := wb_uop.bits.ps1_value
             // rob(index)(inner_offset).ps2_value := wb_uop.bits.ps2_value
         }

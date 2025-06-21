@@ -15,8 +15,8 @@ case class Parameters(
   GHR_WIDTH: Int = 8,
   BRANCH_MASK_WIDTH: Int = 16, // Can handle up to 8 in-flight branches 
 
-  BIMODE_TABLE_SIZE: Int =  1024,          // T/NT 表大小
-  CHOICE_TABLE_SIZE: Int =  1024,          // 选择器表大小
+  BIMODE_TABLE_SIZE: Int = 512,          // T/NT 表大小
+  CHOICE_TABLE_SIZE: Int = 512,          // 选择器表大小
   COUNTER_BITS: Int =  2,                 // 饱和计数器位宽
   BTB_SIZE: Int =  512,                   // BTB 表大小
   INST_BYTES: Int =  4,                   // 指令字节宽度
@@ -27,12 +27,13 @@ case class Parameters(
   DIV_NUM: Int = 1,
   STU_NUM: Int = 1,
   LDU_NUM: Int = 1,
+  FU_NUM: Int = 7,
+
   CSRU_NUM: Int = 1,
-  FU_NUM: Int = 8,
 
   PRF_DEPTH: Int = 128,
 
-  ROB_DEPTH: Int = 256,
+  ROB_DEPTH: Int = 128,
 
   STQ_DEPTH: Int = 32,
 
@@ -45,7 +46,8 @@ case class Parameters(
   EXU_Fj_CNT_MAX: Int = 10, //一个执行单元所包含的FU最多的数量
 
   CSR_MTIME_ADDR: Int = 0xC01,
-  CSR_MCYCLE_ADDR: Int = 0xC00,
+  CSR_MCYCLE_ADDR: Int = 0xC01,
+  CSR_INSTRET_ADDR: Int = 0xC00,
 )
 
 object IType extends ChiselEnum {

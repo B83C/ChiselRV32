@@ -50,7 +50,7 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
     
       to_rename.bits.instr_type := instr_type
       to_rename.bits.opr1_sel := opr1_sel
-      to_rename.bits.opr2_sel := opr2_sel
+      to_rename.bits.opr2_sel := opr2_sel 
       to_rename.bits.rs1 := dis.rs1
       to_rename.bits.rs2 := dis.rs2
    
@@ -162,6 +162,6 @@ class DecodeUnit(implicit p: Parameters) extends CustomModule {
 
       to_rename
     }}), ack)
-    io.rename_uop.valid := RegEnable(io.id_uop.valid && has_valid_instruction, false.B, ack)
+    io.rename_uop.valid := RegEnable(io.id_uop.valid && has_valid_instruction, false.B, downstream_ready)
   }
 }

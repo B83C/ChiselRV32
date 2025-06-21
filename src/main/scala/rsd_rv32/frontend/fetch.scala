@@ -90,7 +90,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         //TODO
 
         when(has_got_branches) {
-            pc_reg := first_branch.target_PC
+            pc_reg := Mux(first_branch.branch_taken, first_branch.target_PC, first_branch.instr_addr + 4.U)
         }.elsewhen(downstream_ready){
             pc_reg := pc_next
         }

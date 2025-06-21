@@ -51,15 +51,15 @@ class mem(mem_path: String, memDepth: Int, instWidth: Int) extends CustomModule 
   //    }
   //  }
 
-  val mem_access_addr = io.ex_mem.data_addr.suggestName("mem_access_addr")
-  val data_into_mem = io.ex_mem.data_into_mem.suggestName("data_into_mem")
-  val mem_access_f3  = io.ex_mem.func3.suggestName("mem_access_f3")
-  val is_write_mem  = io.ex_mem.write_en.suggestName("is_write_mem")
+  val mem_access_addr_dontOptimise = WireInit(io.ex_mem.data_addr)
+  val data_into_mem_dontOptimise = WireInit(io.ex_mem.data_into_mem)
+  val mem_access_f3_dontOptimise  = WireInit(io.ex_mem.func3)
+  val is_write_mem_dontOptimise  = WireInit(io.ex_mem.write_en)
   
-  dontTouch(mem_access_addr)
-  dontTouch(data_into_mem)
-  dontTouch(mem_access_f3) 
-  dontTouch(is_write_mem) 
+  dontTouch(mem_access_addr_dontOptimise)
+  dontTouch(data_into_mem_dontOptimise)
+  dontTouch(mem_access_f3_dontOptimise) 
+  dontTouch(is_write_mem_dontOptimise) 
   
   
   val memWriteVec  = Wire(Vec(4, UInt(8.W)))
@@ -169,7 +169,8 @@ class mem(mem_path: String, memDepth: Int, instWidth: Int) extends CustomModule 
     }
   }
 
-  when(io.ex_mem.write_en) {
+  // For filtering out invalid writes into mmio space
+  when(io.ex_mem.write_en && !(io.ex_mem.data_addr >= 0x10000000.U)) {
     when(io.ex_mem.func3 === 3.U) {
       memInside.write(data_addr, memWriteVec, memChoose0)
       memInside.write(dataAddrP1, memWriteVec, memChoose1)

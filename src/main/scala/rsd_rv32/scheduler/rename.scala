@@ -18,6 +18,8 @@ class RenameUnit_IO(implicit p: Parameters) extends Bundle {
   val rob_controlsignal = Flipped(new ROBControlSignal) //来自于ROB的控制信号
 
   val prf_busys_write = Vec(p.CORE_WIDTH, Valid(UInt(log2Ceil(p.PRF_DEPTH).W)))
+
+  val serialised_wb_uop = Flipped(Valid(new SERIALISED_wb_uop))
 }
 
 //   重命名单元采用显示重命名方式消除WAW、WAR，并保留着真实数据依赖RAW。主要维护preg_freelist，RenameMapTable(RMT)和ArchitecturMapTable。其中preg_freelist为FIFO，具有（PRF_DEPTH - 32）个表项。
@@ -40,7 +42,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
   val prf_freelist = Module(new FreeListCam(
       p.PRF_DEPTH,
       p.CORE_WIDTH,
-      p.CORE_WIDTH,
+      p.CORE_WIDTH + 1,
       maskedRegions = Seq(0 to 0),
       preOccupiedRegion = Seq(),
       needCheckpoint = true,
@@ -125,8 +127,15 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
       val last_mapping_idx2 = OHToUInt(Reverse(PriorityEncoderOH(Reverse(truncated_mapping_2))))
       // TODO: There is a better way to do this
       // 127.U 是为了方便debug
-      out_uop_w.bits.ps1 := Mux(input.opr1_sel === OprSel.REG, Mux(truncated_mapping_1 =/= 0.U, mapping(last_mapping_idx1), Mux(rm_valid1, rm1, am1)), 0.U)
-      out_uop_w.bits.ps2 := Mux(input.opr2_sel === OprSel.REG, Mux(truncated_mapping_2 =/= 0.U, mapping(last_mapping_idx2), Mux(rm_valid2, rm2, am2)), 0.U)
+      val ps1 = Mux(input.opr1_sel === OprSel.REG, Mux(truncated_mapping_1 =/= 0.U, mapping(last_mapping_idx1), Mux(rm_valid1, rm1, am1)), 0.U)
+      val ps2 = Mux(input.opr2_sel === OprSel.REG, Mux(truncated_mapping_2 =/= 0.U, mapping(last_mapping_idx2), Mux(rm_valid2, rm2, am2)), 0.U)
+
+      out_uop_w.bits.debug.ps1 := ps1
+      out_uop_w.bits.debug.ps2 := ps2
+      out_uop_w.bits.debug.pdst := prf_deq.bits
+
+      out_uop_w.bits.ps1 := ps1
+      out_uop_w.bits.ps2 := ps2
 
       // 冲突mask
       current_mapping := 0.U
@@ -139,7 +148,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
     }}), ack) 
 
     // io.dis_uop.valid := RegNext(io.rename_uop.valid && ack)
-    io.dis_uop.valid := RegEnable(io.rename_uop.valid && !should_flush, false.B, ack || should_flush)
+    io.dis_uop.valid := RegEnable(io.rename_uop.valid, false.B, downstream_ready)
   
     // 当ROB有指令退休时，更新amt以及释放rmt中多余的映射关系
     // 值得注意，由于rmt是一对多的关系，因此释放的时候要检查是否存在其它的映射关系。若无，则不释放。
@@ -149,29 +158,47 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
     val mispreds = VecInit(io.rob_commitsignal.bits.map(x => x.mispred && x.valid && x.completed)).asUInt
     val has_mispreds = mispreds =/= 0.U
     val mmask = (PriorityEncoderOH(mispreds) << 1.U) - 1.U
+
+    // Assuming that serialised output can write back within 1-2 clocks
     io.rob_commitsignal.bits.zip(prf_freelist.io.enq_request).zip(mmask.asBools).zipWithIndex.reverse.foreach{ case (((commit, prf_enq), mask), idx) => {
-      val rd = commit.rd.bits
-      val pdst = commit.pdst.bits
-      val wb_valid =  commit.valid && io.rob_commitsignal.valid && commit.pdst.valid && mask
-      prf_enq.bits := DontCare
-      prf_enq.valid := false.B
-      when(wb_valid) {
-        // AMT - Replaces old mappings, in amt, there could only be 32 pdst valid at a time
-        prf_enq.valid := true.B
-        val commit_rd_mask_vec = VecInit(commit_rd_mask.asBools)
-        when(commit_rd_mask_vec(rd) === false.B) {
-          val amt_mapping = amt(commit.rd.bits)
-          when(amt_mapping =/= 0.U) {
-            amt_freelist_mapping(amt_mapping) := false.B
-            prf_enq.bits := amt_mapping
+        val rd = commit.rd.bits
+        val pdst = commit.pdst.bits
+        val wb_valid =  commit.valid && io.rob_commitsignal.valid && commit.pdst.valid && mask
+        prf_enq.bits := DontCare
+        prf_enq.valid := false.B
+        when(wb_valid) {
+          // AMT - Replaces old mappings, in amt, there could only be 32 pdst valid at a time
+          prf_enq.valid := true.B
+          val commit_rd_mask_vec = VecInit(commit_rd_mask.asBools)
+          when(commit_rd_mask_vec(rd) === false.B) {
+            val amt_mapping = amt(commit.rd.bits)
+            when(amt_mapping =/= 0.U) {
+              amt_freelist_mapping(amt_mapping) := false.B
+              prf_enq.bits := amt_mapping
+            }
+            amt_freelist_mapping(pdst) := true.B
+            amt_mapping := pdst
+          }.otherwise {
+            prf_enq.bits := pdst
           }
-          amt_freelist_mapping(pdst) := true.B
-          amt_mapping := pdst
-        }.otherwise {
-          prf_enq.bits := pdst
         }
-      }
-      commit_rd_mask = commit_rd_mask | (wb_valid.asUInt << rd)
-    }}
+        commit_rd_mask = commit_rd_mask | (wb_valid.asUInt << rd)
+      }}
+
+    prf_freelist.io.enq_request(p.CORE_WIDTH).bits := DontCare
+    prf_freelist.io.enq_request(p.CORE_WIDTH).valid:= false.B
+    when(io.serialised_wb_uop.valid) {
+        val rd = io.serialised_wb_uop.bits.rd.bits
+        val pdst = io.serialised_wb_uop.bits.pdst.bits
+        val amt_mapping = amt(rd)
+        when(amt_mapping =/= 0.U) {
+          amt_freelist_mapping(amt_mapping) := false.B
+          // TODO: Clarify this
+          prf_freelist.io.enq_request(p.CORE_WIDTH).bits := amt_mapping
+          prf_freelist.io.enq_request(p.CORE_WIDTH).valid:= true.B
+        }
+        amt_freelist_mapping(pdst) := true.B
+        amt_mapping := pdst
+    }
   }
 }

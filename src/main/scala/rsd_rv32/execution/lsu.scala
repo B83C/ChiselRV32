@@ -250,11 +250,12 @@ class LoadPipeline(implicit p: Parameters) extends CustomModule {
 
 //stage4进行wb操作
   io.ldu_wb_uop.valid := stage4.valid 
-  // io.ldu_wb_uop.bits.ps1_value := DontCare
-  // io.ldu_wb_uop.bits.ps2_value := DontCare
   //仅当ld_issue_uop传入有效且不需要flush时wb rob的uop才有效
   (io.ldu_wb_uop.bits: Data).waiveAll :<= (stage4.bits.uop: Data).waiveAll
   io.ldu_wb_uop.bits.pdst_value := stage4.bits.data
+
+  io.ldu_wb_uop.bits.debug.ps1_value := stage4.bits.ldAddr
+  io.ldu_wb_uop.bits.debug.ps2_value := 0.U
 }
 
 class spipe_uop(implicit p: Parameters) extends CustomBundle {
@@ -314,6 +315,8 @@ class StorePipeline(implicit p: Parameters) extends CustomModule {
   // io.stu_wb_uop.bits.ps2_value := DontCare
   //仅当st_issue_uop传入有效且不需要flush时wb rob的uop才有效
   (io.stu_wb_uop.bits: Data).waiveAll :<= (stage2.bits.uop: Data).waiveAll
+  io.stu_wb_uop.bits.debug.ps1_value := stage2.bits.stAddr
+  io.stu_wb_uop.bits.debug.ps2_value := stage2.bits.data
   io.stu_wb_uop.bits.pdst.valid := false.B
   io.stu_wb_uop.bits.pdst.bits := DontCare
   io.stu_wb_uop.bits.pdst_value := 0.U

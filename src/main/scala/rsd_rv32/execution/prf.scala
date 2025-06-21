@@ -11,6 +11,8 @@ class PRF_IO(read_port_count: Int)(implicit p: Parameters) extends CustomBundle{
   //FU写回的uop TODO
   val wb_uop = Flipped(Vec(p.FU_NUM, Valid(new WB_uop)))
 
+  val serialised_wb_uop = Flipped(Valid(new SERIALISED_wb_uop))
+
   val read_requests = Flipped(Vec(read_port_count, ReadValueRequest(UInt(p.XLEN.W), UInt(log2Ceil(p.PRF_DEPTH).W))))
 
   //接收Rename Unit的AMT用于更新prf_valid
@@ -35,6 +37,10 @@ class PRF(read_port_count: Int)(implicit p: Parameters) extends CustomModule{
       regBank(x.bits.pdst.bits) := x.bits.pdst_value
     }
   })
+
+  when(io.serialised_wb_uop.valid && io.serialised_wb_uop.bits.pdst.valid) {
+    regBank(io.serialised_wb_uop.bits.pdst.bits) := io.serialised_wb_uop.bits.pdst_value
+  }
 
   io.read_requests.foreach(request => {
     request.value := Mux(request.addr =/= 0.U, regBank(request.addr), 0.U)
