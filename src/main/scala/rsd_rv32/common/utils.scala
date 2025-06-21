@@ -86,7 +86,7 @@ object Instr {
     rs2: UInt = 0.U,
     funct3: UInt = 0.U,
     funct7: UInt = 0.U,
-    imm: UInt = 0.U
+    imm: UInt = 0.U(32.W)
   )
 
   def disassemble(instr: UInt, instr_type: IType.Type = IType.I): DisplayInstr = {
@@ -99,14 +99,14 @@ object Instr {
     val funct7 = instr(31, 25)
 
     val imm = instr_type match {
-      case IType.R => 0.U
-      case IType.I => instr(31,20)
-      case IType.S => Cat(instr(31,25),instr(11,7))
-      case IType.B => Cat(instr(31), instr(7), instr(30, 25), instr(11, 8), 0.U(1.W))
-      case IType.U => Cat(instr(31, 12), 0.U(12.W))
-      case IType.J => Cat(instr(31), instr(19,12), instr(20), instr(30,21), 0.U(1.W))
+      case IType.R => 0.S(32.W)
+      case IType.I => instr(31,20).asSInt.pad(32)
+      case IType.S => Cat(instr(31,25),instr(11,7)).asSInt.pad(32)
+      case IType.B => Cat(instr(31), instr(7), instr(30, 25), instr(11, 8), 0.U(1.W)).asSInt.pad(32)
+      case IType.U => Cat(instr(31, 12), 0.U(12.W)).asSInt.pad(32)
+      case IType.J => Cat(instr(31), instr(19,12), instr(20), instr(30,21), 0.U(1.W)).asSInt.pad(32)
     }
-    DisplayInstr(opcode, rd, rs1, rs2, funct3, funct7, imm)
+    DisplayInstr(opcode, rd, rs1, rs2, funct3, funct7, imm.asUInt)
   }
 }
 

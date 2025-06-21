@@ -44,7 +44,7 @@ class Dispatcher_IO(exu_fu_num: Int)(implicit p:Parameters) extends CustomBundle
 // ooo_mode (Out of order) 表示乱序执行状态
 // ino_mode (In order) 表示顺序执行状态
 object DispatchState extends ChiselEnum {
-  val ooo_mode, ino_mode = Value
+  val ooo_mode, ino_mode, post_ino_mode = Value
 }
 
 // 该模块负责将重命名单元发来的指令派遣到ROB，根据指令类型派遣到三个issue queue（分别为exu issue queue，store issue queue和load issue queue），如果是store指令，则还需要派遣到STQ（store queue）中。
@@ -70,11 +70,11 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
   withReset(should_flush || reset.asBool) {
     
     val state = RegInit(ooo_mode)
-    val is_csr = VecInit(io.dis_uop.bits.map(x => x.valid && input_valid && x.bits.instr_type.isOneOf(InstrType.CSR))).asUInt
+    val is_csr = VecInit(io.dis_uop.bits.map(x => x.valid && x.bits.instr_type.isOneOf(InstrType.CSR))).asUInt
   
     // val ooo_mask = 
     val serialise_mask = Reg(UInt(p.CORE_WIDTH.W)) // All 1's by default
-    val still_has_csr = (serialise_mask & is_csr) =/= 0.U
+    val still_has_csr = (serialise_mask & is_csr) =/= 0.U && input_valid
     serialise_mask := ~0.U(p.CORE_WIDTH.W)
 
     def sig_mask(value: UInt) : UInt = {
@@ -89,7 +89,7 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
     val ooo_mask = closest_mask & serialise_mask // Clamped within serialise mask to make sure ooo instructions dispatched before don't appear again
 
     val serialise_mask_mb = PriorityEncoderOH(serialise_mask) 
-    val serialise_fire = serialise_mask_mb & is_csr 
+    val serialise_fire = serialise_mask_mb & is_csr  
     val serialise_fire_next = (serialise_mask_mb << 1) & is_csr 
   
     val selected_serialising_uop = Mux1H(serialise_fire.asBools, io.dis_uop.bits) 
@@ -105,13 +105,13 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
     import InstrType._
     //TODO: Hack
     val is_st = Mux(state === ooo_mode,
-      (VecInit(io.dis_uop.bits.map(x => (x.bits.instr_type.isOneOf(ST)) && x.valid && input_valid)).asUInt & ooo_mask),
+      (VecInit(io.dis_uop.bits.map(x => (x.bits.instr_type.isOneOf(ST)) && x.valid)).asUInt & ooo_mask),
       0.U)
     val is_ld = Mux(state === ooo_mode,
-      (VecInit(io.dis_uop.bits.map(x => (x.bits.instr_type.isOneOf(LD)) && x.valid && input_valid)).asUInt & ooo_mask),
+      (VecInit(io.dis_uop.bits.map(x => (x.bits.instr_type.isOneOf(LD)) && x.valid)).asUInt & ooo_mask),
       0.U)
     val is_ex = Mux(state === ooo_mode,
-      (VecInit(io.dis_uop.bits.map(x => ~(x.bits.instr_type.isOneOf(ST, LD)) && x.valid && input_valid)).asUInt & ooo_mask),
+      (VecInit(io.dis_uop.bits.map(x => ~(x.bits.instr_type.isOneOf(ST, LD)) && x.valid)).asUInt & ooo_mask),
       0.U)
 
     exu_freelist.io.enq_request := io.exu_issued_index
@@ -228,8 +228,11 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
       when(serialise_fire_next =/= 0.U) {
         state := ino_mode
       }.otherwise {
-        state := ooo_mode
+        state := post_ino_mode
       }
+    }.elsewhen(state === post_ino_mode) {
+      state := ooo_mode
+      serialise_mask := serialise_mask
     }.elsewhen(state === ooo_mode || serialise_mask === 0.U) {
       serialise_mask := ~0.U(p.CORE_WIDTH.W) // Reset back to all 1's
     }
