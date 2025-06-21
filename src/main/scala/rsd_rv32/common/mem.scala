@@ -8,7 +8,7 @@ import scala.io.Source
 import java.nio.file.Files
 
 class if_mem extends Bundle {
-  val instAddr = Valid(UInt(64.W))
+  val instAddr =UInt(64.W)
 }
 
 class mem_id(val instWidth: Int) extends Bundle {
@@ -51,17 +51,6 @@ class mem(mem_path: String, memDepth: Int, instWidth: Int) extends CustomModule 
   //    }
   //  }
 
-  val mem_access_addr_dontOptimise = WireInit(io.ex_mem.data_addr)
-  val data_into_mem_dontOptimise = WireInit(io.ex_mem.data_into_mem)
-  val mem_access_f3_dontOptimise  = WireInit(io.ex_mem.func3)
-  val is_write_mem_dontOptimise  = WireInit(io.ex_mem.write_en)
-  
-  dontTouch(mem_access_addr_dontOptimise)
-  dontTouch(data_into_mem_dontOptimise)
-  dontTouch(mem_access_f3_dontOptimise) 
-  dontTouch(is_write_mem_dontOptimise) 
-  
-  
   val memWriteVec  = Wire(Vec(4, UInt(8.W)))
   val memWriteVec1 = Wire(Vec(4, UInt(8.W)))
   for (i <- 0 to 3) {
@@ -113,17 +102,11 @@ class mem(mem_path: String, memDepth: Int, instWidth: Int) extends CustomModule 
   dataAddrP2 := data_addr + 2.U
 
   for (i <- 0 until instWidth) {
-    val last_instr = RegInit(0x13.U(32.W))
-    val valid = RegNext(io.if_mem.instAddr.valid)
-    val read_mem = memInside.read(io.if_mem.instAddr.bits + i.U).reduce((acc, elem) => Cat(elem, acc))
-    io.mem_id.inst(i) := Mux(
-      io.reset || !valid,
-      last_instr,
-      read_mem
-    )
-    when(valid)  {
-      last_instr := read_mem
-    }
+
+    //val valid = RegNext(io.if_mem.instAddr.valid)
+    val read_mem = Mux(io.reset, 0x13.U, memInside.read(io.if_mem.instAddr + i.U).reduce((acc, elem) => Cat(elem, acc)))
+    io.mem_id.inst(i) := read_mem
+    
   }
   io.mem_lsu.data_out_mem := Cat(
     memInside.read(dataAddrP1).reduce((acc, elem) => Cat(elem, acc)),
@@ -169,8 +152,7 @@ class mem(mem_path: String, memDepth: Int, instWidth: Int) extends CustomModule 
     }
   }
 
-  // For filtering out invalid writes into mmio space
-  when(io.ex_mem.write_en && !(io.ex_mem.data_addr >= 0x10000000.U)) {
+  when(io.ex_mem.write_en) {
     when(io.ex_mem.func3 === 3.U) {
       memInside.write(data_addr, memWriteVec, memChoose0)
       memInside.write(dataAddrP1, memWriteVec, memChoose1)

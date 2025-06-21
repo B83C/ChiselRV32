@@ -8,7 +8,7 @@ import rsd_rv32.scheduler._
 // 两个输出: instr_addr, id_uop 
 class Fetch_IO(implicit p: Parameters) extends CustomBundle {
     // from MEM
-    val instr_addr = Valid(UInt(p.XLEN.W)) //当前IFU的PC值
+    val instr_addr = UInt(p.XLEN.W) //当前IFU的PC值
     val instr = Flipped(Vec(p.CORE_WIDTH, UInt(32.W)))
 
     // to ID
@@ -26,16 +26,16 @@ class Fetch_IO(implicit p: Parameters) extends CustomBundle {
 
     // toBranchPredictor
     // val ghr_restore = UInt(p.GHR_WIDTH.W) 
-    val ghr_update = Valid(Bool())
+    //val ghr_update = Valid(Bool())
 
     // from BranchMask Unit
-    val bu_update = Flipped(Valid(new BU_signals))
-    val bu_commit = Flipped(Valid(new BU_signals))
-    val bu_mask_freelist_deq = Flipped(Vec(p.CORE_WIDTH, Decoupled(UInt(bl(p.BRANCH_MASK_WIDTH)))))
-    val bu_mask_freelist_full = Flipped(Bool())
-    val current_branch_mask_with_freed = Flipped(UInt(p.BRANCH_MASK_WIDTH.W))
-    val branch_freed = Flipped(UInt(p.BRANCH_MASK_WIDTH.W)
-)}
+    //val bu_update = Flipped(Valid(new BU_signals))
+    //val bu_commit = Flipped(Valid(new BU_signals))
+    //al bu_mask_freelist_deq = Flipped(Vec(p.CORE_WIDTH, Decoupled(UInt(bl(p.BRANCH_MASK_WIDTH)))))
+    //al bu_mask_freelist_full = Flipped(Bool())
+    //val current_branch_mask_with_freed = Flipped(UInt(p.BRANCH_MASK_WIDTH.W))
+    //val branch_freed = Flipped(UInt(p.BRANCH_MASK_WIDTH.W))
+}
 
 object FetchState extends ChiselEnum {
     val awaiting_instr, running = Value
@@ -53,23 +53,96 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     val core_state = RegInit(awaiting_instr)
   
     val pc_reg = RegInit(p.ENTRY_PC.U(p.XLEN.W))        //存储当前PC
+    io.instr_addr := pc_reg
     
-    val pc_next = Wire(UInt(p.XLEN.W))            //下一个PC
-    val pc_aligned = pc_reg & ~((p.CORE_WIDTH << 2).U(p.XLEN.W) - 1.U)         //对齐后的当前PC
+    val branches = io.rob_commitsignal.bits.map(e =>  e.valid && e.mispred)
+    val has_got_branches = VecInit(branches).asUInt =/= 0.U && io.rob_commitsignal.valid
+    val first_branch = PriorityMux(branches, io.rob_commitsignal.bits)
 
-    val pc_next_default = pc_aligned + (p.CORE_WIDTH.U << 2)
+    val pc_next = Wire(UInt(p.XLEN.W))            //下一个PC
+    //val pc_aligned = pc_reg & ~((p.CORE_WIDTH << 2).U(p.XLEN.W) - 1.U)         //对齐后的当前PC
+    pc_reg := pc_next
+    val pc_next_default = pc_reg + (p.CORE_WIDTH.U << 2)
 
     //需不需要flush
     val should_flush = io.rob_controlsignal.shouldFlush
 
     //分支预测
-    val whether_take_bp = io.should_branch
+    val whether_take_bp = io.btb_hits.reduce(_||_)
     val bp_target = io.predicted_next_pc
+
+    //next pc
+    when(should_flush){
+        pc_next := Mux(first_branch.branch_taken, first_branch.target_PC, first_branch.instr_addr + 4.U)
+    }.otherwise{
+        when(io.id_uop.ready){
+            pc_next := Mux(whether_take_bp, bp_target, pc_next_default)
+        }.otherwise{
+            pc_next := pc_reg
+        }
+    }
+
+    //更新状态机
+    switch(core_state){
+        is(awaiting_instr){
+            core_state := running
+        }
+        is(running){
+            when(should_flush){
+                core_state := awaiting_instr
+            }
+        }
+    }
+
+    //uop的传递
+    val id_uop = Wire(Valid(Vec(p.CORE_WIDTH, Valid(new IF_ID_uop()))))
+    val reg_id_uop = RegEnable(id_uop, 0.U.asTypeOf(Valid(Vec(p.CORE_WIDTH, Valid(new IF_ID_uop())))), io.id_uop.ready)
+    io.id_uop.bits := reg_id_uop.bits
+    io.id_uop.valid := reg_id_uop.valid
+
+    val pc_delay = RegNext(pc_reg)
+    val predicted_next_pc_delay = RegNext(io.predicted_next_pc)
+    val ghr_delay = RegNext(io.ghr)
+    val should_branch_delay = RegNext(io.should_branch)
+    val btb_hits_delay = RegNext(io.btb_hits)
+
+    for(i <- 0 until p.CORE_WIDTH){
+        id_uop.bits(i).bits.instr_addr := pc_delay + (i << 2).U
+        id_uop.bits(i).bits.instr := io.instr(i)
+        id_uop.bits(i).bits.predicted_next_pc := predicted_next_pc_delay
+        id_uop.bits(i).bits.ghr := ghr_delay
+        id_uop.bits(i).bits.branch_taken := should_branch_delay
+        
+        id_uop.bits(i).bits.debug.instr := io.instr(i)
+        id_uop.bits(i).bits.debug.pc := pc_delay + (i << 2).U
+    }
+
+    val btb_hits_oh = VecInit(PriorityEncoderOH(btb_hits_delay)).asUInt
+    val instr_mask = (btb_hits_oh | (btb_hits_oh - 1.U)).asBools //屏蔽位
+    for(i <- 0 until p.CORE_WIDTH){
+        id_uop.bits(i).valid := instr_mask(i)
+    }
+
+    id_uop.valid := false.B
+    switch(core_state){
+        is(awaiting_instr){
+            id_uop.valid := false.B
+        }
+        is(running){
+            id_uop.valid := !should_flush
+        }
+    }
+
     
+
+
+
+
+    /*
     //决定下个pc(ROB>BP>default)
-    pc_next := Mux(whether_take_bp, bp_target, pc_next_default)
+    //pc_next := Mux(whether_take_bp, bp_target, pc_next_default)
     
-    // val can_allocate_all_branches = Wire(Bool())
+    val can_allocate_all_branches = Wire(Bool())
     val operation_ready = core_state === running
     val downstream_ready = io.id_uop.ready
     val ack = operation_ready && downstream_ready
@@ -90,7 +163,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         //TODO
 
         when(has_got_branches) {
-            pc_reg := Mux(first_branch.branch_taken, first_branch.target_PC, first_branch.instr_addr + 4.U)
+            pc_reg := first_branch.target_PC
         }.elsewhen(downstream_ready){
             pc_reg := pc_next
         }
@@ -143,9 +216,9 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         
         // can_allocate_all_branches := !io.bu_mask_freelist_full
         // val has_br = is_br.orR;
-        // can_allocate_all_branches := is_br.asBools.zip(io.bu_mask_freelist_deq).map{ case (valid, deq) =>
-        //   !valid || !deq.ready || deq.valid
-        // }.reduce(_ && _)
+        can_allocate_all_branches := is_br.asBools.zip(io.bu_mask_freelist_deq).map{ case (valid, deq) =>
+          !valid || !deq.ready || deq.valid
+        }.reduce(_ && _)
 
         var temporary_branch_mask = 0.U(p.BRANCH_MASK_WIDTH.W)
         
@@ -178,8 +251,8 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         }}), ack)
         
         // TODO: Not sure yet
-        io.id_uop.valid := RegEnable(instr_valid, false.B, downstream_ready)
+        io.id_uop.valid := RegEnable(instr_valid && !should_flush, false.B, ack)
         // io.id_uop.valid := RegNext(instr_valid && ack)
-    }
+    }*/
 }
 
