@@ -86,7 +86,7 @@ class BranchPredictor(implicit p: Parameters) extends CustomModule {
     val taken = Mux(first_hit.isConditional,
       Mux(choice, T_table(get_histIndex(first_hit_pc, ghr))(1), NT_table(get_histIndex(first_hit_pc, ghr))(1)), true.B)
     io.should_branch := taken 
-    io.predicted_next_pc := Mux(taken, first_hit.target, 0.U)
+    io.predicted_next_pc := Mux(taken, first_hit.target, first_hit_pc + 4.U)
   }
 
   //bht and btb update logic

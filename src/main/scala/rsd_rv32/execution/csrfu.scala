@@ -145,9 +145,9 @@ class CSRFU(
   wdata.valid := false.B
   wdata.bits := DontCare
 
-  val should_input = rs1 =/= 0.U
+  val should_input = serialised_input.valid && rs1 =/= 0.U
   // TODO
-  val should_output = uop.rd.bits =/= 0.U
+  val should_output = serialised_input.valid && uop.rd.bits =/= 0.U
 
   val out = Wire(new SERIALISED_wb_uop)
   (out: Data).waiveAll :<= (uop: Data).waiveAll

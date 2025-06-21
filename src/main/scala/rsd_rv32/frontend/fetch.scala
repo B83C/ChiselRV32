@@ -63,7 +63,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
     val should_flush = io.rob_controlsignal.shouldFlush
 
     //分支预测
-    val whether_take_bp = io.should_branch
+    val whether_take_bp = io.btb_hits.asUInt =/= 0.U
     val bp_target = io.predicted_next_pc
     
     //决定下个pc(ROB>BP>default)
