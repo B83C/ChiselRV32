@@ -72,11 +72,13 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
     rmt_valid.foreach(x => x := false.B)
   }
 
-  val can_rename_all = io.rename_uop.bits.zip(prf_freelist.io.deq_request).map{ case (rename_uop, prf_deq) =>
-    // 包含三种情况：
-    // 指令无效、无写入地址、以及有写入地址并且可获得新的地址
-    !rename_uop.valid || !prf_deq.ready || prf_deq.valid
-  }.reduce(_ && _)
+  // val can_rename_all = io.rename_uop.bits.zip(prf_freelist.io.deq_request).map{ case (rename_uop, prf_deq) =>
+  //   // 包含三种情况：
+  //   // 指令无效、无写入地址、以及有写入地址并且可获得新的地址
+  //   !rename_uop.valid || !prf_deq.ready || prf_deq.valid
+  // }.reduce(_ && _)
+
+  val can_rename_all = prf_freelist.io.deq_request.map(_.valid).reduce(_ && _)
 
   val input_valid = io.rename_uop.valid
   val operation_ready = can_rename_all
@@ -99,7 +101,7 @@ class RenameUnit(implicit p: Parameters) extends CustomModule {
 
       val out_uop_w = Wire(Valid(new RENAME_DISPATCH_uop))
 
-      prf_deq.ready := writes_to_reg
+      prf_deq.ready := writes_to_reg && can_rename_all
 
       prf_busy.valid := writes_to_reg
       prf_busy.bits := prf_deq.bits
