@@ -111,7 +111,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         id_uop.bits(i).bits.instr := io.instr(i)
         id_uop.bits(i).bits.predicted_next_pc := predicted_next_pc_delay
         id_uop.bits(i).bits.ghr := ghr_delay
-        id_uop.bits(i).bits.branch_taken := should_branch_delay
+        id_uop.bits(i).bits.branch_taken := Mux(btb_hits_delay(i), should_branch_delay, false.B)
         
         id_uop.bits(i).bits.debug.instr := io.instr(i)
         id_uop.bits(i).bits.debug.pc := pc_delay + (i << 2).U
