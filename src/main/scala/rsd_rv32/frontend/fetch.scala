@@ -104,7 +104,7 @@ class FetchUnit(implicit p: Parameters) extends CustomModule {
         val mem_stage_ack = downstream_ready && !should_flush
         
         //为对齐时序而延迟一周期的内容
-        val packet_first_valid_slot = pc_reg(log2Ceil(p.CORE_WIDTH - 1) + 2 , 2)
+        val packet_first_valid_slot = pc_reg(log2Ceil(p.CORE_WIDTH) + 1, 2)
         val instr_valid_mask = Reg(UInt(p.CORE_WIDTH.W))
     
         val offset_mask =  (~0.U(p.CORE_WIDTH.W) << packet_first_valid_slot)(p.CORE_WIDTH - 1, 0)

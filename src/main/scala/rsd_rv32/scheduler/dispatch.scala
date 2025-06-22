@@ -14,15 +14,15 @@ class Dispatcher_IO(exu_fu_num: Int)(implicit p:Parameters) extends CustomBundle
   val rob_uop = Decoupled(Vec(p.CORE_WIDTH, Valid(new DISPATCH_ROB_uop()))) //发往ROB的uop
   
   // from ROB
-  val rob_index = Flipped(UInt(bl(p.ROB_DEPTH) + 1.W)) //ROB尾指针
-  val rob_empty = Flipped(Bool()) //ROB尾指针
+  val rob_index = Flipped(UInt(bl(p.ROB_DEPTH) + 1.W)) // 来自ROB的指针信号，用于填入UOP
+  val rob_empty = Flipped(Bool()) // 来自表示ROB的空载状态
   val rob_controlsignal = Flipped(new ROBControlSignal) //来自于ROB的控制信号
   
   // to EXU
-  val serialised_uop = Valid(new SERIALISED_uop()) // 只有在顺序执行模式下才有效
+  val serialised_uop = Valid(new SERIALISED_uop()) // 顺序执行模式下的输出
   
   // to exu_issue
-  val exu_issue_uop = Valid(Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop()))) //发往EXU的uop
+  val exu_issue_uop = Valid(Vec(p.CORE_WIDTH, Valid(new DISPATCH_EXUISSUE_uop()))) // 发往EXU发射队列的UOP
   val exu_issued_index = Flipped(Vec(exu_fu_num, Valid(UInt(log2Ceil(p.EXUISSUE_DEPTH).W)))) //本周期EXU ISSUE queue发出指令对应的issue queue ID，用于更新iq freelist
   
   // to st_issue
@@ -34,11 +34,11 @@ class Dispatcher_IO(exu_fu_num: Int)(implicit p:Parameters) extends CustomBundle
   val ld_issued_index = Flipped(Valid(UInt(log2Ceil(p.LDISSUE_DEPTH).W)))//本周期Load Issue queue发出指令对应的issue queue ID，用于更新issue queue freelist
   
   // from stq
-  val stq_full = Flipped(Bool()) // Store Queue空标志(0表示非满，1表示满)
-  val stq_tail = Flipped(UInt(bl(p.STQ_DEPTH)+ 1.W)) //store queue尾部指针，指向入队处
+  val stq_full = Flipped(Bool()) // 来自STQ的空标志(0表示非满，1表示满)
+  val stq_tail = Flipped(UInt(bl(p.STQ_DEPTH)+ 1.W)) // 来自STQ的store queue尾部指针，指向入队处
   
   // to stq
-  val st_inc = Valid(UInt(log2Ceil(p.CORE_WIDTH + 1).W)) //本cycle派遣store指令的数量
+  val st_inc = Valid(UInt(log2Ceil(p.CORE_WIDTH + 1).W)) // 本cycle派遣store指令的数量（发往STQ)
 }
 
 // ooo_mode (Out of order) 表示乱序执行状态
@@ -50,7 +50,9 @@ object DispatchState extends ChiselEnum {
 // 该模块负责将重命名单元发来的指令派遣到ROB，根据指令类型派遣到三个issue queue（分别为exu issue queue，store issue queue和load issue queue），如果是store指令，则还需要派遣到STQ（store queue）中。
 // 该模块通过和三个issue queue分别共同维护一个freelist（不是FIFO！），freelist到head和tail之间为可用的issue queue ID，dispatch单元选择head处的issue queue id进行派遣，issue queue发射指令后会将issue queue id
 // 反馈给dispatch单元，dispatch单元会将该id存入freelist的tail处。
-class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule {
+class DispatchUnit(
+  exu_fu_num: Int // 表示实际FU的数量，用于接受所有对所有FU发射指令后的issue index，属于wakeup逻辑
+)(implicit p: Parameters) extends CustomModule {
 
   val io = IO(new Dispatcher_IO(exu_fu_num))
 
@@ -58,7 +60,6 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
   
   val should_flush = io.rob_controlsignal.shouldFlush
 
-  
   val exu_freelist = Module(new FreeListCam(p.EXUISSUE_DEPTH, p.CORE_WIDTH, exu_fu_num)) 
   val ld_freelist = Module(new FreeListCam(p.LDISSUE_DEPTH, p.CORE_WIDTH, 1)) 
   val st_freelist = Module(new FreeListCam(p.STISSUE_DEPTH, p.CORE_WIDTH, 1)) 
@@ -72,10 +73,8 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
     val state = RegInit(ooo_mode)
     val is_csr = VecInit(io.dis_uop.bits.map(x => x.valid && x.bits.instr_type.isOneOf(InstrType.CSR))).asUInt
   
-    // val ooo_mask = 
     val serialise_mask = Reg(UInt(p.CORE_WIDTH.W)) // All 1's by default
     val still_has_csr = (serialise_mask & is_csr) =/= 0.U && input_valid
-    serialise_mask := ~0.U(p.CORE_WIDTH.W)
 
     def sig_mask(value: UInt) : UInt = {
       val mid = PriorityEncoderOH(value) - 1.U
@@ -86,7 +85,7 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
     val closest_mask = sig_mask(clamped_is_csr)  // Generates 1's mask that appear right before the next csr instruction, the clamped_is_csr is clamped to make sure when csr is not detected till the end of the packet, it is handled correctly (that closest_mask should be 1's for all the left non-csr instructions)
     val furthest_mask = ~closest_mask
 
-    val ooo_mask = closest_mask & serialise_mask // Clamped within serialise mask to make sure ooo instructions dispatched before don't appear again
+    val ooo_mask = closest_mask & serialise_mask // OOO_mask 的作用就是掩盖掉不能能被乱序提交的指令，serialise_mask是表示未发射的指令
 
     val serialise_mask_mb = PriorityEncoderOH(serialise_mask) 
     val serialise_fire = serialise_mask_mb & is_csr  
@@ -231,6 +230,7 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
       out
     }), st_out_valid)
 
+    serialise_mask := ~0.U(p.CORE_WIDTH.W)
     when(state === ooo_mode && still_has_csr) {
       serialise_mask := furthest_mask // Shift the mask to align the most significant bit with the first matching csr instruction within the previous serialise_mask window
       state:= ino_mode
@@ -247,7 +247,13 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
       serialise_mask := serialise_mask
     }.elsewhen(state === ooo_mode || serialise_mask === 0.U) {
       serialise_mask := ~0.U(p.CORE_WIDTH.W) // Reset back to all 1's
+    }.otherwise {
+      serialise_mask := serialise_mask
     }
+
+    // Debugging
+    val serialise_mask_dontOptimise  = WireInit(serialise_mask)
+    dontTouch(serialise_mask_dontOptimise)
   }
 }
 

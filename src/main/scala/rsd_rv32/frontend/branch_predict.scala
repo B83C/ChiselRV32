@@ -120,7 +120,7 @@ class BranchPredictor(implicit p: Parameters) extends CustomModule {
 
     val table_index = get_histIndex(first_branch.instr_addr, first_branch.ghr)
     // TODO 
-    when(choice(1)) {
+    when(counter_update(choice, direction)(1)) {
       T_table(table_index) := counter_update(T_table(table_index), direction)
     }.otherwise {
       NT_table(table_index) := counter_update(NT_table(table_index), direction)
