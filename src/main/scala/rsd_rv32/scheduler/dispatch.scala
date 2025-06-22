@@ -111,25 +111,25 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
       (VecInit(io.dis_uop.bits.map(x => (x.bits.instr_type.isOneOf(LD)) && x.valid)).asUInt & ooo_mask),
       0.U)
     val is_ex = Mux(state === ooo_mode,
-      (VecInit(io.dis_uop.bits.map(x => ~(x.bits.instr_type.isOneOf(ST, LD, CSR)) && x.valid)).asUInt & ooo_mask),
+      (VecInit(io.dis_uop.bits.map(x => ~(x.bits.instr_type.isOneOf(ST, LD)) && x.valid)).asUInt & ooo_mask),
       0.U)
 
     exu_freelist.io.enq_request := io.exu_issued_index
     ld_freelist.io.enq_request := VecInit(io.ld_issued_index)
     st_freelist.io.enq_request := VecInit(io.st_issued_index)
   
+    val output_valid_w = Wire(Bool())
     val can_allocate_all_ex = exu_freelist.io.deq_request.map(_.valid).reduce(_ && _)
     val can_allocate_all_ld = ld_freelist.io.deq_request.map(_.valid).reduce(_ && _)
     val can_allocate_all_st = st_freelist.io.deq_request.map(_.valid).reduce(_ && _)
-    
     (exu_freelist.io.deq_request zip is_ex.asBools).foreach{ case(dq, v) =>
-      dq.ready := v && downstream_ready && input_valid && can_allocate_all_ex
-    }  
+      dq.ready := v && downstream_ready && input_valid && can_allocate_all_ex && output_valid_w
+     }  
     (ld_freelist.io.deq_request  zip is_ld.asBools).foreach{ case(dq, v) =>
-      dq.ready := v && downstream_ready && input_valid && can_allocate_all_ld
+      dq.ready := v && downstream_ready && input_valid && can_allocate_all_ld && output_valid_w
     } 
     (st_freelist.io.deq_request  zip is_st.asBools).foreach{ case(dq, v) =>
-      dq.ready := v && downstream_ready && input_valid && can_allocate_all_st
+      dq.ready := v && downstream_ready && input_valid && can_allocate_all_st && output_valid_w
     } 
   
     // Ready fields should be ready when it is not valid, or when it is a valid instruction and freelist is ready
@@ -138,20 +138,10 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
     }.reduce(_ && _)  
     val ld_req_ready = (ld_freelist.io.deq_request  zip is_ld.asBools).map{ case(dq, v) =>
       (dq.valid) || !v
-
     }.reduce(_ && _)
     val st_req_ready = (st_freelist.io.deq_request  zip is_st.asBools).map{ case(dq, v) =>
       (dq.valid) || !v
     }.reduce(_ && _) 
-    // val ex_req_ready = (exu_freelist.io.deq_request zip is_ex.asBools).map{ case(dq, v) =>
-    //   (dq.valid) || !v 
-    // }.reduce(_ && _)  
-    // val ld_req_ready = (ld_freelist.io.deq_request  zip is_ld.asBools).map{ case(dq, v) =>
-    //   (dq.valid) || !v
-    // }.reduce(_ && _)
-    // val st_req_ready = (st_freelist.io.deq_request  zip is_st.asBools).map{ case(dq, v) =>
-    //   (dq.valid) || !v
-    // }.reduce(_ && _) 
 
     // TODO: They should not be here
     exu_freelist.io.squeeze := should_flush
@@ -159,9 +149,12 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
     st_freelist.io.squeeze := should_flush
 
     can_dispatch := 
-       ex_req_ready &&
-       ld_req_ready &&
-       st_req_ready &&
+        can_allocate_all_ex && 
+        can_allocate_all_ld && 
+        can_allocate_all_st && 
+       // ex_req_ready &&
+       // ld_req_ready &&
+       // st_req_ready &&
        !should_flush &&
        state === ooo_mode // TODO can be omitted
        
@@ -169,10 +162,12 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
     io.dis_uop.ready := can_dispatch && downstream_ready && !still_has_csr
   
     //Checks for every single uop, signals to update each output register
-    val output_valid = ooo_mask =/= 0.U && can_dispatch && input_valid && downstream_ready
+    val output_valid = ooo_mask =/= 0.U && can_dispatch && input_valid  && downstream_ready
     val st_out_valid = is_st =/= 0.U && output_valid
     val ld_out_valid = is_ld =/= 0.U && output_valid
     val ex_out_valid = is_ex =/= 0.U && output_valid
+
+    output_valid_w := output_valid
   
     io.st_inc.bits := PopCount(is_st.asBools)
     io.st_inc.valid := st_out_valid
@@ -199,17 +194,20 @@ class DispatchUnit(exu_fu_num: Int)(implicit p: Parameters) extends CustomModule
   
     //TODO 如果用bitmask解决效率更高
     var preceding_st_cnt = 0.U
-    io.ld_issue_uop:= ValidPassthrough(VecInit(io.dis_uop.bits.zip(is_ld.asBools).zip(is_st.asBools).zip(ld_freelist.io.deq_request).zipWithIndex.map{case ((((input, is_ld), is_st), fl), rob_inner_ind) =>
+    var stq_mask = 0.U
+    io.ld_issue_uop:= ValidPassthrough(VecInit(io.dis_uop.bits.zip(is_ld.asBools).zip(is_st.asBools).zip(ld_freelist.io.deq_request).zip(st_freelist.io.deq_request).zipWithIndex.map{case (((((input, is_ld), is_st), ld_fl), st_fl), rob_inner_ind) =>
       val out = Wire(Valid(new DISPATCH_LDISSUE_uop()))
       
       // Instruction本身的valid以及instruction 是否为load
       out.valid := input.valid && is_ld
       (out.bits: Data).waiveAll :<>= (input.bits : Data).waiveAll //TODO: UNSAFE 
-      out.bits.iq_index := fl.bits
+      out.bits.iq_index := ld_fl.bits
       // TODO
-      out.bits.stq_mask := Mux(preceding_st_cnt === 0.U, 0.U, ((2.U << preceding_st_cnt) - 1.U) << io.stq_tail)
+      // out.bits.stq_mask := Mux(preceding_st_cnt === 0.U, 0.U, ((2.U << preceding_st_cnt) - 1.U) << io.stq_tail)
+      out.bits.stq_mask := stq_mask
       out.bits.stq_tail := io.stq_tail + preceding_st_cnt//TODO: Check on its validity
       preceding_st_cnt = preceding_st_cnt + is_st
+      stq_mask = stq_mask | Mux(is_st && st_fl.valid, 1.U << st_fl.bits, 0.U)
       
       out.bits.rob_index := io.rob_index
       out.bits.rob_inner_index := rob_inner_ind.U

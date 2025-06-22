@@ -120,7 +120,7 @@ class DISPATCH_LDISSUE_uop(implicit p: Parameters) extends uop {
     val ps1 = UInt(bl(p.PRF_DEPTH))
     val stq_tail = UInt(bl(p.STQ_DEPTH) + 1.W) //needed to get the right forwarding data from STQ
 
-    val stq_mask = UInt(bl(p.STISSUE_DEPTH))
+    val stq_mask = UInt(p.STISSUE_DEPTH.W)
 
     val rob_index = UInt(bl(p.ROB_DEPTH) + 1.W)
     val rob_inner_index = UInt(bl(p.CORE_WIDTH))
